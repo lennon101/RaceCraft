@@ -1,4 +1,8 @@
-# Race Fuel & Pacing Planner - Web Application
+![RaceCraft Logo](logo.png)
+
+# RaceCraft - Fuel & Pacing Planner
+
+**Build your perfect race.**
 
 A web-based ultra-running race planner that calculates personalized pacing, fuel requirements, and hydration needs based on GPX route files.
 
@@ -213,6 +217,10 @@ python Fuel-Plan.py
 ## License
 
 Free to use and modify for personal use.
+
+## About RaceCraft
+
+RaceCraft is your comprehensive race planning companion, helping ultrarunners optimize their performance through data-driven pacing and fueling strategies.
 
 ## Credits
 
