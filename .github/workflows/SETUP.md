@@ -66,15 +66,15 @@ After successful publication, anyone can pull the image:
 
 ```bash
 # Pull the latest version
-docker pull <your-dockerhub-username>/<repository-name>:latest
-# For this repository: docker pull <your-dockerhub-username>/RaceCraft:latest
+docker pull <your-dockerhub-username>/<repository-name-lowercase>:latest
+# For this repository: docker pull <your-dockerhub-username>/racecraft:latest
 
 # Pull a specific version
-docker pull <your-dockerhub-username>/<repository-name>:1.0.0
-# For this repository: docker pull <your-dockerhub-username>/RaceCraft:1.0.0
+docker pull <your-dockerhub-username>/<repository-name-lowercase>:1.0.0
+# For this repository: docker pull <your-dockerhub-username>/racecraft:1.0.0
 ```
 
-The image name is automatically derived from the GitHub repository name.
+**Note:** The image name is automatically derived from the GitHub repository name and converted to lowercase, as required by Docker Hub. For example, the repository `RaceCraft` becomes the Docker image `racecraft`.
 
 ## Troubleshooting
 
@@ -84,9 +84,9 @@ The image name is automatically derived from the GitHub repository name.
 - Check that the token hasn't expired
 
 ### Image name issues
-- The workflow uses `<DOCKERHUB_USERNAME>/<repository-name>` as the image name
-- For this repository, it will be `<DOCKERHUB_USERNAME>/RaceCraft`
-- Docker Hub repository names are case-sensitive, so ensure the name matches your GitHub repository name
+- The workflow uses `<DOCKERHUB_USERNAME>/<repository-name-lowercase>` as the image name
+- For this repository, it will be `<DOCKERHUB_USERNAME>/racecraft` (lowercase)
+- Docker Hub requires lowercase repository names, so the workflow automatically converts the GitHub repository name to lowercase
 
 ### Build failures
 - Check the Dockerfile is valid

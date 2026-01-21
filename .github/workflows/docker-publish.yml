@@ -12,6 +12,9 @@
 #      - latest
 #      - version tag from the release (e.g., v1.2.0, 1.2.0, 1.2, 1)
 #
+# Note: The Docker image name is automatically derived from the GitHub repository name
+#       and converted to lowercase (e.g., RaceCraft -> racecraft) as required by Docker Hub.
+#
 # Usage: Simply create and publish a GitHub release, and the workflow will handle the rest.
 
 name: Docker Hub Publish
@@ -22,8 +25,6 @@ on:
 
 env:
   REGISTRY: docker.io
-  # Image name uses lowercase repository name (e.g., lennon101/RaceCraft -> racecraft)
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
 
 jobs:
   build-and-push:
@@ -34,6 +35,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
+      - name: Convert repository name to lowercase
+        id: repo_name
+        run: echo "lowercase=${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.repo_name.outputs.lowercase }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -70,7 +75,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.IMAGE_NAME }}
-          short-description: "RaceCraft - Fuel & Pacing Planner for ultra-running races"
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.repo_name.outputs.lowercase }}
+          short-description: ${{ github.event.repository.description }}
           readme-filepath: ./README.md
         continue-on-error: true
