@@ -66,11 +66,15 @@ After successful publication, anyone can pull the image:
 
 ```bash
 # Pull the latest version
-docker pull <your-dockerhub-username>/racecraft:latest
+docker pull <your-dockerhub-username>/<repository-name>:latest
+# For this repository: docker pull <your-dockerhub-username>/RaceCraft:latest
 
 # Pull a specific version
-docker pull <your-dockerhub-username>/racecraft:1.0.0
+docker pull <your-dockerhub-username>/<repository-name>:1.0.0
+# For this repository: docker pull <your-dockerhub-username>/RaceCraft:1.0.0
 ```
+
+The image name is automatically derived from the GitHub repository name.
 
 ## Troubleshooting
 
@@ -80,8 +84,9 @@ docker pull <your-dockerhub-username>/racecraft:1.0.0
 - Check that the token hasn't expired
 
 ### Image name issues
-- The workflow uses `<DOCKERHUB_USERNAME>/racecraft` as the image name
-- Ensure this repository name is available in your Docker Hub account
+- The workflow uses `<DOCKERHUB_USERNAME>/<repository-name>` as the image name
+- For this repository, it will be `<DOCKERHUB_USERNAME>/RaceCraft`
+- Docker Hub repository names are case-sensitive, so ensure the name matches your GitHub repository name
 
 ### Build failures
 - Check the Dockerfile is valid

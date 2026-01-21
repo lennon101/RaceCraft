@@ -22,7 +22,8 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/racecraft
+  # Image name uses lowercase repository name (e.g., lennon101/RaceCraft -> racecraft)
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
 
 jobs:
   build-and-push:
