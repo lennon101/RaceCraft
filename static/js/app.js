@@ -342,8 +342,10 @@ function displayResults(data) {
     // Store elevation profile
     currentPlan.elevation_profile = elevation_profile;
     
-    // Render elevation chart
-    renderElevationChart(elevation_profile, segments);
+    // Render elevation chart if profile exists
+    if (elevation_profile && elevation_profile.length > 0) {
+        renderElevationChart(elevation_profile, segments);
+    }
 
     // Update summary cards
     document.getElementById('summary-distance').textContent = `${summary.total_distance} km`;
@@ -436,7 +438,8 @@ async function savePlan() {
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
         race_start_time: document.getElementById('race-start-time').value || null,
         segments: currentPlan.segments,
-        summary: currentPlan.summary
+        summary: currentPlan.summary,
+        elevation_profile: currentPlan.elevation_profile
     };
 
     try {
@@ -531,7 +534,15 @@ async function loadPlan(filename) {
                 currentPlan.segments = data.segments;
                 currentPlan.summary = data.summary;
                 currentPlan.race_start_time = data.race_start_time;
-                displayResults(data);
+                currentPlan.elevation_profile = data.elevation_profile || null;
+                
+                // If no elevation profile, recalculate to get it
+                if (!currentPlan.elevation_profile) {
+                    calculateRacePlan();
+                } else {
+                    displayResults(data);
+                }
+                
                 saveBtn.disabled = false;
                 exportBtn.disabled = false;
             }

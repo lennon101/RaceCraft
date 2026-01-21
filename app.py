@@ -360,8 +360,24 @@ def save_plan():
         
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], plan_name)
         
+        # Include elevation_profile in saved data
+        save_data = {
+            'plan_name': data.get('plan_name'),
+            'gpx_filename': data.get('gpx_filename'),
+            'checkpoint_distances': data.get('checkpoint_distances', []),
+            'avg_cp_time': data.get('avg_cp_time'),
+            'z2_pace': data.get('z2_pace'),
+            'elev_gain_factor': data.get('elev_gain_factor'),
+            'carbs_per_hour': data.get('carbs_per_hour'),
+            'water_per_hour': data.get('water_per_hour'),
+            'race_start_time': data.get('race_start_time'),
+            'segments': data.get('segments'),
+            'summary': data.get('summary'),
+            'elevation_profile': data.get('elevation_profile')
+        }
+        
         with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(save_data, f, indent=2)
         
         return jsonify({'message': 'Plan saved successfully', 'filename': plan_name})
     except Exception as e:
