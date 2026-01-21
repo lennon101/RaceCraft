@@ -63,8 +63,12 @@ def parse_gpx_file(gpx_path):
                 trkpt_list.append(elem)
     
     for trkpt in trkpt_list:
-        lat = float(trkpt.get('lat'))
-        lon = float(trkpt.get('lon'))
+        lat_str = trkpt.get('lat')
+        lon_str = trkpt.get('lon')
+        if lat_str is None or lon_str is None:
+            continue  # Skip trackpoints without lat/lon
+        lat = float(lat_str)
+        lon = float(lon_str)
         
         ele_elem = None
         if namespace_dict:
@@ -166,7 +170,7 @@ def upload_gpx():
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
-    if file.filename == '':
+    if file.filename == '' or file.filename is None:
         return jsonify({'error': 'No file selected'}), 400
     
     if not file.filename.endswith('.gpx'):
@@ -206,6 +210,8 @@ def calculate():
     """Calculate race plan."""
     try:
         data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
         
         # Get uploaded GPX file
         filename = data.get('gpx_filename')
@@ -351,6 +357,8 @@ def save_plan():
     """Save race plan."""
     try:
         data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
         plan_name = data.get('plan_name', f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         
         # Sanitize filename
@@ -438,6 +446,8 @@ def export_csv():
     """Export race plan to CSV."""
     try:
         data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
         segments = data.get('segments', [])
         summary = data.get('summary', {})
         race_start_time = data.get('race_start_time')
