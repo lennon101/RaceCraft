@@ -1,235 +1,230 @@
-# Race Fuel & Pacing Planner
+![RaceCraft Logo](logo.png)
 
-A Python tool for ultra-running race planning that calculates personalized pacing, fuel requirements, and hydration needs based on your GPX route file and individual performance characteristics.
+# RaceCraft - Fuel & Pacing Planner
+
+**Build your perfect race.**
+
+A web-based ultra-running race planner that calculates personalized pacing, fuel requirements, and hydration needs based on GPX route files.
 
 ## Features
 
-- **GPX Route Analysis**: Automatically parses GPX files (supports both track and route formats) to extract distance and elevation data
-- **Personalized Pace Calculations**: Adjusts pace based on elevation changes, accumulated fatigue, and terrain
-- **Fuel & Hydration Planning**: Calculates carbohydrate and water intake targets for each segment
-- **Checkpoint Management**: Plan your race with custom checkpoint distances and stop times
-- **Previous Race Calibration**: Option to calculate personalized elevation gain factors from past race results
+- 🗺️ **GPX Route Upload**: Drag and drop your race route
+- ⚡ **Real-time Calculations**: Results update as you adjust parameters
+- 💾 **Save/Load Plans**: Store multiple race plans for different events
+- 📊 **Interactive Results**: Visual summary cards and detailed segment breakdown
+- 📥 **CSV Export**: Download your race plan for offline use
+- 🎯 **Time of Day**: Optional race start time to see checkpoint arrival times
+- 🎨 **Modern UI**: Clean, responsive interface that works on all devices
 
-## Requirements
+## Quick Start
 
-- Python 3.x
-- No external dependencies (uses only standard library)
+### Option 1: Run Locally
 
-## Setup
-
-1. Place your GPX file(s) in the same directory as `Fuel-Plan.py`
-2. Run the script: `python Fuel-Plan.py`
-3. Select which GPX file to use from the list presented
-
-## Configuration Constants
-
-### GPX_FILENAME
-- **Default**: `"route.gpx"`
-- **Description**: Name of the GPX file containing your race route
-
-### ELEVATION_GAIN_FACTOR
-- **Default**: `6.0` seconds per meter
-- **Description**: Time penalty added per meter of elevation gain. Based on Naismith's rule (~10 seconds/meter for hiking). Lower values for stronger climbers, higher values for those who struggle with elevation.
-- **Can be calculated**: The tool can calculate this from a previous race performance
-
-### FATIGUE_MULTIPLIER
-- **Default**: `2.0` percent per hour
-- **Description**: Percentage pace slowdown per hour of running. Represents cumulative fatigue effect.
-  - `0.5` = Very fit, maintains pace well (0.5% slower per hour)
-  - `2.0` = Moderate fatigue accumulation (2% slower per hour)
-  - `5.0` = Significant fatigue issues (5% slower per hour)
-- **Example**: With `2.0`, after 10 hours you'll be ~20% slower than fresh pace
-
-### MAX_DOWNHILL_SPEED_INCREASE
-- **Default**: `20.0` percent
-- **Description**: Maximum percentage your pace can increase on downhills. Prevents unrealistic fast paces.
-- **Example**: If Z2 pace is 6:00 min/km, fastest allowed pace is 4:48 min/km (20% faster)
-
-### DEFAULT_CARBS_PER_HOUR
-- **Default**: `60.0` grams
-- **Description**: Target carbohydrate intake per hour
-- **Typical ranges**:
-  - 30-60g/hr: Lower intensity or smaller athletes
-  - 60-90g/hr: Standard ultra running recommendation
-  - 90-120g/hr: High-intensity or trained gut tolerance
-
-### DEFAULT_WATER_PER_HOUR
-- **Default**: `500.0` mL
-- **Description**: Target water intake per hour
-- **Typical ranges**:
-  - 400-500 mL/hr: Cool conditions, lower intensity
-  - 500-750 mL/hr: Moderate conditions
-  - 750-1000+ mL/hr: Hot conditions, high sweat rate
-
-## How It Works
-
-### Pace Calculation
-
-The tool calculates adjusted pace for each segment through multiple steps:
-
-1. **Base Pace**: Your Zone 2 pace on flat ground (comfortable aerobic pace)
-
-2. **Elevation Adjustment**:
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
    ```
-   Elevation Time = (gain × factor) - (loss × factor × 0.3)
-   Elevation-Adjusted Pace = (distance × base_pace + elevation_time) / distance
+
+2. **Run the application:**
+   ```bash
+   python app.py
    ```
-   - Gains add time (full factor)
-   - Losses subtract time (30% of factor, as downhills aren't as beneficial)
 
-3. **Downhill Speed Limit**:
+3. **Open your browser:**
+   Navigate to `http://localhost:5000`
+
+### Option 2: Docker
+
+1. **Build and run:**
+   ```bash
+   docker-compose up -d
    ```
-   Minimum Pace = Base Pace × (1 - MAX_DOWNHILL_SPEED_INCREASE/100)
+
+2. **Access the app:**
+   Navigate to `http://localhost:5000`
+
+3. **View logs:**
+   ```bash
+   docker-compose logs -f
    ```
-   - Applied to elevation-adjusted pace to prevent unrealistic fast speeds
 
-4. **Fatigue Adjustment**: 
+4. **Stop the app:**
+   ```bash
+   docker-compose down
    ```
-   Fatigue Factor = 1 + (cumulative_hours × FATIGUE_MULTIPLIER / 100)
-   Final Pace = Limited Elevation Pace × Fatigue Factor
-   ```
-   - Applied last to show accumulating tiredness over the race
 
-5. **Maximum Slowness Limit**:
-   - Slowest pace: Base × 2.0
-
-### Fuel & Hydration Calculation
-
-For each segment:
-```
-Target Carbs = (segment_hours × carbs_per_hour) rounded to nearest 10g
-Target Water = (segment_hours × water_per_hour) rounded to nearest 50mL
-```
-
-## Usage
-
-### Basic Workflow
-
-1. **Start the tool**: `python Fuel-Plan.py`
-
-2. **Select GPX file**:
-   - Tool displays all `.gpx` files in the directory
-   - Enter the number corresponding to your route
-
-3. **Calculate elevation factor** (optional):
-   - Answer 'y' to use previous race data
-   - Enter race distance, elevation gain, moving time, and estimated flat pace
-   - Tool calculates personalized elevation factor
-
-4. **Enter race details**:
-   - Number of checkpoints
-   - Expected time at each checkpoint (aid station stops)
-   - Distance to each checkpoint (must be in order, cannot exceed total distance)
-
-5. **Enter your pacing**:
-   - Zone 2 pace on flat ground (format: MM:SS, e.g., `6:30` for 6:30 min/km)
-   - Input validation ensures proper format and valid values
-
-6. **Enter race start time** (optional):
-   - Format: HH:MM (e.g., `06:00` for 6:00 AM)
-   - Press Enter to skip if you don't want time-of-day calculations
-
-7. **Set nutrition targets**:
-   - Carbs per hour (press Enter for default 60g)
-   - Water per hour (press Enter for default 500mL)
-
-### Output
-
-The tool displays a detailed table showing for each segment:
-- **Segment**: From/to checkpoint labels
-- **Dist(km)**: Segment distance
-- **Elev+/-**: Elevation gain/loss in meters
-- **Net(m)**: Net elevation change (gain - loss)
-- **Elev Pace**: Pace adjusted for elevation only (min/km)
-- **Fatigue**: Time added per km due to accumulated fatigue (mm:ss)
-- **Final Pace**: Final pace including all adjustments (min/km)
-- **Time**: Time to complete segment
-- **Carbs(g)**: Target carbohydrate intake
-- **Water(L)**: Target water intake in liters
-- **Cumul Time**: Cumulative race time including checkpoint stops
-- **Time of Day**: Clock time at checkpoint (only if race start time provided)
-
-Summary totals include:
-- Total moving time (running only)
-- Total checkpoint time
-- Total race time (moving + checkpoints)
-- Total distance
-- Total elevation gain
-- Total carbs needed
-- Total water needed
-
-## Example
+## Project Structure
 
 ```
-Available GPX files:
-  1. route.gpx
-  2. backup-route.gpx
-
-Select a GPX file (1-2): 1
-
-Using GPX file: route.gpx
-Total route distance: 100.00 km (62.14 miles)
-
-Do you want to calculate elevation gain factor from a previous race? (y/n): n
-Using default elevation gain factor: 6.00 seconds per meter
-
-Number of checkpoints (not including start/finish): 3
-Average expected time at each checkpoint (minutes): 5
-
-Enter the distance marker for each checkpoint:
-  Checkpoint 1 distance (km): 25
-  Checkpoint 2 distance (km): 50
-  Checkpoint 3 distance (km): 75
-
-Enter your Zone 2 pace on flat ground:
-  (format: MM:SS per km, e.g., 6:30): 6:30
-
-Enter race start time (optional, press Enter to skip):
-  (format: HH:MM, e.g., 06:00): 06:00
-
-Target carbs per hour in grams (default: 60g, press Enter to use default): 
-Target water per hour in mL (default: 500mL, press Enter to use default): 
-
-CALCULATING RACE PLAN...
-...
+Fuel-Plan-Tool/
+├── app.py                 # Flask backend API
+├── requirements.txt       # Python dependencies
+├── Dockerfile            # Docker configuration
+├── docker-compose.yml    # Docker Compose setup
+├── Fuel-Plan.py          # Original CLI script (kept for reference)
+├── templates/
+│   └── index.html        # Main HTML page
+├── static/
+│   ├── css/
+│   │   └── style.css     # Styles
+│   ├── js/
+│   │   └── app.js        # Frontend JavaScript
+│   └── uploads/          # GPX file storage
+└── saved_plans/          # Saved race plans (JSON)
 ```
 
-## Tips for Best Results
+## API Endpoints
 
-1. **Accurate Z2 Pace**: Use a pace you can maintain comfortably for hours on flat ground
-2. **GPX Quality**: Higher resolution GPX files (more points) provide better accuracy
-3. **Previous Race Calibration**: If available, use a similar race type (trail vs road) for elevation factor calculation
-4. **Adjust Constants**: Tune FATIGUE_MULTIPLIER based on your experience in ultra distances
-5. **Checkpoint Stops**: Include realistic stop times - underestimating here throws off later segments
+- `POST /api/upload-gpx` - Upload and parse GPX file
+- `POST /api/calculate` - Calculate race plan
+- `POST /api/save-plan` - Save race plan
+- `GET /api/list-plans` - List all saved plans
+- `GET /api/load-plan/<filename>` - Load a specific plan
+- `DELETE /api/delete-plan/<filename>` - Delete a plan
+- `POST /api/export-csv` - Export race plan to CSV
 
-## GPX File Format
+## Configuration
 
-The tool supports:
-- **Track points** (`<trkpt>` in `<trk>` elements)
-- **Route points** (`<rtept>` in `<rte>` elements)
-- With or without XML namespaces
-- Exported from most GPS devices and route planning apps (Garmin, Strava, Footpath, etc.)
-
-## Limitations
-
-- Assumes relatively consistent pace between track points
-- Does not account for technical terrain difficulty (beyond elevation)
-- Weather conditions not factored into calculations
-- Individual variability in nutrition/hydration needs
-
-## Customization
-
-All constants can be adjusted at the top of `Fuel-Plan.py`:
+### Constants (in app.py)
 
 ```python
-GPX_FILENAME = "your-route.gpx"
-ELEVATION_GAIN_FACTOR = 6.0
-FATIGUE_MULTIPLIER = 2.0
-MAX_DOWNHILL_SPEED_INCREASE = 20.0
-DEFAULT_CARBS_PER_HOUR = 60.0
-DEFAULT_WATER_PER_HOUR = 500.0
+ELEVATION_GAIN_FACTOR = 6.0      # Seconds per meter of elevation gain
+FATIGUE_MULTIPLIER = 2.0         # Percent pace slowdown per hour
+MAX_DOWNHILL_SPEED_INCREASE = 20.0  # Max % pace increase on downhills
+DEFAULT_CARBS_PER_HOUR = 60.0    # Default carb intake (grams/hour)
+DEFAULT_WATER_PER_HOUR = 500.0   # Default water intake (mL/hour)
+```
+
+### Port Configuration
+
+To change the port, edit `app.py`:
+```python
+app.run(host='0.0.0.0', port=5000, debug=True)
+```
+
+And update `docker-compose.yml`:
+```yaml
+ports:
+  - "8080:5000"  # host:container
+```
+
+## Usage Workflow
+
+1. **Upload GPX Route**
+   - Click "Choose GPX file" and select your race route
+   - Route information displays automatically
+
+2. **Configure Checkpoints**
+   - Set number of checkpoints
+   - Enter average stop time at each checkpoint
+   - Specify distance to each checkpoint in kilometers
+
+3. **Set Pacing Parameters**
+   - Enter your Zone 2 pace (flat ground)
+   - Adjust elevation gain factor if needed
+   - Optionally set race start time for time-of-day display
+
+4. **Configure Nutrition**
+   - Set target carbs per hour
+   - Set target water per hour
+
+5. **Calculate**
+   - Click "Calculate Race Plan"
+   - Results update in real-time as you adjust values
+
+6. **Save/Export**
+   - Save plan for future reference
+   - Export to CSV for offline use
+
+## Docker Deployment
+
+### Network Access
+
+To access from other devices on your network:
+1. Find your machine's IP address
+2. Navigate to `http://YOUR_IP:5000` from any device
+
+### Persistent Storage
+
+The Docker setup uses volumes to persist:
+- Uploaded GPX files: `./static/uploads`
+- Saved race plans: `./saved_plans`
+
+### Production Deployment
+
+For production, consider:
+1. Change `debug=True` to `debug=False` in `app.py`
+2. Use a production WSGI server (gunicorn):
+   ```dockerfile
+   CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+   ```
+3. Add environment variables for configuration
+4. Set up reverse proxy (nginx) for SSL/TLS
+
+## Browser Compatibility
+
+- Chrome/Edge: Full support
+- Firefox: Full support
+- Safari: Full support
+- Mobile browsers: Responsive design
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Windows
+netstat -ano | findstr :5000
+taskkill /PID <PID> /F
+
+# Linux/Mac
+lsof -i :5000
+kill -9 <PID>
+```
+
+### Docker Issues
+```bash
+# Rebuild from scratch
+docker-compose down
+docker-compose build --no-cache
+docker-compose up
+```
+
+### GPX Upload Fails
+- Ensure file is valid GPX format
+- Check file size (max 16MB)
+- Verify file contains track or route points
+
+## Development
+
+### Run in Debug Mode
+```bash
+python app.py
+```
+Changes to Python code require restart. HTML/CSS/JS changes refresh automatically in browser.
+
+### Add New Features
+1. Backend: Add route in `app.py`
+2. Frontend: Update `app.js` and `index.html`
+3. Styling: Modify `style.css`
+
+## Original CLI Version
+
+The original command-line script (`Fuel-Plan.py`) is still available and fully functional. Run it with:
+```bash
+python Fuel-Plan.py
 ```
 
 ## License
 
 Free to use and modify for personal use.
+
+## About RaceCraft
+
+RaceCraft is your comprehensive race planning companion, helping ultrarunners optimize their performance through data-driven pacing and fueling strategies.
+
+## Credits
+
+Built with:
+- Flask (Python web framework)
+- Vanilla JavaScript (no frameworks)
+- CSS Grid & Flexbox (modern layouts)
