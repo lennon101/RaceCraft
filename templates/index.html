@@ -4,14 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Race Fuel & Pacing Planner</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🏃 Race Fuel & Pacing Planner</h1>
-            <p class="subtitle">Plan your ultra race with precision</p>
+            <div class="header-content">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="RaceCraft Logo" class="header-logo">
+                <div class="header-text">
+                    <h1>RaceCraft</h1>
+                    <h2 class="subtitle">Fuel & Pacing Planner</h2>
+                    <p class="slogan">Build your perfect race.</p>
+                </div>
+            </div>
         </header>
 
         <div class="main-grid">
