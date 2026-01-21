@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  fuel-planner:
+    build: .
+    container_name: race-fuel-planner
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./static/uploads:/app/static/uploads
+      - ./saved_plans:/app/saved_plans
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped

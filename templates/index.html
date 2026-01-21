@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Race Fuel & Pacing Planner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏃 Race Fuel & Pacing Planner</h1>
+            <p class="subtitle">Plan your ultra race with precision</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Left Panel: Inputs -->
+            <div class="panel inputs-panel">
+                <h2>Race Configuration</h2>
+
+                <!-- GPX Upload -->
+                <section class="input-section">
+                    <h3>1. Upload Route (GPX)</h3>
+                    <div class="file-upload">
+                        <input type="file" id="gpx-file" accept=".gpx" />
+                        <label for="gpx-file" class="file-label">
+                            <span id="file-name">Choose GPX file...</span>
+                        </label>
+                    </div>
+                    <div id="gpx-info" class="info-box" style="display: none;"></div>
+                </section>
+
+                <!-- Checkpoints -->
+                <section class="input-section">
+                    <h3>2. Checkpoints</h3>
+                    <div class="input-group">
+                        <label for="num-checkpoints">Number of Checkpoints:</label>
+                        <input type="number" id="num-checkpoints" min="0" max="20" value="3" />
+                    </div>
+                    <div class="input-group">
+                        <label for="avg-cp-time">Avg CP Stop Time (minutes):</label>
+                        <input type="number" id="avg-cp-time" min="0" step="0.5" value="5" />
+                    </div>
+                    <div id="checkpoint-distances"></div>
+                </section>
+
+                <!-- Pacing -->
+                <section class="input-section">
+                    <h3>3. Pacing</h3>
+                    <div class="input-group">
+                        <label for="z2-pace-min">Z2 Pace (flat):</label>
+                        <div class="pace-input">
+                            <input type="number" id="z2-pace-min" min="3" max="20" value="6" />
+                            <span>:</span>
+                            <input type="number" id="z2-pace-sec" min="0" max="59" value="30" />
+                            <span class="unit">min/km</span>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="elev-gain-factor">Elevation Gain Factor (sec/m):</label>
+                        <input type="number" id="elev-gain-factor" min="0" step="0.1" value="6.0" />
+                    </div>
+                    <div class="input-group">
+                        <label for="race-start-time">Race Start Time (optional):</label>
+                        <input type="time" id="race-start-time" />
+                    </div>
+                </section>
+
+                <!-- Nutrition -->
+                <section class="input-section">
+                    <h3>4. Nutrition</h3>
+                    <div class="input-group">
+                        <label for="carbs-per-hour">Carbs per Hour (g):</label>
+                        <input type="number" id="carbs-per-hour" min="0" step="5" value="60" />
+                    </div>
+                    <div class="input-group">
+                        <label for="water-per-hour">Water per Hour (mL):</label>
+                        <input type="number" id="water-per-hour" min="0" step="50" value="500" />
+                    </div>
+                </section>
+
+                <!-- Actions -->
+                <section class="actions">
+                    <button id="calculate-btn" class="btn btn-primary">Calculate Race Plan</button>
+                    <button id="save-btn" class="btn btn-secondary" disabled>Save Plan</button>
+                    <button id="load-btn" class="btn btn-secondary">Load Plan</button>
+                    <button id="export-btn" class="btn btn-secondary" disabled>Export CSV</button>
+                    <button id="clear-btn" class="btn btn-danger">Clear & Start Again</button>
+                </section>
+            </div>
+
+            <!-- Right Panel: Results -->
+            <div class="panel results-panel">
+                <h2>Race Plan</h2>
+                
+                <div id="results-container" style="display: none;">
+                    <!-- Elevation Profile -->
+                    <div class="elevation-chart-container">
+                        <h3>Elevation Profile</h3>
+                        <canvas id="elevation-chart"></canvas>
+                    </div>
+                    
+                    <!-- Summary -->
+                    <div class="summary-cards">
+                        <div class="summary-card">
+                            <div class="card-label">Total Distance</div>
+                            <div class="card-value" id="summary-distance">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-label">Moving Time</div>
+                            <div class="card-value" id="summary-moving-time">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-label">Total Time</div>
+                            <div class="card-value" id="summary-total-time">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-label">Elevation Gain</div>
+                            <div class="card-value" id="summary-elev-gain">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-label">Total Carbs</div>
+                            <div class="card-value" id="summary-carbs">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-label">Total Water</div>
+                            <div class="card-value" id="summary-water">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Segments Table -->
+                    <div class="table-container">
+                        <table id="segments-table">
+                            <thead>
+                                <tr>
+                                    <th>Segment</th>
+                                    <th>Dist (km)</th>
+                                    <th>Elev +/-</th>
+                                    <th>Net (m)</th>
+                                    <th>Elev Pace</th>
+                                    <th>Fatigue</th>
+                                    <th>Final Pace</th>
+                                    <th>Time</th>
+                                    <th>Carbs (g)</th>
+                                    <th>Water (L)</th>
+                                    <th>Cumul Time</th>
+                                    <th class="time-of-day-col" style="display: none;">Time of Day</th>
+                                </tr>
+                            </thead>
+                            <tbody id="segments-tbody">
+                                <!-- Segments will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="no-results" class="placeholder">
+                    <p>👆 Configure your race and click "Calculate Race Plan" to see results</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Plan Modal -->
+    <div id="save-modal" class="modal">
+        <div class="modal-content">
+            <h2>Save Race Plan</h2>
+            <div class="input-group">
+                <label for="plan-name">Plan Name:</label>
+                <input type="text" id="plan-name" placeholder="e.g., UTMB_2026" />
+            </div>
+            <div class="modal-actions">
+                <button id="save-confirm-btn" class="btn btn-primary">Save</button>
+                <button id="save-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Plan Modal -->
+    <div id="load-modal" class="modal">
+        <div class="modal-content">
+            <h2>Load Race Plan</h2>
+            <div id="plans-list"></div>
+            <div class="modal-actions">
+                <button id="load-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
