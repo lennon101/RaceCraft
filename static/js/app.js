@@ -77,20 +77,79 @@ function renderElevationChart(elevationProfile, segments) {
         elevationChart.destroy();
     }
     
-    // Prepare checkpoint markers
-    const checkpointDistances = segments.map((seg, idx) => {
-        // Get cumulative distance at end of each segment
-        const cumDist = segments.slice(0, idx + 1).reduce((sum, s) => sum + s.distance, 0);
-        return {
-            distance: cumDist,
-            label: seg.to
-        };
+    // Prepare checkpoint data with nutrition info
+    const checkpointData = [];
+    let cumulativeDist = 0;
+    
+    segments.forEach((seg, idx) => {
+        cumulativeDist += seg.distance;
+        
+        // Skip the finish line (last segment)
+        if (idx < segments.length - 1) {
+            const cpNumber = idx + 1;
+            const distanceToNext = segments[idx + 1].distance;
+            const carbsToNext = segments[idx + 1].target_carbs;
+            const waterToNext = segments[idx + 1].target_water;
+            
+            checkpointData.push({
+                distance: cumulativeDist,
+                cpNumber: cpNumber,
+                label: seg.to,
+                distanceToNext: distanceToNext,
+                carbsToNext: carbsToNext,
+                waterToNext: waterToNext
+            });
+        }
     });
     
     // Create gradient
     const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, 'rgba(37, 99, 235, 0.5)');
     gradient.addColorStop(1, 'rgba(37, 99, 235, 0.1)');
+    
+    // Plugin to draw checkpoint lines
+    const checkpointLinesPlugin = {
+        id: 'checkpointLines',
+        afterDatasetsDraw: (chart) => {
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { x, y } } = chart;
+            
+            checkpointData.forEach(cp => {
+                // Find the closest index in elevation profile to this checkpoint distance
+                let closestIndex = 0;
+                let minDiff = Math.abs(elevationProfile[0].distance - cp.distance);
+                
+                for (let i = 1; i < elevationProfile.length; i++) {
+                    const diff = Math.abs(elevationProfile[i].distance - cp.distance);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                }
+                
+                // Get pixel position using the index
+                const xPos = x.getPixelForValue(closestIndex);
+                
+                // Draw vertical dotted line
+                ctx.save();
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(xPos, top);
+                ctx.lineTo(xPos, bottom);
+                ctx.stroke();
+                ctx.restore();
+                
+                // Draw checkpoint label
+                ctx.save();
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(cp.label, xPos, top - 5);
+                ctx.restore();
+            });
+        }
+    };
     
     elevationChart = new Chart(ctx, {
         type: 'line',
@@ -110,6 +169,11 @@ function renderElevationChart(elevationProfile, segments) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 20
+                }
+            },
             plugins: {
                 legend: {
                     display: false
@@ -118,8 +182,58 @@ function renderElevationChart(elevationProfile, segments) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        title: (context) => `Distance: ${context[0].label} km`,
-                        label: (context) => `Elevation: ${context.parsed.y.toFixed(0)} m`
+                        title: (context) => {
+                            const distance = parseFloat(context[0].label);
+                            
+                            // Check if we're near a checkpoint
+                            const nearCheckpoint = checkpointData.find(cp => 
+                                Math.abs(cp.distance - distance) < 0.5
+                            );
+                            
+                            if (nearCheckpoint) {
+                                return [
+                                    `${nearCheckpoint.label}`,
+                                    `Distance: ${nearCheckpoint.distance.toFixed(1)} km`
+                                ];
+                            }
+                            
+                            return `Distance: ${distance} km`;
+                        },
+                        label: (context) => {
+                            const distance = parseFloat(context.label);
+                            const labels = [`Elevation: ${context.parsed.y.toFixed(0)} m`];
+                            
+                            // Check if we're near a checkpoint
+                            const nearCheckpoint = checkpointData.find(cp => 
+                                Math.abs(cp.distance - distance) < 0.5
+                            );
+                            
+                            if (nearCheckpoint) {
+                                labels.push('');
+                                labels.push(`Next Section: ${nearCheckpoint.distanceToNext.toFixed(1)} km`);
+                                labels.push(`Fuel Needed: ${nearCheckpoint.carbsToNext}g carbs`);
+                                labels.push(`Hydration: ${nearCheckpoint.waterToNext}L water`);
+                            }
+                            
+                            return labels;
+                        },
+                        labelTextColor: (context) => {
+                            return '#1f2937';
+                        }
+                    },
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    titleColor: '#1f2937',
+                    bodyColor: '#1f2937',
+                    borderColor: 'rgba(0, 0, 0, 0.1)',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: false,
+                    titleFont: {
+                        size: 13,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 12
                     }
                 }
             },
@@ -166,7 +280,8 @@ function renderElevationChart(elevationProfile, segments) {
                 axis: 'x',
                 intersect: false
             }
-        }
+        },
+        plugins: [checkpointLinesPlugin]
     });
 }
 
