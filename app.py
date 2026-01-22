@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 import xml.etree.ElementTree as ET
 import math
 import os
@@ -202,7 +202,7 @@ def index():
 @app.route('/robots.txt')
 def robots():
     """Serve robots.txt file."""
-    return send_file('static/robots.txt', mimetype='text/plain')
+    return send_from_directory('static', 'robots.txt', mimetype='text/plain')
 
 @app.route('/api/upload-gpx', methods=['POST'])
 def upload_gpx():
