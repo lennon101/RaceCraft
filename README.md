@@ -8,50 +8,115 @@ A web-based ultra-running race planner that calculates personalized pacing, fuel
 
 ## Features
 
-- 🗺️ **GPX Route Upload**: Drag and drop your race route
-- ⚡ **Real-time Calculations**: Results update as you adjust parameters
-- 💾 **Save/Load Plans**: Store multiple race plans for different events
-- 📊 **Interactive Results**: Visual summary cards and detailed segment breakdown
-- 📥 **CSV Export**: Download your race plan for offline use
-- 🎯 **Time of Day**: Optional race start time to see checkpoint arrival times
-- 🎨 **Modern UI**: Clean, responsive interface that works on all devices
+- **GPX Route Upload**: Drag and drop your race route
+- **Real-time Calculations**: Results update as you adjust parameters
+- **Save/Load Plans**: Store multiple race plans for different events
+- **Interactive Results**: Visual summary cards and detailed segment breakdown
+- **CSV Export**: Download your race plan for offline use
+- **Time of Day**: Optional race start time to see checkpoint arrival times
+- **Modern UI**: Clean, responsive interface that works on all devices
 
 ## Quick Start
 
-### Option 1: Run Locally
+### Option 1: Docker Compose (Recommended)
 
-1. **Install dependencies:**
+1. **Create a `docker-compose.yml` file:**
+   ```yaml
+   version: '3.8'
+
+   services:
+     fuel-planner:
+       image: lennon101/racecraft:latest
+       container_name: racecraft
+       ports:
+         - "5000:5000"
+       volumes:
+         - racecraft-uploads:/app/static/uploads
+         - racecraft-plans:/app/saved_plans
+         - racecraft-static:/app/static
+       environment:
+         - FLASK_ENV=development
+         - FLASK_DEBUG=1
+       restart: unless-stopped
+       networks:
+         - racecraft
+
+   volumes:
+     racecraft-uploads:
+     racecraft-plans:
+     racecraft-static:
+
+   networks:
+     racecraft:
+   ```
+
+2. **Pull and run the container:**
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Access the application:**
+   Open your browser to `http://localhost:5000`
+
+4. **View logs:**
+   ```bash
+   docker compose logs -f
+   ```
+
+5. **Stop the application:**
+   ```bash
+   docker compose down
+   ```
+
+### Option 2: Docker Run
+
+1. **Pull the image:**
+   ```bash
+   docker pull lennon101/racecraft:latest
+   ```
+
+2. **Create volumes for persistent data:**
+   ```bash
+   docker volume create racecraft-uploads
+   docker volume create racecraft-plans
+   docker volume create racecraft-static
+   ```
+
+3. **Run the container:**
+   ```bash
+   docker run -d \
+     --name racecraft \
+     -p 5000:5000 \
+     -v racecraft-uploads:/app/static/uploads \
+     -v racecraft-plans:/app/saved_plans \
+     -v racecraft-static:/app/static \
+     --restart unless-stopped \
+     lennon101/racecraft:latest
+   ```
+
+4. **Access the application:**
+   Open your browser to `http://localhost:5000`
+
+### Option 3: Run Locally (Development)
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd Fuel-Plan-Tool
+   ```
+
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Run the application:**
+3. **Run the application:**
    ```bash
    python app.py
    ```
 
-3. **Open your browser:**
+4. **Open your browser:**
    Navigate to `http://localhost:5000`
-
-### Option 2: Docker
-
-1. **Build and run:**
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Access the app:**
-   Navigate to `http://localhost:5000`
-
-3. **View logs:**
-   ```bash
-   docker-compose logs -f
-   ```
-
-4. **Stop the app:**
-   ```bash
-   docker-compose down
-   ```
 
 ## Project Structure
 
@@ -138,28 +203,134 @@ ports:
 
 ## Docker Deployment
 
+### Image Information
+
+- **Image**: `lennon101/racecraft:latest`
+- **Port**: 5000
+- **Volumes**: 
+  - `racecraft-uploads`: Stores uploaded GPX files
+  - `racecraft-plans`: Stores saved race plans (JSON)
+  - `racecraft-static`: Static assets cache
+
 ### Network Access
 
 To access from other devices on your network:
-1. Find your machine's IP address
-2. Navigate to `http://YOUR_IP:5000` from any device
+1. Find your machine's IP address:
+   ```bash
+   # Windows
+   ipconfig | findstr IPv4
+   
+   # Linux/Mac
+   hostname -I
+   ```
+2. Navigate to `http://YOUR_IP:5000` from any device on the same network
 
-### Persistent Storage
+### Managing Containers
 
-The Docker setup uses volumes to persist:
-- Uploaded GPX files: `./static/uploads`
-- Saved race plans: `./saved_plans`
+**View running containers:**
+```bash
+docker ps
+```
+
+**View logs:**
+```bash
+docker logs racecraft
+# or for live logs
+docker logs -f racecraft
+```
+
+**Stop the container:**
+```bash
+docker stop racecraft
+```
+
+**Start the container:**
+```bash
+docker start racecraft
+```
+
+**Restart the container:**
+```bash
+docker restart racecraft
+```
+
+**Remove the container:**
+```bash
+docker stop racecraft
+docker rm racecraft
+```
+
+### Managing Volumes
+
+**List volumes:**
+```bash
+docker volume ls
+```
+
+**Inspect a volume:**
+```bash
+docker volume inspect racecraft-uploads
+```
+
+**Backup volume data:**
+```bash
+docker run --rm -v racecraft-plans:/data -v $(pwd):/backup alpine tar czf /backup/racecraft-plans-backup.tar.gz -C /data .
+```
+
+**Restore volume data:**
+```bash
+docker run --rm -v racecraft-plans:/data -v $(pwd):/backup alpine tar xzf /backup/racecraft-plans-backup.tar.gz -C /data
+```
+
+### Updating the Application
+
+**With Docker Compose:**
+```bash
+docker compose pull
+docker compose up -d
+```
+
+**With Docker Run:**
+```bash
+docker pull lennon101/racecraft:latest
+docker stop racecraft
+docker rm racecraft
+# Then run the docker run command again
+```
 
 ### Production Deployment
 
-For production, consider:
-1. Change `debug=True` to `debug=False` in `app.py`
-2. Use a production WSGI server (gunicorn):
-   ```dockerfile
-   CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+For production environments:
+
+1. **Use Docker Compose** with environment-specific configuration:
+   ```yaml
+   environment:
+     - FLASK_ENV=production
+     - FLASK_DEBUG=0
    ```
-3. Add environment variables for configuration
-4. Set up reverse proxy (nginx) for SSL/TLS
+
+2. **Set up a reverse proxy** (nginx/Traefik) for:
+   - SSL/TLS termination
+   - Domain routing
+   - Load balancing
+
+3. **Configure resource limits:**
+   ```yaml
+   deploy:
+     resources:
+       limits:
+         cpus: '0.5'
+         memory: 512M
+   ```
+
+4. **Enable health checks:**
+   ```yaml
+   healthcheck:
+     test: ["CMD", "curl", "-f", "http://localhost:5000"]
+     interval: 30s
+     timeout: 10s
+     retries: 3
+   ```
 
 ## Browser Compatibility
 
@@ -182,11 +353,39 @@ kill -9 <PID>
 ```
 
 ### Docker Issues
+
+**Rebuild from scratch:**
 ```bash
-# Rebuild from scratch
-docker-compose down
-docker-compose build --no-cache
-docker-compose up
+docker compose down -v
+docker compose pull
+docker compose up -d
+```
+
+**Check container status:**
+```bash
+docker ps -a
+docker logs racecraft
+```
+
+**Port conflicts:**
+```bash
+# Windows - check what's using port 5000
+netstat -ano | findstr :5000
+
+# Linux/Mac
+lsof -i :5000
+```
+
+**Clean up Docker resources:**
+```bash
+# Remove stopped containers
+docker container prune
+
+# Remove unused volumes
+docker volume prune
+
+# Remove unused images
+docker image prune
 ```
 
 ### GPX Upload Fails

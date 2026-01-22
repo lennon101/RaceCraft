@@ -2,13 +2,25 @@ version: '3.8'
 
 services:
   fuel-planner:
-    build: .
-    container_name: race-fuel-planner
+    image: lennon101/racecraft:latest
+    container_name: racecraft
     ports:
       - "5000:5000"
     volumes:
-      - ./static/uploads:/app/static/uploads
-      - ./saved_plans:/app/saved_plans
+      - racecraft-uploads:/app/static/uploads
+      - racecraft-plans:/app/saved_plans
+      - racecraft-static:/app/static
     environment:
-      - FLASK_ENV=production
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
     restart: unless-stopped
+    networks:
+      - racecraft
+
+volumes:
+  racecraft-uploads:
+  racecraft-plans:
+  racecraft-static:
+
+networks:
+  racecraft:
