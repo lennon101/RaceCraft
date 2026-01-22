@@ -350,6 +350,7 @@ function displayResults(data) {
     // Update summary cards
     document.getElementById('summary-distance').textContent = `${summary.total_distance} km`;
     document.getElementById('summary-moving-time').textContent = summary.total_moving_time_str;
+    document.getElementById('summary-cp-time').textContent = summary.total_cp_time_str;
     document.getElementById('summary-total-time').textContent = summary.total_race_time_str;
     document.getElementById('summary-elev-gain').textContent = `${summary.total_elev_gain} m`;
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
