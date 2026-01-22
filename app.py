@@ -24,6 +24,13 @@ MAX_DOWNHILL_SPEED_INCREASE = 20.0
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
 
+# Ability level fatigue multipliers
+ABILITY_FATIGUE_MAP = {
+    'strong': 1.0,
+    'average': 2.0,
+    'weak': 3.0
+}
+
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points on earth in kilometers."""
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
@@ -127,7 +134,8 @@ def calculate_elevation_change(trackpoints, start_idx, end_idx):
     return gain, loss
 
 def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distance_km, 
-                              cumulative_time_hours=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR):
+                              cumulative_time_hours=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR,
+                              fatigue_enabled=True, fatigue_multiplier=FATIGUE_MULTIPLIER):
     """Adjust pace for elevation and fatigue."""
     if distance_km == 0:
         return base_pace, base_pace, 0.0
@@ -141,10 +149,14 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     min_allowed_pace = base_pace * (1.0 - MAX_DOWNHILL_SPEED_INCREASE / 100.0)
     pace_with_elev_limited = max(pace_with_elev_only, min_allowed_pace)
     
-    fatigue_factor = 1.0 + (cumulative_time_hours * FATIGUE_MULTIPLIER / 100.0)
-    fatigued_pace = pace_with_elev_limited * fatigue_factor
-    
-    fatigue_seconds_per_km = (fatigued_pace - pace_with_elev_limited) * 60.0
+    # Apply fatigue only if enabled
+    if fatigue_enabled:
+        fatigue_factor = 1.0 + (cumulative_time_hours * fatigue_multiplier / 100.0)
+        fatigued_pace = pace_with_elev_limited * fatigue_factor
+        fatigue_seconds_per_km = (fatigued_pace - pace_with_elev_limited) * 60.0
+    else:
+        fatigued_pace = pace_with_elev_limited
+        fatigue_seconds_per_km = 0.0
     
     max_allowed_pace = base_pace * 2.0
     final_pace = min(fatigued_pace, max_allowed_pace)
@@ -231,6 +243,11 @@ def calculate():
         elev_gain_factor = float(data.get('elev_gain_factor', ELEVATION_GAIN_FACTOR))
         race_start_time = data.get('race_start_time')  # "HH:MM" or None
         
+        # Fatigue settings
+        fatigue_enabled = data.get('fatigue_enabled', True)
+        ability_level = data.get('ability_level', 'average')
+        fatigue_multiplier = ABILITY_FATIGUE_MAP.get(ability_level, FATIGUE_MULTIPLIER)
+        
         # Parse GPX
         trackpoints = parse_gpx_file(filepath)
         total_distance = calculate_total_distance(trackpoints)
@@ -259,7 +276,8 @@ def calculate():
             
             cumulative_hours = total_moving_time / 60.0
             adjusted_pace, elev_adjusted_pace, fatigue_seconds = adjust_pace_for_elevation(
-                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_hours, elev_gain_factor
+                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_hours, elev_gain_factor,
+                fatigue_enabled, fatigue_multiplier
             )
             
             segment_time = segment_dist * adjusted_pace

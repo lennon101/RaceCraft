@@ -138,6 +138,23 @@ header h2.subtitle {
     font-size: 0.9rem;
 }
 
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-group label {
+    display: inline;
+    margin-bottom: 0;
+    cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+
 .input-group input,
 .input-group select {
     width: 100%;

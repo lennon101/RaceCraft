@@ -31,6 +31,8 @@ const loadCancelBtn = document.getElementById('load-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
+const fatigueEnabledInput = document.getElementById('fatigue-enabled');
+const abilityLevelInput = document.getElementById('ability-level');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -43,6 +45,14 @@ clearBtn.addEventListener('click', clearAll);
 saveConfirmBtn.addEventListener('click', savePlan);
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
+
+// Fatigue checkbox toggles ability level dropdown
+fatigueEnabledInput.addEventListener('change', () => {
+    abilityLevelInput.disabled = !fatigueEnabledInput.checked;
+    if (currentPlan.gpx_filename) {
+        calculateRacePlan();
+    }
+});
 
 // Add real-time calculation on input changes
 document.querySelectorAll('input, select').forEach(input => {
@@ -194,6 +204,9 @@ function clearAll() {
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
     document.getElementById('race-start-time').value = '';
+    document.getElementById('fatigue-enabled').checked = true;
+    document.getElementById('ability-level').value = 'average';
+    document.getElementById('ability-level').disabled = false;
     
     // Regenerate checkpoint inputs
     generateCheckpointInputs();
@@ -298,6 +311,8 @@ async function calculateRacePlan() {
     const carbsPerHour = parseFloat(document.getElementById('carbs-per-hour').value) || 60;
     const waterPerHour = parseFloat(document.getElementById('water-per-hour').value) || 500;
     const raceStartTime = document.getElementById('race-start-time').value || null;
+    const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
+    const abilityLevel = document.getElementById('ability-level').value;
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
@@ -307,7 +322,9 @@ async function calculateRacePlan() {
         elev_gain_factor: elevGainFactor,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
-        race_start_time: raceStartTime
+        race_start_time: raceStartTime,
+        fatigue_enabled: fatigueEnabled,
+        ability_level: abilityLevel
     };
 
     try {
@@ -366,6 +383,14 @@ function displayResults(data) {
         col.style.display = hasTimeOfDay ? 'table-cell' : 'none';
     });
 
+    // Check if fatigue is enabled to show/hide fatigue column
+    const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
+    const hasFatigue = fatigueEnabled && segments.some(seg => seg.fatigue_seconds > 0);
+    const fatigueCols = document.querySelectorAll('.fatigue-col');
+    fatigueCols.forEach(col => {
+        col.style.display = hasFatigue ? 'table-cell' : 'none';
+    });
+
     segments.forEach(seg => {
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -374,7 +399,7 @@ function displayResults(data) {
             <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
             <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
             <td>${seg.elev_pace_str}</td>
-            <td>${seg.fatigue_str}</td>
+            <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
             <td><strong>${seg.pace_str}</strong></td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
@@ -438,6 +463,8 @@ async function savePlan() {
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
         race_start_time: document.getElementById('race-start-time').value || null,
+        fatigue_enabled: document.getElementById('fatigue-enabled').checked,
+        ability_level: document.getElementById('ability-level').value,
         segments: currentPlan.segments,
         summary: currentPlan.summary,
         elevation_profile: currentPlan.elevation_profile
@@ -526,6 +553,9 @@ async function loadPlan(filename) {
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
             document.getElementById('race-start-time').value = data.race_start_time || '';
+            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
+            document.getElementById('ability-level').value = data.ability_level || 'average';
+            document.getElementById('ability-level').disabled = !document.getElementById('fatigue-enabled').checked;
 
             // Generate checkpoint inputs and populate
             generateCheckpointInputs();

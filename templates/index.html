@@ -68,6 +68,18 @@
                         <label for="elev-gain-factor">Elevation Gain Factor (sec/m):</label>
                         <input type="number" id="elev-gain-factor" min="0" step="0.1" value="6.0" />
                     </div>
+                    <div class="input-group checkbox-group">
+                        <input type="checkbox" id="fatigue-enabled" checked />
+                        <label for="fatigue-enabled">Include Fatigue Penalty</label>
+                    </div>
+                    <div class="input-group" id="ability-level-group">
+                        <label for="ability-level">Ability Level:</label>
+                        <select id="ability-level">
+                            <option value="strong">Strong (Low Fatigue)</option>
+                            <option value="average" selected>Average (Medium Fatigue)</option>
+                            <option value="weak">Weak (High Fatigue)</option>
+                        </select>
+                    </div>
                     <div class="input-group">
                         <label for="race-start-time">Race Start Time (optional):</label>
                         <input type="time" id="race-start-time" />
@@ -150,7 +162,7 @@
                                     <th>Elev +/-</th>
                                     <th>Net (m)</th>
                                     <th>Elev Pace</th>
-                                    <th>Fatigue</th>
+                                    <th class="fatigue-col">Fatigue</th>
                                     <th>Final Pace</th>
                                     <th>Time</th>
                                     <th>Carbs (g)</th>
