@@ -199,6 +199,11 @@ def index():
     """Render main page."""
     return render_template('index.html')
 
+@app.route('/robots.txt')
+def robots():
+    """Serve robots.txt file."""
+    return send_file('static/robots.txt', mimetype='text/plain')
+
 @app.route('/api/upload-gpx', methods=['POST'])
 def upload_gpx():
     """Handle GPX file upload."""
