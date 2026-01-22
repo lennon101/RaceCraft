@@ -9,7 +9,6 @@ services:
     volumes:
       - racecraft-uploads:/app/static/uploads
       - racecraft-plans:/app/saved_plans
-      - racecraft-static:/app/static
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
@@ -20,7 +19,6 @@ services:
 volumes:
   racecraft-uploads:
   racecraft-plans:
-  racecraft-static:
 
 networks:
   racecraft:
