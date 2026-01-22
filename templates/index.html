@@ -52,9 +52,19 @@
                     <div id="checkpoint-distances"></div>
                 </section>
 
+                <!-- Terrain Difficulty -->
+                <section class="input-section">
+                    <h3>3. Terrain Difficulty</h3>
+                    <div class="input-group checkbox-group">
+                        <input type="checkbox" id="terrain-enabled" />
+                        <label for="terrain-enabled">Include Terrain Difficulty Adjustments</label>
+                    </div>
+                    <div id="terrain-difficulties" style="display: none;"></div>
+                </section>
+
                 <!-- Pacing -->
                 <section class="input-section">
-                    <h3>3. Pacing</h3>
+                    <h3>4. Pacing</h3>
                     <div class="input-group">
                         <label for="z2-pace-min">Z2 Pace (flat):</label>
                         <div class="pace-input">
@@ -88,7 +98,7 @@
 
                 <!-- Nutrition -->
                 <section class="input-section">
-                    <h3>4. Nutrition</h3>
+                    <h3>5. Nutrition</h3>
                     <div class="input-group">
                         <label for="carbs-per-hour">Carbs per Hour (g):</label>
                         <input type="number" id="carbs-per-hour" min="0" step="5" value="60" />
@@ -163,12 +173,13 @@
                                     <th>Net (m)</th>
                                     <th>Elev Pace</th>
                                     <th class="fatigue-col">Fatigue</th>
+                                    <th class="difficulty-col">Difficulty</th>
                                     <th>Final Pace</th>
                                     <th>Time</th>
                                     <th>Carbs (g)</th>
                                     <th>Water (L)</th>
                                     <th>Cumul Time</th>
-                                    <th class="time-of-day-col" style="display: none;">Time of Day</th>
+                                    <th class="time-of-day-col" id="time-header" style="display: none;">Time of Arrival</th>
                                 </tr>
                             </thead>
                             <tbody id="segments-tbody">

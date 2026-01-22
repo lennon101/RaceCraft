@@ -31,6 +31,14 @@ ABILITY_FATIGUE_MAP = {
     'weak': 3.0
 }
 
+# Segment difficulty pace adjustments (in seconds per km)
+DIFFICULTY_PACE_MAP = {
+    'easy': -10,         # Road/Flat
+    'normal': 0,         # Default (no penalty)
+    'technical_uphill': 10,   # Technical terrain climbing
+    'technical_downhill': 20  # Technical terrain descending
+}
+
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points on earth in kilometers."""
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
@@ -135,10 +143,11 @@ def calculate_elevation_change(trackpoints, start_idx, end_idx):
 
 def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distance_km, 
                               cumulative_time_hours=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR,
-                              fatigue_enabled=True, fatigue_multiplier=FATIGUE_MULTIPLIER):
-    """Adjust pace for elevation and fatigue."""
+                              fatigue_enabled=True, fatigue_multiplier=FATIGUE_MULTIPLIER,
+                              difficulty='easy'):
+    """Adjust pace for elevation, fatigue, and terrain difficulty."""
     if distance_km == 0:
-        return base_pace, base_pace, 0.0
+        return base_pace, base_pace, 0.0, 0.0
     
     elev_time_seconds = (elevation_gain * elev_gain_factor) - (elevation_loss * elev_gain_factor * 0.3)
     elev_time_minutes = elev_time_seconds / 60.0
@@ -158,10 +167,25 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
         fatigued_pace = pace_with_elev_limited
         fatigue_seconds_per_km = 0.0
     
-    max_allowed_pace = base_pace * 2.0
-    final_pace = min(fatigued_pace, max_allowed_pace)
+    # Apply difficulty adjustment (in seconds per km)
+    # For technical terrain, apply different adjustments based on elevation change
+    if difficulty == 'difficult':
+        # Technical terrain: +10s/km for climbing, -20s/km for descending
+        if elevation_gain > elevation_loss:
+            difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get('technical_uphill', 0)
+        else:
+            difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get('technical_downhill', 0)
+    else:
+        difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get(difficulty, 0)
     
-    return final_pace, pace_with_elev_limited, fatigue_seconds_per_km
+    difficulty_adjustment_minutes = difficulty_adjustment_seconds / 60.0
+    pace_with_difficulty = fatigued_pace + difficulty_adjustment_minutes
+    
+    max_allowed_pace = base_pace * 2.0
+    final_pace = min(pace_with_difficulty, max_allowed_pace)
+    pace_capped = pace_with_difficulty > max_allowed_pace
+    
+    return final_pace, pace_with_elev_limited, fatigue_seconds_per_km, difficulty_adjustment_seconds, pace_capped
 
 def format_time(minutes):
     """Format minutes to HH:MM:SS."""
@@ -236,6 +260,7 @@ def calculate():
         
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
+        segment_difficulties = data.get('segment_difficulties', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
         carbs_per_hour = float(data.get('carbs_per_hour', DEFAULT_CARBS_PER_HOUR))
@@ -274,11 +299,19 @@ def calculate():
             elev_gain, elev_loss = calculate_elevation_change(trackpoints, start_idx, end_idx)
             net_elev_change = elev_gain - elev_loss
             
+            # Get difficulty for this segment (default to 'easy' if not provided)
+            segment_difficulty = segment_difficulties[i] if i < len(segment_difficulties) else 'easy'
+            
             cumulative_hours = total_moving_time / 60.0
-            adjusted_pace, elev_adjusted_pace, fatigue_seconds = adjust_pace_for_elevation(
+            adjusted_pace, elev_adjusted_pace, fatigue_seconds, difficulty_seconds, pace_capped = adjust_pace_for_elevation(
                 z2_pace, elev_gain, elev_loss, segment_dist, cumulative_hours, elev_gain_factor,
-                fatigue_enabled, fatigue_multiplier
+                fatigue_enabled, fatigue_multiplier, segment_difficulty
             )
+            
+            # Log when pace is capped
+            if pace_capped:
+                segment_label = f"{segment_labels[i]} → {segment_labels[i + 1]}"
+                print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2× base pace)")
             
             segment_time = segment_dist * adjusted_pace
             total_moving_time += segment_time
@@ -305,6 +338,14 @@ def calculate():
                 except:
                     pass
             
+            # Format difficulty string
+            if difficulty_seconds > 0:
+                difficulty_str = f"+{int(difficulty_seconds // 60)}:{int(difficulty_seconds % 60):02d}"
+            elif difficulty_seconds < 0:
+                difficulty_str = f"-{int(abs(difficulty_seconds) // 60)}:{int(abs(difficulty_seconds) % 60):02d}"
+            else:
+                difficulty_str = "0:00"
+            
             segments.append({
                 'from': segment_labels[i],
                 'to': segment_labels[i + 1],
@@ -316,8 +357,11 @@ def calculate():
                 'elev_pace_str': f"{int(elev_adjusted_pace)}:{int((elev_adjusted_pace % 1) * 60):02d}",
                 'pace': round(adjusted_pace, 2),
                 'pace_str': f"{int(adjusted_pace)}:{int((adjusted_pace % 1) * 60):02d}",
+                'pace_capped': pace_capped,
                 'fatigue_seconds': round(fatigue_seconds, 1),
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}",
+                'difficulty_seconds': round(difficulty_seconds, 1),
+                'difficulty_str': difficulty_str,
                 'segment_time': round(segment_time, 2),
                 'segment_time_str': format_time(segment_time),
                 'cumulative_time': round(cumulative_time, 2),
@@ -391,12 +435,15 @@ def save_plan():
             'plan_name': data.get('plan_name'),
             'gpx_filename': data.get('gpx_filename'),
             'checkpoint_distances': data.get('checkpoint_distances', []),
+            'segment_difficulties': data.get('segment_difficulties', []),
             'avg_cp_time': data.get('avg_cp_time'),
             'z2_pace': data.get('z2_pace'),
             'elev_gain_factor': data.get('elev_gain_factor'),
             'carbs_per_hour': data.get('carbs_per_hour'),
             'water_per_hour': data.get('water_per_hour'),
             'race_start_time': data.get('race_start_time'),
+            'fatigue_enabled': data.get('fatigue_enabled'),
+            'ability_level': data.get('ability_level'),
             'segments': data.get('segments'),
             'summary': data.get('summary'),
             'elevation_profile': data.get('elevation_profile')
@@ -479,14 +526,16 @@ def export_csv():
             
             # Header
             header = ['Segment', 'Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
-                     'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Final Pace (min/km)', 
+                     'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Difficulty (mm:ss)', 'Final Pace (min/km)', 
                      'Segment Time', 'Carbs (g)', 'Water (L)', 'Cumulative Time']
             if race_start_time:
-                header.append('Time of Day')
+                header.append('Time of Arrival at CP')
             writer.writerow(header)
             
             # Data rows
             for seg in segments:
+                # Extract checkpoint name from segment 'to' field for dynamic column naming
+                checkpoint_name = seg['to']
                 row = [
                     f"{seg['from']} → {seg['to']}",
                     seg['distance'],
@@ -495,6 +544,7 @@ def export_csv():
                     seg['net_elev'],
                     seg['elev_pace_str'],
                     seg['fatigue_str'],
+                    seg.get('difficulty_str', '0:00'),
                     seg['pace_str'],
                     seg['segment_time_str'],
                     seg['target_carbs'],

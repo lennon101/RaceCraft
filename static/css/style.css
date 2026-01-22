@@ -239,11 +239,17 @@ header h2.subtitle {
     color: var(--text-secondary);
 }
 
-.checkpoint-input input {
+.checkpoint-input input,
+.checkpoint-input select {
     width: 100%;
     padding: 8px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
+}
+
+.checkpoint-input select {
+    background-color: white;
+    cursor: pointer;
 }
 
 .actions {

@@ -2,6 +2,7 @@
 let currentPlan = {
     gpx_filename: null,
     checkpoint_distances: [],
+    segment_difficulties: [],
     segments: null,
     summary: null,
     elevation_profile: null
@@ -33,6 +34,8 @@ const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
 const fatigueEnabledInput = document.getElementById('fatigue-enabled');
 const abilityLevelInput = document.getElementById('ability-level');
+const terrainEnabledInput = document.getElementById('terrain-enabled');
+const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -49,6 +52,17 @@ loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 // Fatigue checkbox toggles ability level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
     abilityLevelInput.disabled = !fatigueEnabledInput.checked;
+    if (currentPlan.gpx_filename) {
+        calculateRacePlan();
+    }
+});
+
+// Terrain difficulty checkbox toggles terrain difficulty dropdowns
+terrainEnabledInput.addEventListener('change', () => {
+    terrainDifficultiesContainer.style.display = terrainEnabledInput.checked ? 'block' : 'none';
+    if (terrainEnabledInput.checked) {
+        generateTerrainDifficultyInputs();
+    }
     if (currentPlan.gpx_filename) {
         calculateRacePlan();
     }
@@ -294,6 +308,7 @@ function clearAll() {
     currentPlan = {
         gpx_filename: null,
         checkpoint_distances: [],
+        segment_difficulties: [],
         segments: null,
         summary: null,
         elevation_profile: null
@@ -322,6 +337,8 @@ function clearAll() {
     document.getElementById('fatigue-enabled').checked = true;
     document.getElementById('ability-level').value = 'average';
     document.getElementById('ability-level').disabled = false;
+    document.getElementById('terrain-enabled').checked = false;
+    terrainDifficultiesContainer.style.display = 'none';
     
     // Regenerate checkpoint inputs
     generateCheckpointInputs();
@@ -379,9 +396,11 @@ function generateCheckpointInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
 
+    // Create only checkpoint distance inputs
     for (let i = 0; i < numCheckpoints; i++) {
         const div = document.createElement('div');
         div.className = 'checkpoint-input';
+        
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
             <input type="number" 
@@ -403,6 +422,67 @@ function generateCheckpointInputs() {
             }
         });
     });
+    
+    // Generate terrain difficulty inputs if enabled
+    if (terrainEnabledInput.checked) {
+        generateTerrainDifficultyInputs();
+    }
+}
+
+function generateTerrainDifficultyInputs() {
+    const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
+    terrainDifficultiesContainer.innerHTML = '';
+    
+    if (numCheckpoints === 0) {
+        return;
+    }
+
+    // Create terrain difficulty dropdowns for all segments
+    // Note: We need numCheckpoints + 1 difficulty dropdowns for all segments (Start→CP1, CP1→CP2, ..., CPn→Finish)
+    for (let i = 0; i < numCheckpoints; i++) {
+        const div = document.createElement('div');
+        div.className = 'checkpoint-input';
+        const segmentDifficulty = currentPlan.segment_difficulties[i] || 'normal';
+        
+        // Determine segment label (Start → CP1, CP1 → CP2, etc.)
+        const fromLabel = i === 0 ? 'Start' : `CP${i}`;
+        const toLabel = `CP${i + 1}`;
+        
+        div.innerHTML = `
+            <label>Segment ${fromLabel} → ${toLabel} Terrain Difficulty:</label>
+            <select class="segment-difficulty" data-index="${i}">
+                <option value="easy" ${segmentDifficulty === 'easy' ? 'selected' : ''}>Easy (Road/Flat) -10s/km</option>
+                <option value="normal" selected>Normal 0s/km</option>
+                <option value="difficult" ${segmentDifficulty === 'difficult' ? 'selected' : ''}>Difficult (Technical) +10s/km ↑ / +20s/km ↓</option>
+            </select>
+        `;
+        terrainDifficultiesContainer.appendChild(div);
+    }
+    
+    // Add final segment difficulty (last CP → Finish)
+    const div = document.createElement('div');
+    div.className = 'checkpoint-input';
+    const finalSegmentDifficulty = currentPlan.segment_difficulties[numCheckpoints] || 'normal';
+    const fromLabel = `CP${numCheckpoints}`;
+    
+    div.innerHTML = `
+        <label>Segment ${fromLabel} → Finish Terrain Difficulty:</label>
+        <select class="segment-difficulty" data-index="${numCheckpoints}">
+            <option value="easy" ${finalSegmentDifficulty === 'easy' ? 'selected' : ''}>Easy (Road/Flat) -10s/km</option>
+            <option value="normal" selected>Normal 0s/km</option>
+            <option value="difficult" ${finalSegmentDifficulty === 'difficult' ? 'selected' : ''}>Difficult (Technical) +10s/km ↑ / +20s/km ↓</option>
+        </select>
+    `;
+    terrainDifficultiesContainer.appendChild(div);
+
+    // Add event listeners for real-time updates
+    document.querySelectorAll('.segment-difficulty').forEach(input => {
+        input.addEventListener('change', () => {
+            if (currentPlan.gpx_filename) {
+                calculateRacePlan();
+            }
+        });
+    });
 }
 
 async function calculateRacePlan() {
@@ -416,6 +496,21 @@ async function calculateRacePlan() {
     currentPlan.checkpoint_distances = Array.from(checkpointInputs)
         .map(input => parseFloat(input.value))
         .filter(val => !isNaN(val));
+
+    // Gather segment difficulties (only if terrain difficulty is enabled)
+    const terrainEnabled = terrainEnabledInput.checked;
+    if (terrainEnabled) {
+        const difficultyInputs = document.querySelectorAll('.segment-difficulty');
+        // Sort by data-index to ensure correct order
+        const sortedInputs = Array.from(difficultyInputs).sort((a, b) => {
+            return parseInt(a.getAttribute('data-index')) - parseInt(b.getAttribute('data-index'));
+        });
+        currentPlan.segment_difficulties = sortedInputs.map(input => input.value);
+    } else {
+        // Set all difficulties to 'easy' (no penalty) if terrain is disabled
+        const numSegments = currentPlan.checkpoint_distances.length + 1;
+        currentPlan.segment_difficulties = Array(numSegments).fill('easy');
+    }
 
     // Gather other inputs
     const avgCpTime = parseFloat(document.getElementById('avg-cp-time').value) || 5;
@@ -432,6 +527,7 @@ async function calculateRacePlan() {
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
+        segment_difficulties: currentPlan.segment_difficulties,
         avg_cp_time: avgCpTime,
         z2_pace: z2Pace,
         elev_gain_factor: elevGainFactor,
@@ -506,8 +602,17 @@ function displayResults(data) {
         col.style.display = hasFatigue ? 'table-cell' : 'none';
     });
 
+    // Check if any segment has difficulty adjustment
+    const hasDifficulty = segments.some(seg => seg.difficulty_seconds && seg.difficulty_seconds !== 0);
+    const difficultyCols = document.querySelectorAll('.difficulty-col');
+    difficultyCols.forEach(col => {
+        col.style.display = hasDifficulty ? 'table-cell' : 'none';
+    });
+
     segments.forEach(seg => {
         const row = document.createElement('tr');
+        const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
+        const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
         row.innerHTML = `
             <td><strong>${seg.from} → ${seg.to}</strong></td>
             <td>${seg.distance}</td>
@@ -515,13 +620,14 @@ function displayResults(data) {
             <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
-            <td><strong>${seg.pace_str}</strong></td>
+            <td class="difficulty-col" style="display: ${hasDifficulty ? 'table-cell' : 'none'}">${seg.difficulty_str || '0:00'}</td>
+            <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
             <td>${seg.target_water}</td>
             <td><strong>${seg.cumulative_time_str}</strong></td>
             <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
-                ${seg.time_of_day || '--'}
+                ${timeOfArrival}
             </td>
         `;
         tbody.appendChild(row);
@@ -572,6 +678,7 @@ async function savePlan() {
         plan_name: planName,
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
+        segment_difficulties: currentPlan.segment_difficulties,
         avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value),
         z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + parseFloat(document.getElementById('z2-pace-sec').value) / 60,
         elev_gain_factor: parseFloat(document.getElementById('elev-gain-factor').value),
@@ -656,6 +763,7 @@ async function loadPlan(filename) {
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
+            currentPlan.segment_difficulties = data.segment_difficulties || [];
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
@@ -671,6 +779,8 @@ async function loadPlan(filename) {
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('ability-level').value = data.ability_level || 'average';
             document.getElementById('ability-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            document.getElementById('terrain-enabled').checked = data.segment_difficulties && data.segment_difficulties.some(d => d !== 'easy');
+            terrainDifficultiesContainer.style.display = document.getElementById('terrain-enabled').checked ? 'block' : 'none';
 
             // Generate checkpoint inputs and populate
             generateCheckpointInputs();
