@@ -149,11 +149,14 @@ header h2.subtitle {
     transition: opacity 0.2s;
 }
 
-.info-icon:hover {
+.info-icon:hover,
+.info-icon:focus {
     opacity: 1;
+    outline: none;
 }
 
-.info-icon[title]:hover::after {
+.info-icon[title]:hover::after,
+.info-icon[title]:focus::after {
     content: attr(title);
     position: absolute;
     left: 25px;
@@ -165,7 +168,6 @@ header h2.subtitle {
     border-radius: 8px;
     white-space: normal;
     max-width: 280px;
-    width: max-content;
     font-size: 0.85rem;
     font-weight: 400;
     line-height: 1.4;
