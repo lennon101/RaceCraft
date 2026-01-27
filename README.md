@@ -1,4 +1,6 @@
-<img src="logo.png" alt="RaceCraft Logo" width="200">
+<p align="center">
+  <img src="logo_header.png" alt="RaceCraft Logo" width="800">
+</p>
 
 # RaceCraft - Fuel & Pacing Planner
 
