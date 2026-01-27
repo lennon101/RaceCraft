@@ -37,12 +37,14 @@ effort_km = 10 + 5 + 1.5 = 16.5 km-effort
 
 Each athlete has a **Fatigue Onset Point** representing how much cumulative effort they can sustain before fatigue begins affecting performance. FOP values are in km-effort:
 
-| Fitness Level | FOP Range | α (Severity) | β (Compounding) |
-|--------------|-----------|--------------|-----------------|
-| **Untrained** | 20-30 km | 0.35 | 1.8 |
-| **Recreational** | 30-45 km | 0.25 | 1.5 |
-| **Trained** | 45-65 km | 0.20 | 1.4 |
-| **Elite** | 65-85+ km | 0.15 | 1.3 |
+| Fitness Level | FOP (km-effort) | α (Severity) | β (Growth) | Fatigue Curve |
+|--------------|-----------------|--------------|------------|---------------|
+| **Untrained** | 25 | 0.12 | 1.0 | Linear: 12% per 1× FOP |
+| **Recreational** | 37.5 | 0.10 | 1.0 | Linear: 10% per 1× FOP |
+| **Trained** | 55 | 0.08 | 0.95 | Sub-linear: ~8% per 1× FOP |
+| **Elite** | 75 | 0.06 | 0.90 | Sub-linear: ~6% per 1× FOP |
+
+**Note**: Beta ≤ 1.0 ensures linear or sub-linear fatigue growth, preventing unrealistic exponential slowdowns common in ultra-endurance events.
 
 ### Fitness Level Definitions
 
@@ -73,29 +75,50 @@ Where:
 
 ### Example Calculations
 
-**Recreational runner (FOP = 37.5 km, α = 0.25, β = 1.5):**
+**Recreational runner (FOP = 37.5 km, α = 0.10, β = 1.0):**
 
 At 50 km cumulative effort:
 ```
-fatigue_multiplier = 1 + 0.25 × ((50 - 37.5) / 37.5)^1.5
-fatigue_multiplier = 1 + 0.25 × (0.333)^1.5
-fatigue_multiplier = 1 + 0.25 × 0.192
-fatigue_multiplier = 1.048 (4.8% slower)
+fatigue_multiplier = 1 + 0.10 × ((50 - 37.5) / 37.5)^1.0
+fatigue_multiplier = 1 + 0.10 × (0.333)^1.0
+fatigue_multiplier = 1 + 0.10 × 0.333
+fatigue_multiplier = 1.033 (3.3% slower)
 ```
 
-At 75 km cumulative effort:
+At 75 km cumulative effort (2× FOP):
 ```
-fatigue_multiplier = 1 + 0.25 × ((75 - 37.5) / 37.5)^1.5
-fatigue_multiplier = 1 + 0.25 × (1.0)^1.5
-fatigue_multiplier = 1.25 (25% slower)
+fatigue_multiplier = 1 + 0.10 × ((75 - 37.5) / 37.5)^1.0
+fatigue_multiplier = 1 + 0.10 × 1.0
+fatigue_multiplier = 1.10 (10% slower)
 ```
 
-At 100 km cumulative effort:
+At 112.5 km cumulative effort (3× FOP):
 ```
-fatigue_multiplier = 1 + 0.25 × ((100 - 37.5) / 37.5)^1.5
-fatigue_multiplier = 1 + 0.25 × (1.667)^1.5
-fatigue_multiplier = 1.539 (53.9% slower)
+fatigue_multiplier = 1 + 0.10 × ((112.5 - 37.5) / 37.5)^1.0
+fatigue_multiplier = 1 + 0.10 × 2.0
+fatigue_multiplier = 1.20 (20% slower)
 ```
+
+**Elite runner (FOP = 75 km, α = 0.06, β = 0.90):**
+
+At 150 km cumulative effort (2× FOP):
+```
+fatigue_multiplier = 1 + 0.06 × ((150 - 75) / 75)^0.90
+fatigue_multiplier = 1 + 0.06 × (1.0)^0.90
+fatigue_multiplier = 1 + 0.06 × 1.0
+fatigue_multiplier = 1.06 (6% slower)
+```
+
+### Why Linear/Sub-Linear Growth?
+
+With **β ≤ 1.0**, fatigue grows linearly or sub-linearly rather than exponentially. This is more realistic for ultra-endurance events because:
+
+1. **Pacing Adaptation**: Athletes adjust their pace to manage fatigue
+2. **Mental Resilience**: Experienced ultra runners maintain form despite fatigue
+3. **Energy Management**: Smart fueling and hydration slow fatigue accumulation
+4. **Realistic Slowdowns**: 10-20% slowdown at 2× FOP is typical, not 50-100%
+
+Old exponential model (β = 1.3-1.8) caused unrealistic 70-120% slowdowns in long races.
 
 ## Pace Calculation Pipeline
 

@@ -22,12 +22,13 @@ DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
 
 # Climbing ability parameters - vertical speed in m/h
+# Updated to more realistic values for mountain runners
 CLIMBING_ABILITY_PARAMS = {
-    'conservative': {'vertical_speed': 500, 'label': 'Conservative Climber'},
-    'moderate': {'vertical_speed': 700, 'label': 'Moderate Climber'},
-    'strong': {'vertical_speed': 900, 'label': 'Strong Climber'},
-    'very_strong': {'vertical_speed': 1100, 'label': 'Very Strong Climber'},
-    'elite': {'vertical_speed': 1300, 'label': 'Elite Climber'}
+    'conservative': {'vertical_speed': 600, 'label': 'Conservative Climber'},   # Untrained/cautious
+    'moderate': {'vertical_speed': 800, 'label': 'Moderate Climber'},           # Recreational mountain runner
+    'strong': {'vertical_speed': 1000, 'label': 'Strong Climber'},              # Experienced/trained
+    'very_strong': {'vertical_speed': 1250, 'label': 'Very Strong Climber'},    # Competitive
+    'elite': {'vertical_speed': 1500, 'label': 'Elite Climber'}                 # Top-level mountain athlete
 }
 
 # Downhill speed multipliers by gradient range (as decimal, e.g., 0.05 = 5%)
@@ -40,11 +41,13 @@ DOWNHILL_SPEED_MULTIPLIERS = {
 }
 
 # Fitness level parameters - Fatigue Onset Point (FOP) in km-effort
+# Reduced alpha and beta values to prevent excessive fatigue escalation
+# Beta ≤ 1.0 provides linear or sub-linear growth (more realistic for endurance events)
 FITNESS_LEVEL_PARAMS = {
-    'untrained': {'fop': 25, 'alpha': 0.35, 'beta': 1.8},
-    'recreational': {'fop': 37.5, 'alpha': 0.25, 'beta': 1.5},
-    'trained': {'fop': 55, 'alpha': 0.20, 'beta': 1.4},
-    'elite': {'fop': 75, 'alpha': 0.15, 'beta': 1.3}
+    'untrained': {'fop': 25, 'alpha': 0.12, 'beta': 1.0},      # 12% per 1x FOP beyond threshold
+    'recreational': {'fop': 37.5, 'alpha': 0.10, 'beta': 1.0}, # 10% per 1x FOP beyond threshold
+    'trained': {'fop': 55, 'alpha': 0.08, 'beta': 0.95},       # 8% per 1x FOP, slight sub-linear
+    'elite': {'fop': 75, 'alpha': 0.06, 'beta': 0.90}          # 6% per 1x FOP, more sub-linear
 }
 
 # Terrain Efficiency Factors (TEF) - multipliers where 1.0 = smooth ideal trail
@@ -208,9 +211,11 @@ def calculate_vertical_speed(base_vertical_speed, gradient):
     Calculate gradient-aware vertical speed in m/h.
     
     Vertical speed efficiency varies with gradient:
-    - <5%: Minimal climb cost (very gentle, barely noticeable)
-    - 8-12%: Peak efficiency (optimal sustainable climbing grade)
-    - >15%: Declining efficiency (forced hiking, biomechanical limits)
+    - <3%: Minimal efficiency penalty (90% - barely feels like climbing)
+    - 3-6%: Slight reduction (90-95% - gentle sustained climb)
+    - 6-12%: Peak efficiency (95-100% - optimal climbing zone)
+    - 12-18%: Still efficient (95-85% - steep but manageable)
+    - >18%: Declining efficiency (85-70% - very steep, forced to slow)
     
     Args:
         base_vertical_speed: Athlete's base vertical speed in m/h
@@ -222,24 +227,24 @@ def calculate_vertical_speed(base_vertical_speed, gradient):
     gradient_pct = abs(gradient) * 100.0
     
     # Efficiency multiplier based on gradient
-    if gradient_pct < 5.0:
-        # Very gentle: 60% efficiency (climb cost is low)
-        efficiency = 0.60
-    elif gradient_pct < 8.0:
-        # Gentle to moderate: scale from 60% to 100%
-        efficiency = 0.60 + (gradient_pct - 5.0) / 3.0 * 0.40
+    if gradient_pct < 3.0:
+        # Very gentle: 90% efficiency (barely noticeable)
+        efficiency = 0.90
+    elif gradient_pct < 6.0:
+        # Gentle: scale from 90% to 95%
+        efficiency = 0.90 + (gradient_pct - 3.0) / 3.0 * 0.05
     elif gradient_pct <= 12.0:
-        # Peak efficiency zone: 100%
-        efficiency = 1.0
-    elif gradient_pct <= 15.0:
-        # Getting steep: scale from 100% to 85%
-        efficiency = 1.0 - (gradient_pct - 12.0) / 3.0 * 0.15
-    elif gradient_pct <= 20.0:
-        # Steep: scale from 85% to 65%
-        efficiency = 0.85 - (gradient_pct - 15.0) / 5.0 * 0.20
+        # Optimal climbing zone: scale from 95% to 100%
+        efficiency = 0.95 + (gradient_pct - 6.0) / 6.0 * 0.05
+    elif gradient_pct <= 18.0:
+        # Steep but efficient: scale from 100% to 85%
+        efficiency = 1.0 - (gradient_pct - 12.0) / 6.0 * 0.15
+    elif gradient_pct <= 25.0:
+        # Very steep: scale from 85% to 70%
+        efficiency = 0.85 - (gradient_pct - 18.0) / 7.0 * 0.15
     else:
-        # Very steep: 65% efficiency (forced to slow down significantly)
-        efficiency = 0.65
+        # Extremely steep: 70% efficiency
+        efficiency = 0.70
     
     return base_vertical_speed * efficiency
 
@@ -391,8 +396,9 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     # Calculate fatigue penalty in seconds per km (for reporting)
     fatigue_seconds_per_km = (pace_with_climbing * fatigue_multiplier - pace_with_climbing) * 60.0
     
-    # Apply reasonable max pace limit (2× base pace)
-    max_allowed_pace = base_pace * 2.0
+    # Apply reasonable max pace limit (2.5× base pace to accommodate very long races)
+    # This prevents unrealistic slowdowns while still capping extreme values
+    max_allowed_pace = base_pace * 2.5
     pace_capped = final_pace > max_allowed_pace
     if pace_capped:
         final_pace = max_allowed_pace
@@ -535,7 +541,8 @@ def calculate():
             # Log when pace is capped
             if pace_capped:
                 segment_label = f"{segment_labels[i]} → {segment_labels[i + 1]}"
-                print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2× base pace)")
+                print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2.5× base pace)")
+
             
             segment_time = segment_dist * adjusted_pace
             total_moving_time += segment_time
