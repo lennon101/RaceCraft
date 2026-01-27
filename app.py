@@ -31,13 +31,24 @@ FITNESS_LEVEL_PARAMS = {
     'elite': {'fop': 75, 'alpha': 0.15, 'beta': 1.3}
 }
 
-# Segment difficulty pace adjustments (in seconds per km)
-DIFFICULTY_PACE_MAP = {
-    'easy': -10,         # Road/Flat
-    'normal': 0,         # Default (no penalty)
-    'technical_uphill': 10,   # Technical terrain climbing
-    'technical_downhill': 20  # Technical terrain descending
+# Terrain Efficiency Factors (TEF) - multipliers where 1.0 = smooth ideal trail
+# Higher values = slower pace due to terrain difficulty
+TERRAIN_FACTORS = {
+    'road': 0.95,              # Road/track
+    'smooth_trail': 1.0,       # Smooth singletrack (ideal baseline)
+    'dirt_road': 1.05,         # Dirt road
+    'rocky_runnable': 1.15,    # Rocky but runnable (average of 1.1-1.2)
+    'technical': 1.325,        # Technical trail with roots/rocks (average of 1.25-1.4)
+    'very_technical': 1.65,    # Very technical or hands-needed (average of 1.5-1.8)
+    'scrambling': 2.0          # Scrambling or unstable footing
 }
+
+# Terrain gradient scaling factor (gamma) - how much gradient amplifies terrain effects
+TERRAIN_GRADIENT_GAMMA = 1.25  # Between 1.0-1.5 as recommended
+
+# Terrain effect on climbs vs descents
+TERRAIN_CLIMB_FACTOR = 0.7     # 70% effect on climbs
+TERRAIN_DESCENT_FACTOR = 1.0   # 100% effect on descents
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points on earth in kilometers."""
@@ -141,24 +152,69 @@ def calculate_elevation_change(trackpoints, start_idx, end_idx):
     
     return gain, loss
 
+def calculate_terrain_efficiency_factor(terrain_type='smooth_trail', gradient=0.0, 
+                                       skill_level=0.5, is_descent=False):
+    """
+    Calculate terrain efficiency factor (TEF) for a segment.
+    
+    Args:
+        terrain_type: Type of terrain (key from TERRAIN_FACTORS)
+        gradient: Segment gradient as decimal (e.g., 0.1 = 10% grade)
+        skill_level: Athlete technical skill (0.0 = novice, 1.0 = expert)
+        is_descent: Whether segment is primarily descending
+        
+    Returns:
+        Terrain efficiency factor (≥ 1.0, where 1.0 = no terrain penalty)
+    """
+    # Get base terrain factor
+    base_terrain_factor = TERRAIN_FACTORS.get(terrain_type, 1.0)
+    
+    # Scale terrain impact by gradient: effective_terrain_factor = terrain_factor × (1 + γ × |gradient|)
+    gradient_scaling = 1.0 + (TERRAIN_GRADIENT_GAMMA * abs(gradient))
+    scaled_terrain_factor = base_terrain_factor * gradient_scaling
+    
+    # Apply different terrain effects for climbs vs descents
+    if is_descent:
+        # 100% effect on descents
+        direction_adjusted_factor = 1.0 + (scaled_terrain_factor - 1.0) * TERRAIN_DESCENT_FACTOR
+    else:
+        # ~70% effect on climbs
+        direction_adjusted_factor = 1.0 + (scaled_terrain_factor - 1.0) * TERRAIN_CLIMB_FACTOR
+    
+    # Adjust for athlete technical skill: adjusted = 1 + (factor − 1) × (1 − skill)
+    skill_adjusted_factor = 1.0 + (direction_adjusted_factor - 1.0) * (1.0 - skill_level)
+    
+    # Ensure factor is at least 1.0 (terrain can only slow down, not speed up beyond smooth trail)
+    return max(1.0, skill_adjusted_factor)
+
 def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distance_km, 
                               cumulative_effort=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR,
                               fatigue_enabled=True, fitness_level='recreational',
-                              difficulty='easy'):
-    """Adjust pace for elevation, fatigue, and terrain difficulty using cumulative effort model."""
-    if distance_km == 0:
-        return base_pace, base_pace, 0.0, 0.0, False
+                              terrain_type='smooth_trail', skill_level=0.5):
+    """
+    Adjust pace for elevation, fatigue, and terrain difficulty.
     
+    Terrain difficulty is applied as a local, immediate efficiency penalty that affects 
+    segment time but does NOT alter fatigue onset or accumulation.
+    
+    Formula: segment_time = base_time × terrain_factor × fatigue_multiplier
+    """
+    if distance_km == 0:
+        return base_pace, base_pace, 0.0, 1.0, False
+    
+    # Calculate base time with elevation adjustments
     elev_time_seconds = (elevation_gain * elev_gain_factor) - (elevation_loss * elev_gain_factor * 0.3)
     elev_time_minutes = elev_time_seconds / 60.0
     
     segment_time_no_fatigue = (distance_km * base_pace) + elev_time_minutes
     pace_with_elev_only = segment_time_no_fatigue / distance_km if distance_km > 0 else base_pace
     
+    # Limit downhill speed increase
     min_allowed_pace = base_pace * (1.0 - MAX_DOWNHILL_SPEED_INCREASE / 100.0)
     pace_with_elev_limited = max(pace_with_elev_only, min_allowed_pace)
     
-    # Apply fatigue only if enabled using FOP-based model
+    # Calculate fatigue multiplier (independent of terrain)
+    fatigue_multiplier = 1.0
     if fatigue_enabled:
         params = FITNESS_LEVEL_PARAMS.get(fitness_level, FITNESS_LEVEL_PARAMS['recreational'])
         fop = params['fop']
@@ -169,34 +225,38 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
         if cumulative_effort > fop:
             # Non-linear fatigue: fatigue_multiplier = 1 + α × ((E − FOP) / FOP)^β
             fatigue_multiplier = 1.0 + alpha * (((cumulative_effort - fop) / fop) ** beta)
-            fatigued_pace = pace_with_elev_limited * fatigue_multiplier
-            fatigue_seconds_per_km = (fatigued_pace - pace_with_elev_limited) * 60.0
-        else:
-            fatigued_pace = pace_with_elev_limited
-            fatigue_seconds_per_km = 0.0
-    else:
-        fatigued_pace = pace_with_elev_limited
-        fatigue_seconds_per_km = 0.0
     
-    # Apply difficulty adjustment (in seconds per km)
-    # For technical terrain, apply different adjustments based on elevation change
-    if difficulty == 'difficult':
-        # Technical terrain: +10s/km for climbing, -20s/km for descending
-        if elevation_gain > elevation_loss:
-            difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get('technical_uphill', 0)
-        else:
-            difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get('technical_downhill', 0)
-    else:
-        difficulty_adjustment_seconds = DIFFICULTY_PACE_MAP.get(difficulty, 0)
+    # Calculate terrain efficiency factor (separate from fatigue)
+    # Determine if segment is primarily descent
+    is_descent = elevation_loss > elevation_gain
     
-    difficulty_adjustment_minutes = difficulty_adjustment_seconds / 60.0
-    pace_with_difficulty = fatigued_pace + difficulty_adjustment_minutes
+    # Calculate gradient as decimal (net elevation change / distance)
+    net_elevation_change = elevation_gain - elevation_loss
+    gradient = (net_elevation_change / (distance_km * 1000.0)) if distance_km > 0 else 0.0
     
+    terrain_factor = calculate_terrain_efficiency_factor(
+        terrain_type=terrain_type,
+        gradient=gradient,
+        skill_level=skill_level,
+        is_descent=is_descent
+    )
+    
+    # Apply both fatigue and terrain to get final pace
+    # segment_time = base_time × terrain_factor × fatigue_multiplier
+    base_segment_time = distance_km * pace_with_elev_limited
+    adjusted_segment_time = base_segment_time * terrain_factor * fatigue_multiplier
+    final_pace = adjusted_segment_time / distance_km
+    
+    # Calculate individual components for reporting
+    fatigue_seconds_per_km = (pace_with_elev_limited * fatigue_multiplier - pace_with_elev_limited) * 60.0
+    
+    # Apply reasonable max pace limit
     max_allowed_pace = base_pace * 2.0
-    final_pace = min(pace_with_difficulty, max_allowed_pace)
-    pace_capped = pace_with_difficulty > max_allowed_pace
+    pace_capped = final_pace > max_allowed_pace
+    if pace_capped:
+        final_pace = max_allowed_pace
     
-    return final_pace, pace_with_elev_limited, fatigue_seconds_per_km, difficulty_adjustment_seconds, pace_capped
+    return final_pace, pace_with_elev_limited, fatigue_seconds_per_km, terrain_factor, pace_capped
 
 def format_time(minutes):
     """Format minutes to HH:MM:SS."""
@@ -276,7 +336,7 @@ def calculate():
         
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
-        segment_difficulties = data.get('segment_difficulties', [])
+        segment_terrain_types = data.get('segment_terrain_types', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
         carbs_per_hour = float(data.get('carbs_per_hour', DEFAULT_CARBS_PER_HOUR))
@@ -287,6 +347,9 @@ def calculate():
         # Fatigue settings
         fatigue_enabled = data.get('fatigue_enabled', True)
         fitness_level = data.get('fitness_level', 'recreational')
+        
+        # Terrain settings
+        skill_level = float(data.get('skill_level', 0.5))  # 0.0 = novice, 1.0 = expert
         
         # Parse GPX
         trackpoints = parse_gpx_file(filepath)
@@ -315,13 +378,13 @@ def calculate():
             elev_gain, elev_loss = calculate_elevation_change(trackpoints, start_idx, end_idx)
             net_elev_change = elev_gain - elev_loss
             
-            # Get difficulty for this segment (default to 'easy' if not provided)
-            segment_difficulty = segment_difficulties[i] if i < len(segment_difficulties) else 'easy'
+            # Get terrain type for this segment (default to 'smooth_trail' if not provided)
+            terrain_type = segment_terrain_types[i] if i < len(segment_terrain_types) else 'smooth_trail'
             
             # Calculate pace using cumulative effort (BEFORE adding this segment's effort)
-            adjusted_pace, elev_adjusted_pace, fatigue_seconds, difficulty_seconds, pace_capped = adjust_pace_for_elevation(
+            adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
                 z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, elev_gain_factor,
-                fatigue_enabled, fitness_level, segment_difficulty
+                fatigue_enabled, fitness_level, terrain_type, skill_level
             )
             
             # Update cumulative effort: effort_km = distance_km + ascent_m/100 + descent_m/200
@@ -358,13 +421,8 @@ def calculate():
                 except:
                     pass
             
-            # Format difficulty string
-            if difficulty_seconds > 0:
-                difficulty_str = f"+{int(difficulty_seconds // 60)}:{int(difficulty_seconds % 60):02d}"
-            elif difficulty_seconds < 0:
-                difficulty_str = f"-{int(abs(difficulty_seconds) // 60)}:{int(abs(difficulty_seconds) % 60):02d}"
-            else:
-                difficulty_str = "0:00"
+            # Calculate terrain penalty percentage for display
+            terrain_penalty_pct = (terrain_factor - 1.0) * 100.0
             
             segments.append({
                 'from': segment_labels[i],
@@ -382,8 +440,9 @@ def calculate():
                 'pace_capped': pace_capped,
                 'fatigue_seconds': round(fatigue_seconds, 1),
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}",
-                'difficulty_seconds': round(difficulty_seconds, 1),
-                'difficulty_str': difficulty_str,
+                'terrain_type': terrain_type,
+                'terrain_factor': round(terrain_factor, 3),
+                'terrain_penalty_pct': round(terrain_penalty_pct, 1),
                 'segment_time': round(segment_time, 2),
                 'segment_time_str': format_time(segment_time),
                 'cumulative_time': round(cumulative_time, 2),
@@ -457,7 +516,7 @@ def save_plan():
             'plan_name': data.get('plan_name'),
             'gpx_filename': data.get('gpx_filename'),
             'checkpoint_distances': data.get('checkpoint_distances', []),
-            'segment_difficulties': data.get('segment_difficulties', []),
+            'segment_terrain_types': data.get('segment_terrain_types', []),
             'avg_cp_time': data.get('avg_cp_time'),
             'z2_pace': data.get('z2_pace'),
             'elev_gain_factor': data.get('elev_gain_factor'),
@@ -466,6 +525,7 @@ def save_plan():
             'race_start_time': data.get('race_start_time'),
             'fatigue_enabled': data.get('fatigue_enabled'),
             'fitness_level': data.get('fitness_level'),
+            'skill_level': data.get('skill_level'),
             'segments': data.get('segments'),
             'summary': data.get('summary'),
             'elevation_profile': data.get('elevation_profile')
@@ -548,7 +608,7 @@ def export_csv():
             
             # Header
             header = ['Segment', 'Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
-                     'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Difficulty (mm:ss)', 'Final Pace (min/km)', 
+                     'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Terrain Type', 'Terrain Factor', 'Final Pace (min/km)', 
                      'Segment Time', 'Carbs (g)', 'Water (L)', 'Cumulative Time']
             if race_start_time:
                 header.append('Time of Arrival at CP')
@@ -566,7 +626,8 @@ def export_csv():
                     seg['net_elev'],
                     seg['elev_pace_str'],
                     seg['fatigue_str'],
-                    seg.get('difficulty_str', '0:00'),
+                    seg.get('terrain_type', 'smooth_trail'),
+                    seg.get('terrain_factor', 1.0),
                     seg['pace_str'],
                     seg['segment_time_str'],
                     seg['target_carbs'],

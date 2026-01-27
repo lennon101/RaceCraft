@@ -10,6 +10,7 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 
 - **GPX Route Upload**: Drag and drop your race route
 - **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](FATIGUE_MODEL.md))
+- **Terrain Difficulty System**: Sophisticated trail surface modeling with skill adjustment ([learn more](TERRAIN_DIFFICULTY.md))
 - **Real-time Calculations**: Results update as you adjust parameters
 - **Save/Load Plans**: Store multiple race plans for different events
 - **Interactive Results**: Visual summary cards and detailed segment breakdown
@@ -154,6 +155,17 @@ RaceCraft uses an advanced **effort-based fatigue model** that accounts for cumu
 - **Effort Calculation**: `effort_km = distance_km + ascent_m/100 + descent_m/200`
 - **Fatigue Formula**: `fatigue_multiplier = 1 + α × ((E − FOP) / FOP)^β`
 
+### Terrain Difficulty Model
+
+RaceCraft models terrain difficulty as a **local efficiency penalty** that slows pace without affecting fatigue accumulation. See [TERRAIN_DIFFICULTY.md](TERRAIN_DIFFICULTY.md) for complete documentation.
+
+**Key features:**
+- **7 Terrain Types**: Road (0.95×) to Scrambling (2.0×)
+- **Gradient Scaling**: Steeper terrain amplifies difficulty
+- **Skill Adjustment**: Technical proficiency reduces terrain penalties
+- **Descent Weighting**: 100% effect downhill, 70% uphill
+- **Formula**: `segment_time = base_time × terrain_factor × fatigue_multiplier`
+
 ### Constants (in app.py)
 
 ```python
@@ -201,15 +213,20 @@ ports:
    - Adjust elevation gain factor if needed
    - Optionally set race start time for time-of-day display
 
-4. **Configure Nutrition**
+4. **Configure Terrain Difficulty** (Optional)
+   - Enable terrain difficulty adjustments
+   - Select terrain type for each segment (road to scrambling)
+   - Set your technical skill level (novice to expert)
+
+5. **Configure Nutrition**
    - Set target carbs per hour
    - Set target water per hour
 
-5. **Calculate**
+6. **Calculate**
    - Click "Calculate Race Plan"
    - Results update in real-time as you adjust values
 
-6. **Save/Export**
+7. **Save/Export**
    - Save plan for future reference
    - Export to CSV for offline use
 

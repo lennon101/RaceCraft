@@ -59,7 +59,19 @@
                         <input type="checkbox" id="terrain-enabled" />
                         <label for="terrain-enabled">Include Terrain Difficulty Adjustments</label>
                     </div>
-                    <div id="terrain-difficulties" style="display: none;"></div>
+                    <div id="terrain-skill-container" style="display: none;">
+                        <div class="input-group">
+                            <label for="skill-level">Technical Skill Level:</label>
+                            <select id="skill-level">
+                                <option value="0.0">Novice (0% reduction)</option>
+                                <option value="0.25">Beginner (25% reduction)</option>
+                                <option value="0.5" selected>Intermediate (50% reduction)</option>
+                                <option value="0.75">Advanced (75% reduction)</option>
+                                <option value="1.0">Expert (100% reduction)</option>
+                            </select>
+                        </div>
+                        <div id="terrain-difficulties"></div>
+                    </div>
                 </section>
 
                 <!-- Pacing -->
@@ -174,7 +186,7 @@
                                     <th>Net (m)</th>
                                     <th>Elev Pace</th>
                                     <th class="fatigue-col">Fatigue</th>
-                                    <th class="difficulty-col">Difficulty</th>
+                                    <th class="terrain-col">Terrain</th>
                                     <th>Final Pace</th>
                                     <th>Time</th>
                                     <th>Carbs (g)</th>
