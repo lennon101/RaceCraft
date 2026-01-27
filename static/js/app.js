@@ -688,7 +688,9 @@ function showSaveModal() {
     // If a plan is loaded, show both Save and Save As buttons
     if (currentPlan.loadedFilename) {
         // Set the plan name to the loaded filename (without .json extension)
-        const loadedPlanName = currentPlan.loadedFilename.replace('.json', '');
+        const loadedPlanName = currentPlan.loadedFilename.endsWith('.json') 
+            ? currentPlan.loadedFilename.slice(0, -5) 
+            : currentPlan.loadedFilename;
         planNameInput.value = loadedPlanName;
         
         // Show Save As button for loaded plans
@@ -759,19 +761,14 @@ async function savePlan(forceSaveAs = false) {
         const data = await response.json();
 
         if (response.ok) {
-            // Update the loaded filename appropriately based on the operation
+            // Always update to the filename returned by the server
+            currentPlan.loadedFilename = data.filename;
+            
+            // Show appropriate message based on operation
             if (forceSaveAs) {
-                // We're saving as a new plan, update to the new filename
-                currentPlan.loadedFilename = data.filename;
                 alert('Plan saved successfully!');
-            } else if (currentPlan.loadedFilename) {
-                // We're updating an existing plan, keep tracking it
-                // Note: We keep the original loadedFilename since user didn't change the name
-                alert('Plan updated successfully!');
             } else {
-                // First time saving a new plan
-                currentPlan.loadedFilename = data.filename;
-                alert('Plan saved successfully!');
+                alert('Plan updated successfully!');
             }
             hideModal(saveModal);
         } else {
