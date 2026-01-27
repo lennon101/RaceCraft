@@ -105,8 +105,8 @@ docker logs racecraft
 
 ### Climbing Model (v1.0.0+)
 - **BREAKING CHANGE**: `climbing_ability` replaces `elev_gain_factor` in API
-- Vertical speed climbing model: 600-1500 m/h based on ability
-- Gradient-aware efficiency curve (optimal at 12% gradient)
+- Vertical speed climbing model: 600-1500 m/h based on ability (conservative: 600, moderate: 800, strong: 1000, very_strong: 1250, elite: 1500)
+- Gradient-aware efficiency curve (optimal range: 6-12% gradient, scales from 95% to 100% efficiency)
 - See `CLIMBING_MODEL.md` for full documentation
 
 ### Fatigue Model
