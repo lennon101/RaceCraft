@@ -50,8 +50,8 @@ saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
 exportBtn.addEventListener('click', exportToCSV);
 clearBtn.addEventListener('click', clearAll);
-saveConfirmBtn.addEventListener('click', () => savePlan(false));  // false = don't force save as
-saveAsBtn.addEventListener('click', () => savePlan(true));  // true = force save as
+saveConfirmBtn.addEventListener('click', () => savePlan(false));
+saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 
@@ -688,9 +688,7 @@ function showSaveModal() {
     // If a plan is loaded, show both Save and Save As buttons
     if (currentPlan.loadedFilename) {
         // Set the plan name to the loaded filename (without .json extension)
-        const loadedPlanName = currentPlan.loadedFilename.endsWith('.json') 
-            ? currentPlan.loadedFilename.slice(0, -5) 
-            : currentPlan.loadedFilename;
+        const loadedPlanName = currentPlan.loadedFilename.replace(/\.json$/, '');
         planNameInput.value = loadedPlanName;
         
         // Show Save As button for loaded plans
