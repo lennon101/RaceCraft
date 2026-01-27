@@ -761,14 +761,17 @@ async function savePlan(forceSaveAs = false) {
         const data = await response.json();
 
         if (response.ok) {
+            // Determine if this was an update or a new save
+            const wasUpdate = !forceSaveAs && currentPlan.loadedFilename;
+            
             // Always update to the filename returned by the server
             currentPlan.loadedFilename = data.filename;
             
             // Show appropriate message based on operation
-            if (forceSaveAs) {
-                alert('Plan saved successfully!');
-            } else {
+            if (wasUpdate) {
                 alert('Plan updated successfully!');
+            } else {
+                alert('Plan saved successfully!');
             }
             hideModal(saveModal);
         } else {
