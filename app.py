@@ -1,3 +1,18 @@
+"""
+RaceCraft - Fuel & Pacing Planner
+Version: v1.0.0-climbing-model-overhaul
+Release Date: January 27, 2026
+
+Major Changes in v1.0.0:
+- Vertical speed climbing model (600-1500 m/h) replaces elevation penalty system
+- Gradient-aware efficiency curve (90% at 3%, 100% at 12%)
+- Improved fatigue model with linear/sub-linear growth for ultra-distance realism
+- Additive time calculation: horizontal + climb - descent
+- Terrain-aware downhill speed caps
+
+BREAKING CHANGE: climbing_ability replaces elev_gain_factor in API
+"""
+
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 import xml.etree.ElementTree as ET
 import math
