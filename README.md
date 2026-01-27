@@ -10,7 +10,7 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 
 - **GPX Route Upload**: Drag and drop your race route
 - **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](FATIGUE_MODEL.md))
-- **Terrain Difficulty System**: Sophisticated trail surface modeling with skill adjustment ([learn more](TERRAIN_DIFFICULTY.md))
+- **Terrain Difficulty System**: Sophisticated trail surface modelling with skill adjustment ([learn more](TERRAIN_DIFFICULTY.md))
 - **Real-time Calculations**: Results update as you adjust parameters
 - **Save/Load Plans**: Store multiple race plans for different events
 - **Interactive Results**: Visual summary cards and detailed segment breakdown
@@ -448,7 +448,7 @@ Free to use and modify for personal use.
 
 ## About RaceCraft
 
-RaceCraft is your comprehensive race planning companion, helping ultrarunners optimize their performance through data-driven pacing and fueling strategies.
+RaceCraft is your comprehensive race planning companion, helping endurance athletes optimise their performance through data-driven pacing and fuelling strategies.
 
 ## Credits
 

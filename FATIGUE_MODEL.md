@@ -2,7 +2,7 @@
 
 ## Overview
 
-RaceCraft uses an **effort-based, fitness-dependent fatigue model** that more accurately reflects how fatigue affects ultrarunners during long races. Unlike simple time-based models, this approach accounts for cumulative effort (including vertical gain), delays fatigue onset based on fitness level, and applies non-linear compounding after a threshold is exceeded.
+RaceCraft uses an **effort-based, fitness-dependent fatigue model** that more accurately reflects how fatigue affects endurance athletes during long races. Unlike simple time-based models, this approach accounts for cumulative effort (including vertical gain), delays fatigue onset based on fitness level, and applies non-linear compounding after a threshold is exceeded.
 
 ## Core Principles
 
@@ -46,10 +46,10 @@ Each athlete has a **Fatigue Onset Point** representing how much cumulative effo
 
 ### Fitness Level Definitions
 
-- **Untrained**: New to ultrarunning, limited endurance base
-- **Recreational**: Regular runner, some ultra experience, moderate endurance
-- **Trained**: Consistent training, multiple ultras completed, strong endurance base
-- **Elite**: High-volume training, competitive ultrarunner, exceptional durability
+- **Untrained**: New to endurance racing, limited endurance base
+- **Recreational**: Regular runner, some long-distance experience, moderate endurance
+- **Trained**: Consistent training, multiple long-distance races completed, strong endurance base
+- **Elite**: High-volume training, competitive endurance athlete, exceptional durability
 
 ## Fatigue Multiplier Formula
 
@@ -160,11 +160,11 @@ IF effort > FOP:
 - Non-linear compounding reflects progressive breakdown
 - Vertical gain drives fatigue accumulation
 - Fitter athletes have higher thresholds and slower accumulation
-- More accurate for mountainous ultras
+- More accurate for mountainous races
 
 ## Practical Examples
 
-### Example 1: 50km Mountain Ultra (Recreational Runner)
+### Example 1: 50km Mountain Race (Recreational Runner)
 
 **Route:** 50km, 3000m ascent, 3000m descent
 ```
@@ -207,11 +207,11 @@ Example: Recreational runner in extreme heat
 - Normal: FOP = 37.5, α = 0.25
 - Adjusted: FOP = 32, α = 0.30
 
-### Fueling & Hydration
-Poor fueling can accelerate fatigue:
-- Under-fueling: Reduce FOP by 15%, increase α by 0.08
-- Proper fueling: Use standard values
-- Optimal fueling: Can increase FOP by 5-10%
+### Fuelling & Hydration
+Poor fuelling can accelerate fatigue:
+- Under-fuelling: Reduce FOP by 15%, increase α by 0.08
+- Proper fuelling: Use standard values
+- Optimal fuelling: Can increase FOP by 5-10%
 
 ### Late-Race Descent Penalty
 The model already accounts for descents in effort calculation (1 km per 200m descent), which reflects the eccentric muscle damage that accumulates throughout the race. This penalty is applied continuously as cumulative effort increases.
@@ -257,10 +257,10 @@ fatigue_multiplier = 1.0 + alpha * (((cumulative_effort - fop) / fop) ** beta)
 
 ## References
 
-This model is inspired by research in ultrarunning physiology and builds upon concepts from:
+This model is inspired by research in endurance running physiology and builds upon concepts from:
 - Naismith's Rule (1892) for climbing time estimation
 - ITRA Performance Index for vertical gain equivalents
-- Observational data from ultrarunning race splits
+- Observational data from endurance race splits
 - Physiological studies on non-linear fatigue accumulation
 
 ## Future Enhancements

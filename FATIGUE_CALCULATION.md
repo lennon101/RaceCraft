@@ -6,7 +6,7 @@ The RaceCraft Fuel & Pacing Planner includes a sophisticated fatigue model that 
 
 ## Key Concepts
 
-Fatigue in ultramarathon running is the cumulative effect of time on feet that progressively slows down a runner's pace. The model assumes that the longer you've been running, the slower you will go, even on similar terrain.
+Fatigue in endurance racing is the cumulative effect of time on feet that progressively slows down a runner's pace. The model assumes that the longer you've been running, the slower you will go, even on similar terrain.
 
 ## Configuration Parameters
 
@@ -17,7 +17,7 @@ The system uses ability-level-specific fatigue multipliers to account for differ
 ```python
 ABILITY_FATIGUE_MAP = {
     'strong': 1.0,      # Experienced/elite runners
-    'average': 2.0,     # Typical ultramarathon runners
+    'average': 2.0,     # Typical endurance runners
     'weak': 3.0         # Less experienced/struggling runners
 }
 ```
@@ -172,7 +172,7 @@ Consider a segment late in a 100km race:
 
 ### Why This Makes Sense
 
-This compounding effect reflects real ultramarathon physiology:
+This compounding effect reflects real endurance racing physiology:
 
 1. **Elevation already challenges you:** The climb slows you to 8:13 min/km
 2. **Fatigue affects your actual effort:** After 13.5 hours, you're 26.93% slower at whatever you're doing
@@ -227,14 +227,14 @@ The pace calculation uses only elevation and terrain difficulty adjustments.
 
 The linear fatigue model (`fatigue_factor = 1.0 + (hours × multiplier / 100)`) provides:
 - Predictable, understandable results
-- Progressive slowdown that matches real-world ultramarathon experiences
+- Progressive slowdown that matches real-world endurance racing experiences
 - Easy calibration through ability levels
 
 ### Why Different Ability Levels?
 
 Runner experience significantly affects fatigue resistance:
 - **Elite/experienced runners:** Better pacing, nutrition, and mental toughness
-- **Average runners:** Standard ultramarathon fatigue patterns
+- **Average runners:** Standard endurance racing fatigue patterns
 - **Less experienced:** May struggle with pacing, nutrition, or physical conditioning
 
 ### Limitations
@@ -248,9 +248,9 @@ This model:
 ## Best Practices
 
 1. **Choose appropriate ability level:**
-   - Strong: 10+ ultras, consistent pacing experience
-   - Average: 3-10 ultras, typical runner
-   - Weak: First ultra or known pacing struggles
+   - Strong: 10+ long-distance races, consistent pacing experience
+   - Average: 3-10 long-distance races, typical runner
+   - Weak: First long-distance race or known pacing struggles
 
 2. **Consider the race distance:**
    - Shorter (50km): Fatigue less significant

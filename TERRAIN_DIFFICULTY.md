@@ -4,7 +4,7 @@ RaceCraft uses a sophisticated terrain difficulty system that models how differe
 
 ## Overview
 
-The terrain model recognizes that technical terrain slows runners down independently of fitness or fatigue. A fresh runner on rocky terrain will be slower than on smooth trail, and a fatigued runner on rocky terrain will experience the same terrain-induced slowdown plus their fatigue penalty.
+The terrain model recognises that technical terrain slows runners down independently of fitness or fatigue. A fresh runner on rocky terrain will be slower than on smooth trail, and a fatigued runner on rocky terrain will experience the same terrain-induced slowdown plus their fatigue penalty.
 
 ### Key Principles
 
@@ -119,7 +119,7 @@ skill_adjusted_factor = 1 + (direction_adjusted_factor - 1) × (1 - skill)
 | **Beginner** | 0.25 | 75% | Some trail experience |
 | **Intermediate** | 0.5 | 50% | Regular trail runner |
 | **Advanced** | 0.75 | 25% | Experienced technical runner |
-| **Expert** | 1.0 | 0% | Elite mountain/ultra runner |
+| **Expert** | 1.0 | 0% | Elite mountain/trail runner |
 
 ### Example
 
@@ -275,7 +275,7 @@ Be honest about technical ability:
 
 The terrain factors are derived from:
 - Field data from trail running studies
-- Analysis of professional ultra-runner splits
+- Analysis of professional endurance athlete splits
 - Comparison of road vs trail pace ratios
 - Trail running community feedback
 
@@ -328,7 +328,7 @@ The previous system used simple time additions:
 ## References
 
 The terrain model is based on research and practical experience in:
-- Mountain and ultra running physiology
+- Mountain and trail running physiology
 - Trail running pace analysis
 - Biomechanical studies of running on varied surfaces
 - Elite athlete training and racing data
