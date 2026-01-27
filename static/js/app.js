@@ -693,7 +693,6 @@ function showSaveModal() {
         
         // Show Save As button for loaded plans
         saveAsBtn.style.display = 'inline-block';
-        saveConfirmBtn.textContent = 'Save';  // Keep as "Save" to update existing plan
     } else {
         // Generate default name for new plans
         const now = new Date();
@@ -702,7 +701,6 @@ function showSaveModal() {
         
         // Hide Save As button for new plans
         saveAsBtn.style.display = 'none';
-        saveConfirmBtn.textContent = 'Save';
     }
     
     saveModal.classList.add('active');
@@ -761,13 +759,17 @@ async function savePlan(forceSaveAs = false) {
         const data = await response.json();
 
         if (response.ok) {
-            // Update the loaded filename if we're overwriting (not save-as)
-            if (!forceSaveAs && currentPlan.loadedFilename) {
-                // We're saving over the existing plan, keep the same filename
+            // Update the loaded filename appropriately based on the operation
+            if (forceSaveAs) {
+                // We're saving as a new plan, update to the new filename
                 currentPlan.loadedFilename = data.filename;
+                alert('Plan saved successfully!');
+            } else if (currentPlan.loadedFilename) {
+                // We're updating an existing plan, keep tracking it
+                // Note: We keep the original loadedFilename since user didn't change the name
                 alert('Plan updated successfully!');
             } else {
-                // We're saving as a new plan, update the loaded filename to the new one
+                // First time saving a new plan
                 currentPlan.loadedFilename = data.filename;
                 alert('Plan saved successfully!');
             }
