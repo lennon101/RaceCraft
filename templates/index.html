@@ -59,7 +59,32 @@
                         <input type="checkbox" id="terrain-enabled" />
                         <label for="terrain-enabled">Include Terrain Difficulty Adjustments</label>
                     </div>
-                    <div id="terrain-difficulties" style="display: none;"></div>
+                    <div id="terrain-skill-container" style="display: none;">
+                        <div class="input-group">
+                            <label for="skill-level">Technical Skill Level:</label>
+                            <select id="skill-level">
+                                <option value="0.0">Novice (0% reduction)</option>
+                                <option value="0.25">Beginner (25% reduction)</option>
+                                <option value="0.5" selected>Intermediate (50% reduction)</option>
+                                <option value="0.75">Advanced (75% reduction)</option>
+                                <option value="1.0">Expert (100% reduction)</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="default-terrain-type">Default Terrain Type (applies to all segments):</label>
+                            <select id="default-terrain-type">
+                                <option value="">-- Select to apply to all --</option>
+                                <option value="road">Road/Track (0.95×)</option>
+                                <option value="smooth_trail" selected>Smooth Trail (1.0×)</option>
+                                <option value="dirt_road">Dirt Road (1.05×)</option>
+                                <option value="rocky_runnable">Rocky Runnable (1.15×)</option>
+                                <option value="technical">Technical Trail (1.33×)</option>
+                                <option value="very_technical">Very Technical (1.65×)</option>
+                                <option value="scrambling">Scrambling (2.0×)</option>
+                            </select>
+                        </div>
+                        <div id="terrain-difficulties"></div>
+                    </div>
                 </section>
 
                 <!-- Pacing -->
@@ -75,19 +100,26 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="elev-gain-factor">Elevation Gain Factor (sec/m):</label>
-                        <input type="number" id="elev-gain-factor" min="0" step="0.1" value="6.0" />
+                        <label for="climbing-ability">Climbing Ability:</label>
+                        <select id="climbing-ability">
+                            <option value="conservative">Conservative Climber (600 m/h)</option>
+                            <option value="moderate" selected>Moderate Climber (800 m/h)</option>
+                            <option value="strong">Strong Climber (1000 m/h)</option>
+                            <option value="very_strong">Very Strong Climber (1250 m/h)</option>
+                            <option value="elite">Elite Climber (1500 m/h)</option>
+                        </select>
                     </div>
                     <div class="input-group checkbox-group">
                         <input type="checkbox" id="fatigue-enabled" checked />
                         <label for="fatigue-enabled">Include Fatigue Penalty</label>
                     </div>
-                    <div class="input-group" id="ability-level-group">
-                        <label for="ability-level">Ability Level:</label>
-                        <select id="ability-level">
-                            <option value="strong">Strong (Low Fatigue)</option>
-                            <option value="average" selected>Average (Medium Fatigue)</option>
-                            <option value="weak">Weak (High Fatigue)</option>
+                    <div class="input-group" id="fitness-level-group">
+                        <label for="fitness-level">Fitness Level:</label>
+                        <select id="fitness-level">
+                            <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
+                            <option value="recreational" selected>Recreational (FOP: 30-45 km-effort)</option>
+                            <option value="trained">Trained (FOP: 45-65 km-effort)</option>
+                            <option value="elite">Elite (FOP: 65-85+ km-effort)</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -173,7 +205,7 @@
                                     <th>Net (m)</th>
                                     <th>Elev Pace</th>
                                     <th class="fatigue-col">Fatigue</th>
-                                    <th class="difficulty-col">Difficulty</th>
+                                    <th class="terrain-col">Terrain</th>
                                     <th>Final Pace</th>
                                     <th>Time</th>
                                     <th>Carbs (g)</th>
