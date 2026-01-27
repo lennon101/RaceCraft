@@ -1,4 +1,4 @@
-![RaceCraft Logo](logo.png)
+<img src="logo.png" alt="RaceCraft Logo" width="200">
 
 # RaceCraft - Fuel & Pacing Planner
 
