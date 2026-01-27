@@ -100,8 +100,14 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="elev-gain-factor">Elevation Gain Factor (sec/m):</label>
-                        <input type="number" id="elev-gain-factor" min="0" step="0.1" value="6.0" />
+                        <label for="climbing-ability">Climbing Ability:</label>
+                        <select id="climbing-ability">
+                            <option value="conservative">Conservative Climber (500 m/h)</option>
+                            <option value="moderate" selected>Moderate Climber (700 m/h)</option>
+                            <option value="strong">Strong Climber (900 m/h)</option>
+                            <option value="very_strong">Very Strong Climber (1100 m/h)</option>
+                            <option value="elite">Elite Climber (1300 m/h)</option>
+                        </select>
                     </div>
                     <div class="input-group checkbox-group">
                         <input type="checkbox" id="fatigue-enabled" checked />

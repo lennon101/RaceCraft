@@ -349,7 +349,7 @@ function clearAll() {
     document.getElementById('avg-cp-time').value = 5;
     document.getElementById('z2-pace-min').value = 6;
     document.getElementById('z2-pace-sec').value = 30;
-    document.getElementById('elev-gain-factor').value = 6.0;
+    document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
     document.getElementById('race-start-time').value = '';
@@ -546,7 +546,7 @@ async function calculateRacePlan() {
     const z2PaceMin = parseFloat(document.getElementById('z2-pace-min').value) || 6;
     const z2PaceSec = parseFloat(document.getElementById('z2-pace-sec').value) || 30;
     const z2Pace = z2PaceMin + z2PaceSec / 60;
-    const elevGainFactor = parseFloat(document.getElementById('elev-gain-factor').value) || 6.0;
+    const climbingAbility = document.getElementById('climbing-ability').value || 'moderate';
     const carbsPerHour = parseFloat(document.getElementById('carbs-per-hour').value) || 60;
     const waterPerHour = parseFloat(document.getElementById('water-per-hour').value) || 500;
     const raceStartTime = document.getElementById('race-start-time').value || null;
@@ -560,7 +560,7 @@ async function calculateRacePlan() {
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: avgCpTime,
         z2_pace: z2Pace,
-        elev_gain_factor: elevGainFactor,
+        climbing_ability: climbingAbility,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
         race_start_time: raceStartTime,
@@ -717,7 +717,7 @@ async function savePlan() {
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value),
         z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + parseFloat(document.getElementById('z2-pace-sec').value) / 60,
-        elev_gain_factor: parseFloat(document.getElementById('elev-gain-factor').value),
+        climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
         race_start_time: document.getElementById('race-start-time').value || null,
@@ -809,7 +809,7 @@ async function loadPlan(filename) {
             document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
             document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
             
-            document.getElementById('elev-gain-factor').value = data.elev_gain_factor || 6.0;
+            document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
             document.getElementById('race-start-time').value = data.race_start_time || '';
