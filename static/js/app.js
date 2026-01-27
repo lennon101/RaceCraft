@@ -2,7 +2,7 @@
 let currentPlan = {
     gpx_filename: null,
     checkpoint_distances: [],
-    segment_difficulties: [],
+    segment_terrain_types: [],
     segments: null,
     summary: null,
     elevation_profile: null
@@ -33,9 +33,12 @@ const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
 const fatigueEnabledInput = document.getElementById('fatigue-enabled');
-const abilityLevelInput = document.getElementById('ability-level');
+const fitnessLevelInput = document.getElementById('fitness-level');
 const terrainEnabledInput = document.getElementById('terrain-enabled');
+const terrainSkillContainer = document.getElementById('terrain-skill-container');
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
+const skillLevelInput = document.getElementById('skill-level');
+const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -49,9 +52,9 @@ saveConfirmBtn.addEventListener('click', savePlan);
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 
-// Fatigue checkbox toggles ability level dropdown
+// Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
-    abilityLevelInput.disabled = !fatigueEnabledInput.checked;
+    fitnessLevelInput.disabled = !fatigueEnabledInput.checked;
     if (currentPlan.gpx_filename) {
         calculateRacePlan();
     }
@@ -59,7 +62,7 @@ fatigueEnabledInput.addEventListener('change', () => {
 
 // Terrain difficulty checkbox toggles terrain difficulty dropdowns
 terrainEnabledInput.addEventListener('change', () => {
-    terrainDifficultiesContainer.style.display = terrainEnabledInput.checked ? 'block' : 'none';
+    terrainSkillContainer.style.display = terrainEnabledInput.checked ? 'block' : 'none';
     if (terrainEnabledInput.checked) {
         generateTerrainDifficultyInputs();
     }
@@ -68,9 +71,25 @@ terrainEnabledInput.addEventListener('change', () => {
     }
 });
 
+// Default terrain type applies to all segments
+defaultTerrainTypeInput.addEventListener('change', () => {
+    const defaultValue = defaultTerrainTypeInput.value;
+    if (defaultValue) {
+        // Apply to all segment terrain dropdowns
+        const terrainInputs = document.querySelectorAll('.segment-terrain-type');
+        terrainInputs.forEach(input => {
+            input.value = defaultValue;
+        });
+        
+        if (currentPlan.gpx_filename) {
+            calculateRacePlan();
+        }
+    }
+});
+
 // Add real-time calculation on input changes
 document.querySelectorAll('input, select').forEach(input => {
-    if (input.id !== 'gpx-file' && input.id !== 'plan-name') {
+    if (input.id !== 'gpx-file' && input.id !== 'plan-name' && input.id !== 'default-terrain-type') {
         input.addEventListener('change', () => {
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
@@ -330,15 +349,17 @@ function clearAll() {
     document.getElementById('avg-cp-time').value = 5;
     document.getElementById('z2-pace-min').value = 6;
     document.getElementById('z2-pace-sec').value = 30;
-    document.getElementById('elev-gain-factor').value = 6.0;
+    document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
-    document.getElementById('ability-level').value = 'average';
-    document.getElementById('ability-level').disabled = false;
+    document.getElementById('fitness-level').value = 'recreational';
+    document.getElementById('fitness-level').disabled = false;
     document.getElementById('terrain-enabled').checked = false;
-    terrainDifficultiesContainer.style.display = 'none';
+    document.getElementById('skill-level').value = 0.5;
+    document.getElementById('default-terrain-type').value = '';
+    terrainSkillContainer.style.display = 'none';
     
     // Regenerate checkpoint inputs
     generateCheckpointInputs();
@@ -437,46 +458,54 @@ function generateTerrainDifficultyInputs() {
         return;
     }
 
-    // Create terrain difficulty dropdowns for all segments
-    // Note: We need numCheckpoints + 1 difficulty dropdowns for all segments (Start→CP1, CP1→CP2, ..., CPn→Finish)
+    // Create terrain type dropdowns for all segments
+    // Note: We need numCheckpoints + 1 dropdowns for all segments (Start→CP1, CP1→CP2, ..., CPn→Finish)
     for (let i = 0; i < numCheckpoints; i++) {
         const div = document.createElement('div');
         div.className = 'checkpoint-input';
-        const segmentDifficulty = currentPlan.segment_difficulties[i] || 'normal';
+        const terrainType = currentPlan.segment_terrain_types?.[i] || 'smooth_trail';
         
         // Determine segment label (Start → CP1, CP1 → CP2, etc.)
         const fromLabel = i === 0 ? 'Start' : `CP${i}`;
         const toLabel = `CP${i + 1}`;
         
         div.innerHTML = `
-            <label>Segment ${fromLabel} → ${toLabel} Terrain Difficulty:</label>
-            <select class="segment-difficulty" data-index="${i}">
-                <option value="easy" ${segmentDifficulty === 'easy' ? 'selected' : ''}>Easy (Road/Flat) -10s/km</option>
-                <option value="normal" selected>Normal 0s/km</option>
-                <option value="difficult" ${segmentDifficulty === 'difficult' ? 'selected' : ''}>Difficult (Technical) +10s/km ↑ / +20s/km ↓</option>
+            <label>Segment ${fromLabel} → ${toLabel} Terrain Type:</label>
+            <select class="segment-terrain-type" data-index="${i}">
+                <option value="road" ${terrainType === 'road' ? 'selected' : ''}>Road/Track (0.95×)</option>
+                <option value="smooth_trail" ${terrainType === 'smooth_trail' ? 'selected' : ''}>Smooth Trail (1.0×)</option>
+                <option value="dirt_road" ${terrainType === 'dirt_road' ? 'selected' : ''}>Dirt Road (1.05×)</option>
+                <option value="rocky_runnable" ${terrainType === 'rocky_runnable' ? 'selected' : ''}>Rocky Runnable (1.15×)</option>
+                <option value="technical" ${terrainType === 'technical' ? 'selected' : ''}>Technical Trail (1.325×)</option>
+                <option value="very_technical" ${terrainType === 'very_technical' ? 'selected' : ''}>Very Technical (1.65×)</option>
+                <option value="scrambling" ${terrainType === 'scrambling' ? 'selected' : ''}>Scrambling (2.0×)</option>
             </select>
         `;
         terrainDifficultiesContainer.appendChild(div);
     }
     
-    // Add final segment difficulty (last CP → Finish)
+    // Add final segment terrain type (last CP → Finish)
     const div = document.createElement('div');
     div.className = 'checkpoint-input';
-    const finalSegmentDifficulty = currentPlan.segment_difficulties[numCheckpoints] || 'normal';
+    const finalTerrainType = currentPlan.segment_terrain_types?.[numCheckpoints] || 'smooth_trail';
     const fromLabel = `CP${numCheckpoints}`;
     
     div.innerHTML = `
-        <label>Segment ${fromLabel} → Finish Terrain Difficulty:</label>
-        <select class="segment-difficulty" data-index="${numCheckpoints}">
-            <option value="easy" ${finalSegmentDifficulty === 'easy' ? 'selected' : ''}>Easy (Road/Flat) -10s/km</option>
-            <option value="normal" selected>Normal 0s/km</option>
-            <option value="difficult" ${finalSegmentDifficulty === 'difficult' ? 'selected' : ''}>Difficult (Technical) +10s/km ↑ / +20s/km ↓</option>
+        <label>Segment ${fromLabel} → Finish Terrain Type:</label>
+        <select class="segment-terrain-type" data-index="${numCheckpoints}">
+            <option value="road" ${finalTerrainType === 'road' ? 'selected' : ''}>Road/Track (0.95×)</option>
+            <option value="smooth_trail" ${finalTerrainType === 'smooth_trail' ? 'selected' : ''}>Smooth Trail (1.0×)</option>
+            <option value="dirt_road" ${finalTerrainType === 'dirt_road' ? 'selected' : ''}>Dirt Road (1.05×)</option>
+            <option value="rocky_runnable" ${finalTerrainType === 'rocky_runnable' ? 'selected' : ''}>Rocky Runnable (1.15×)</option>
+            <option value="technical" ${finalTerrainType === 'technical' ? 'selected' : ''}>Technical Trail (1.325×)</option>
+            <option value="very_technical" ${finalTerrainType === 'very_technical' ? 'selected' : ''}>Very Technical (1.65×)</option>
+            <option value="scrambling" ${finalTerrainType === 'scrambling' ? 'selected' : ''}>Scrambling (2.0×)</option>
         </select>
     `;
     terrainDifficultiesContainer.appendChild(div);
 
     // Add event listeners for real-time updates
-    document.querySelectorAll('.segment-difficulty').forEach(input => {
+    document.querySelectorAll('.segment-terrain-type').forEach(input => {
         input.addEventListener('change', () => {
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
@@ -497,19 +526,19 @@ async function calculateRacePlan() {
         .map(input => parseFloat(input.value))
         .filter(val => !isNaN(val));
 
-    // Gather segment difficulties (only if terrain difficulty is enabled)
+    // Gather segment terrain types (only if terrain difficulty is enabled)
     const terrainEnabled = terrainEnabledInput.checked;
     if (terrainEnabled) {
-        const difficultyInputs = document.querySelectorAll('.segment-difficulty');
+        const terrainInputs = document.querySelectorAll('.segment-terrain-type');
         // Sort by data-index to ensure correct order
-        const sortedInputs = Array.from(difficultyInputs).sort((a, b) => {
+        const sortedInputs = Array.from(terrainInputs).sort((a, b) => {
             return parseInt(a.getAttribute('data-index')) - parseInt(b.getAttribute('data-index'));
         });
-        currentPlan.segment_difficulties = sortedInputs.map(input => input.value);
+        currentPlan.segment_terrain_types = sortedInputs.map(input => input.value);
     } else {
-        // Set all difficulties to 'easy' (no penalty) if terrain is disabled
+        // Set all terrain types to 'smooth_trail' (baseline) if terrain is disabled
         const numSegments = currentPlan.checkpoint_distances.length + 1;
-        currentPlan.segment_difficulties = Array(numSegments).fill('easy');
+        currentPlan.segment_terrain_types = Array(numSegments).fill('smooth_trail');
     }
 
     // Gather other inputs
@@ -517,25 +546,27 @@ async function calculateRacePlan() {
     const z2PaceMin = parseFloat(document.getElementById('z2-pace-min').value) || 6;
     const z2PaceSec = parseFloat(document.getElementById('z2-pace-sec').value) || 30;
     const z2Pace = z2PaceMin + z2PaceSec / 60;
-    const elevGainFactor = parseFloat(document.getElementById('elev-gain-factor').value) || 6.0;
+    const climbingAbility = document.getElementById('climbing-ability').value || 'moderate';
     const carbsPerHour = parseFloat(document.getElementById('carbs-per-hour').value) || 60;
     const waterPerHour = parseFloat(document.getElementById('water-per-hour').value) || 500;
     const raceStartTime = document.getElementById('race-start-time').value || null;
     const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
-    const abilityLevel = document.getElementById('ability-level').value;
+    const fitnessLevel = document.getElementById('fitness-level').value;
+    const skillLevel = parseFloat(document.getElementById('skill-level').value) || 0.5;
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
-        segment_difficulties: currentPlan.segment_difficulties,
+        segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: avgCpTime,
         z2_pace: z2Pace,
-        elev_gain_factor: elevGainFactor,
+        climbing_ability: climbingAbility,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
-        ability_level: abilityLevel
+        fitness_level: fitnessLevel,
+        skill_level: skillLevel
     };
 
     try {
@@ -602,17 +633,22 @@ function displayResults(data) {
         col.style.display = hasFatigue ? 'table-cell' : 'none';
     });
 
-    // Check if any segment has difficulty adjustment
-    const hasDifficulty = segments.some(seg => seg.difficulty_seconds && seg.difficulty_seconds !== 0);
-    const difficultyCols = document.querySelectorAll('.difficulty-col');
-    difficultyCols.forEach(col => {
-        col.style.display = hasDifficulty ? 'table-cell' : 'none';
+    // Check if terrain is enabled to show/hide terrain columns
+    const terrainEnabled = document.getElementById('terrain-enabled').checked;
+    const terrainCols = document.querySelectorAll('.terrain-col');
+    terrainCols.forEach(col => {
+        col.style.display = terrainEnabled ? 'table-cell' : 'none';
     });
 
     segments.forEach(seg => {
         const row = document.createElement('tr');
         const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
         const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
+        
+        // Format terrain type for display
+        const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
+        const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
+        
         row.innerHTML = `
             <td><strong>${seg.from} → ${seg.to}</strong></td>
             <td>${seg.distance}</td>
@@ -620,7 +656,7 @@ function displayResults(data) {
             <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
-            <td class="difficulty-col" style="display: ${hasDifficulty ? 'table-cell' : 'none'}">${seg.difficulty_str || '0:00'}</td>
+            <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
             <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
@@ -678,15 +714,16 @@ async function savePlan() {
         plan_name: planName,
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
-        segment_difficulties: currentPlan.segment_difficulties,
+        segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value),
         z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + parseFloat(document.getElementById('z2-pace-sec').value) / 60,
-        elev_gain_factor: parseFloat(document.getElementById('elev-gain-factor').value),
+        climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
-        ability_level: document.getElementById('ability-level').value,
+        fitness_level: document.getElementById('fitness-level').value,
+        skill_level: parseFloat(document.getElementById('skill-level').value),
         segments: currentPlan.segments,
         summary: currentPlan.summary,
         elevation_profile: currentPlan.elevation_profile
@@ -763,7 +800,7 @@ async function loadPlan(filename) {
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
-            currentPlan.segment_difficulties = data.segment_difficulties || [];
+            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
@@ -772,15 +809,19 @@ async function loadPlan(filename) {
             document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
             document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
             
-            document.getElementById('elev-gain-factor').value = data.elev_gain_factor || 6.0;
+            document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('ability-level').value = data.ability_level || 'average';
-            document.getElementById('ability-level').disabled = !document.getElementById('fatigue-enabled').checked;
-            document.getElementById('terrain-enabled').checked = data.segment_difficulties && data.segment_difficulties.some(d => d !== 'easy');
-            terrainDifficultiesContainer.style.display = document.getElementById('terrain-enabled').checked ? 'block' : 'none';
+            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
+            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            
+            // Load terrain settings
+            const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
+            document.getElementById('terrain-enabled').checked = hasTerrainTypes;
+            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
             // Generate checkpoint inputs and populate
             generateCheckpointInputs();
