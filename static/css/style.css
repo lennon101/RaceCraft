@@ -176,6 +176,15 @@ header h2.subtitle {
     pointer-events: none;
 }
 
+@media (max-width: 768px) {
+    .info-icon[title]:hover::after,
+    .info-icon[title]:focus::after {
+        left: auto;
+        right: 0;
+        max-width: 200px;
+    }
+}
+
 .checkbox-group {
     display: flex;
     align-items: center;
