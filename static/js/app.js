@@ -33,7 +33,7 @@ const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
 const fatigueEnabledInput = document.getElementById('fatigue-enabled');
-const abilityLevelInput = document.getElementById('ability-level');
+const fitnessLevelInput = document.getElementById('fitness-level');
 const terrainEnabledInput = document.getElementById('terrain-enabled');
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 
@@ -49,9 +49,9 @@ saveConfirmBtn.addEventListener('click', savePlan);
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 
-// Fatigue checkbox toggles ability level dropdown
+// Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
-    abilityLevelInput.disabled = !fatigueEnabledInput.checked;
+    fitnessLevelInput.disabled = !fatigueEnabledInput.checked;
     if (currentPlan.gpx_filename) {
         calculateRacePlan();
     }
@@ -335,8 +335,8 @@ function clearAll() {
     document.getElementById('water-per-hour').value = 500;
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
-    document.getElementById('ability-level').value = 'average';
-    document.getElementById('ability-level').disabled = false;
+    document.getElementById('fitness-level').value = 'recreational';
+    document.getElementById('fitness-level').disabled = false;
     document.getElementById('terrain-enabled').checked = false;
     terrainDifficultiesContainer.style.display = 'none';
     
@@ -522,7 +522,7 @@ async function calculateRacePlan() {
     const waterPerHour = parseFloat(document.getElementById('water-per-hour').value) || 500;
     const raceStartTime = document.getElementById('race-start-time').value || null;
     const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
-    const abilityLevel = document.getElementById('ability-level').value;
+    const fitnessLevel = document.getElementById('fitness-level').value;
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
@@ -535,7 +535,7 @@ async function calculateRacePlan() {
         water_per_hour: waterPerHour,
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
-        ability_level: abilityLevel
+        fitness_level: fitnessLevel
     };
 
     try {
@@ -686,7 +686,7 @@ async function savePlan() {
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
-        ability_level: document.getElementById('ability-level').value,
+        fitness_level: document.getElementById('fitness-level').value,
         segments: currentPlan.segments,
         summary: currentPlan.summary,
         elevation_profile: currentPlan.elevation_profile
@@ -777,8 +777,8 @@ async function loadPlan(filename) {
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('ability-level').value = data.ability_level || 'average';
-            document.getElementById('ability-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
+            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
             document.getElementById('terrain-enabled').checked = data.segment_difficulties && data.segment_difficulties.some(d => d !== 'easy');
             terrainDifficultiesContainer.style.display = document.getElementById('terrain-enabled').checked ? 'block' : 'none';
 

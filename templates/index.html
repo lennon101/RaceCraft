@@ -82,12 +82,13 @@
                         <input type="checkbox" id="fatigue-enabled" checked />
                         <label for="fatigue-enabled">Include Fatigue Penalty</label>
                     </div>
-                    <div class="input-group" id="ability-level-group">
-                        <label for="ability-level">Ability Level:</label>
-                        <select id="ability-level">
-                            <option value="strong">Strong (Low Fatigue)</option>
-                            <option value="average" selected>Average (Medium Fatigue)</option>
-                            <option value="weak">Weak (High Fatigue)</option>
+                    <div class="input-group" id="fitness-level-group">
+                        <label for="fitness-level">Fitness Level:</label>
+                        <select id="fitness-level">
+                            <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
+                            <option value="recreational" selected>Recreational (FOP: 30-45 km-effort)</option>
+                            <option value="trained">Trained (FOP: 45-65 km-effort)</option>
+                            <option value="elite">Elite (FOP: 65-85+ km-effort)</option>
                         </select>
                     </div>
                     <div class="input-group">

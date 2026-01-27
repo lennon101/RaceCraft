@@ -4,13 +4,12 @@
 
 # RaceCraft - Fuel & Pacing Planner
 
-**Build your perfect race.**
-
-A web-based ultra-running race planner that calculates personalized pacing, fuel requirements, and hydration needs based on GPX route files.
+A web-based race planner for athletes needing to estimate their pacing, checkpoint timings, fuel requirements, and hydration needs. 
 
 ## Features
 
 - **GPX Route Upload**: Drag and drop your race route
+- **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](FATIGUE_MODEL.md))
 - **Real-time Calculations**: Results update as you adjust parameters
 - **Save/Load Plans**: Store multiple race plans for different events
 - **Interactive Results**: Visual summary cards and detailed segment breakdown
@@ -59,16 +58,6 @@ A web-based ultra-running race planner that calculates personalized pacing, fuel
 
 3. **Access the application:**
    Open your browser to `http://localhost:5000`
-
-4. **View logs:**
-   ```bash
-   docker compose logs -f
-   ```
-
-5. **Stop the application:**
-   ```bash
-   docker compose down
-   ```
 
 ### Option 2: Docker Run
 
@@ -152,14 +141,34 @@ Fuel-Plan-Tool/
 
 ## Configuration
 
+### Fatigue Model
+
+RaceCraft uses an advanced **effort-based fatigue model** that accounts for cumulative effort, fitness level, and delayed fatigue onset. See [FATIGUE_MODEL.md](FATIGUE_MODEL.md) for complete documentation.
+
+**Key parameters:**
+- **Fitness Level**: Determines your Fatigue Onset Point (FOP)
+  - Untrained: 20-30 km-effort
+  - Recreational: 30-45 km-effort
+  - Trained: 45-65 km-effort
+  - Elite: 65-85+ km-effort
+- **Effort Calculation**: `effort_km = distance_km + ascent_m/100 + descent_m/200`
+- **Fatigue Formula**: `fatigue_multiplier = 1 + α × ((E − FOP) / FOP)^β`
+
 ### Constants (in app.py)
 
 ```python
 ELEVATION_GAIN_FACTOR = 6.0      # Seconds per meter of elevation gain
-FATIGUE_MULTIPLIER = 2.0         # Percent pace slowdown per hour
 MAX_DOWNHILL_SPEED_INCREASE = 20.0  # Max % pace increase on downhills
 DEFAULT_CARBS_PER_HOUR = 60.0    # Default carb intake (grams/hour)
 DEFAULT_WATER_PER_HOUR = 500.0   # Default water intake (mL/hour)
+
+# Fitness level parameters
+FITNESS_LEVEL_PARAMS = {
+    'untrained': {'fop': 25, 'alpha': 0.35, 'beta': 1.8},
+    'recreational': {'fop': 37.5, 'alpha': 0.25, 'beta': 1.5},
+    'trained': {'fop': 55, 'alpha': 0.20, 'beta': 1.4},
+    'elite': {'fop': 75, 'alpha': 0.15, 'beta': 1.3}
+}
 ```
 
 ### Port Configuration
@@ -188,6 +197,7 @@ ports:
 
 3. **Set Pacing Parameters**
    - Enter your Zone 2 pace (flat ground)
+   - Select your fitness level (determines fatigue onset)
    - Adjust elevation gain factor if needed
    - Optionally set race start time for time-of-day display
 

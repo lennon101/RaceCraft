@@ -19,16 +19,16 @@ os.makedirs(app.config['SAVED_PLANS_FOLDER'], exist_ok=True)
 
 # Constants
 ELEVATION_GAIN_FACTOR = 6.0
-FATIGUE_MULTIPLIER = 2.0
 MAX_DOWNHILL_SPEED_INCREASE = 20.0
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
 
-# Ability level fatigue multipliers
-ABILITY_FATIGUE_MAP = {
-    'strong': 1.0,
-    'average': 2.0,
-    'weak': 3.0
+# Fitness level parameters - Fatigue Onset Point (FOP) in km-effort
+FITNESS_LEVEL_PARAMS = {
+    'untrained': {'fop': 25, 'alpha': 0.35, 'beta': 1.8},
+    'recreational': {'fop': 37.5, 'alpha': 0.25, 'beta': 1.5},
+    'trained': {'fop': 55, 'alpha': 0.20, 'beta': 1.4},
+    'elite': {'fop': 75, 'alpha': 0.15, 'beta': 1.3}
 }
 
 # Segment difficulty pace adjustments (in seconds per km)
@@ -142,12 +142,12 @@ def calculate_elevation_change(trackpoints, start_idx, end_idx):
     return gain, loss
 
 def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distance_km, 
-                              cumulative_time_hours=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR,
-                              fatigue_enabled=True, fatigue_multiplier=FATIGUE_MULTIPLIER,
+                              cumulative_effort=0.0, elev_gain_factor=ELEVATION_GAIN_FACTOR,
+                              fatigue_enabled=True, fitness_level='recreational',
                               difficulty='easy'):
-    """Adjust pace for elevation, fatigue, and terrain difficulty."""
+    """Adjust pace for elevation, fatigue, and terrain difficulty using cumulative effort model."""
     if distance_km == 0:
-        return base_pace, base_pace, 0.0, 0.0
+        return base_pace, base_pace, 0.0, 0.0, False
     
     elev_time_seconds = (elevation_gain * elev_gain_factor) - (elevation_loss * elev_gain_factor * 0.3)
     elev_time_minutes = elev_time_seconds / 60.0
@@ -158,11 +158,22 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     min_allowed_pace = base_pace * (1.0 - MAX_DOWNHILL_SPEED_INCREASE / 100.0)
     pace_with_elev_limited = max(pace_with_elev_only, min_allowed_pace)
     
-    # Apply fatigue only if enabled
+    # Apply fatigue only if enabled using FOP-based model
     if fatigue_enabled:
-        fatigue_factor = 1.0 + (cumulative_time_hours * fatigue_multiplier / 100.0)
-        fatigued_pace = pace_with_elev_limited * fatigue_factor
-        fatigue_seconds_per_km = (fatigued_pace - pace_with_elev_limited) * 60.0
+        params = FITNESS_LEVEL_PARAMS.get(fitness_level, FITNESS_LEVEL_PARAMS['recreational'])
+        fop = params['fop']
+        alpha = params['alpha']
+        beta = params['beta']
+        
+        # No fatigue penalty until cumulative effort exceeds FOP
+        if cumulative_effort > fop:
+            # Non-linear fatigue: fatigue_multiplier = 1 + α × ((E − FOP) / FOP)^β
+            fatigue_multiplier = 1.0 + alpha * (((cumulative_effort - fop) / fop) ** beta)
+            fatigued_pace = pace_with_elev_limited * fatigue_multiplier
+            fatigue_seconds_per_km = (fatigued_pace - pace_with_elev_limited) * 60.0
+        else:
+            fatigued_pace = pace_with_elev_limited
+            fatigue_seconds_per_km = 0.0
     else:
         fatigued_pace = pace_with_elev_limited
         fatigue_seconds_per_km = 0.0
@@ -275,8 +286,7 @@ def calculate():
         
         # Fatigue settings
         fatigue_enabled = data.get('fatigue_enabled', True)
-        ability_level = data.get('ability_level', 'average')
-        fatigue_multiplier = ABILITY_FATIGUE_MAP.get(ability_level, FATIGUE_MULTIPLIER)
+        fitness_level = data.get('fitness_level', 'recreational')
         
         # Parse GPX
         trackpoints = parse_gpx_file(filepath)
@@ -285,10 +295,11 @@ def calculate():
         # Find checkpoint indices
         checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
         
-        # Calculate segments
+        # Calculate segments with cumulative effort tracking
         segments = []
         cumulative_time = 0.0
         total_moving_time = 0.0
+        cumulative_effort = 0.0  # Track effort in km-effort
         
         num_checkpoints = len(checkpoint_distances)
         segment_labels = ["Start"]
@@ -307,11 +318,15 @@ def calculate():
             # Get difficulty for this segment (default to 'easy' if not provided)
             segment_difficulty = segment_difficulties[i] if i < len(segment_difficulties) else 'easy'
             
-            cumulative_hours = total_moving_time / 60.0
+            # Calculate pace using cumulative effort (BEFORE adding this segment's effort)
             adjusted_pace, elev_adjusted_pace, fatigue_seconds, difficulty_seconds, pace_capped = adjust_pace_for_elevation(
-                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_hours, elev_gain_factor,
-                fatigue_enabled, fatigue_multiplier, segment_difficulty
+                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, elev_gain_factor,
+                fatigue_enabled, fitness_level, segment_difficulty
             )
+            
+            # Update cumulative effort: effort_km = distance_km + ascent_m/100 + descent_m/200
+            segment_effort = segment_dist + (elev_gain / 100.0) + (elev_loss / 200.0)
+            cumulative_effort += segment_effort
             
             # Log when pace is capped
             if pace_capped:
@@ -358,6 +373,8 @@ def calculate():
                 'elev_gain': round(elev_gain, 0),
                 'elev_loss': round(elev_loss, 0),
                 'net_elev': round(net_elev_change, 0),
+                'segment_effort': round(segment_effort, 2),
+                'cumulative_effort': round(cumulative_effort, 2),
                 'elev_pace': round(elev_adjusted_pace, 2),
                 'elev_pace_str': f"{int(elev_adjusted_pace)}:{int((elev_adjusted_pace % 1) * 60):02d}",
                 'pace': round(adjusted_pace, 2),
@@ -448,7 +465,7 @@ def save_plan():
             'water_per_hour': data.get('water_per_hour'),
             'race_start_time': data.get('race_start_time'),
             'fatigue_enabled': data.get('fatigue_enabled'),
-            'ability_level': data.get('ability_level'),
+            'fitness_level': data.get('fitness_level'),
             'segments': data.get('segments'),
             'summary': data.get('summary'),
             'elevation_profile': data.get('elevation_profile')
