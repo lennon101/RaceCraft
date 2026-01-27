@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 import xml.etree.ElementTree as ET
 import math
 import os
@@ -198,6 +198,11 @@ def format_time(minutes):
 def index():
     """Render main page."""
     return render_template('index.html')
+
+@app.route('/robots.txt')
+def robots():
+    """Serve robots.txt file."""
+    return send_from_directory('static', 'robots.txt', mimetype='text/plain')
 
 @app.route('/api/upload-gpx', methods=['POST'])
 def upload_gpx():
