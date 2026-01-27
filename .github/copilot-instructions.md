@@ -116,7 +116,7 @@ docker logs racecraft
 - See `FATIGUE_MODEL.md` for full documentation
 
 ### Terrain Difficulty
-- 7 terrain types: road, smooth_trail, technical_trail, rocky, very_rocky, boulders, scrambling
+- 7 terrain types: road, smooth_trail, dirt_road, rocky_runnable, technical, very_technical, scrambling
 - Gradient scaling amplifies difficulty
 - Skill adjustment: novice to expert reduces terrain penalties
 - See `TERRAIN_DIFFICULTY.md` for full documentation
