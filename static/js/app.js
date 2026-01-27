@@ -38,6 +38,7 @@ const terrainEnabledInput = document.getElementById('terrain-enabled');
 const terrainSkillContainer = document.getElementById('terrain-skill-container');
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
+const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -70,9 +71,25 @@ terrainEnabledInput.addEventListener('change', () => {
     }
 });
 
+// Default terrain type applies to all segments
+defaultTerrainTypeInput.addEventListener('change', () => {
+    const defaultValue = defaultTerrainTypeInput.value;
+    if (defaultValue) {
+        // Apply to all segment terrain dropdowns
+        const terrainInputs = document.querySelectorAll('.segment-terrain-type');
+        terrainInputs.forEach(input => {
+            input.value = defaultValue;
+        });
+        
+        if (currentPlan.gpx_filename) {
+            calculateRacePlan();
+        }
+    }
+});
+
 // Add real-time calculation on input changes
 document.querySelectorAll('input, select').forEach(input => {
-    if (input.id !== 'gpx-file' && input.id !== 'plan-name') {
+    if (input.id !== 'gpx-file' && input.id !== 'plan-name' && input.id !== 'default-terrain-type') {
         input.addEventListener('change', () => {
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
@@ -340,6 +357,8 @@ function clearAll() {
     document.getElementById('fitness-level').value = 'recreational';
     document.getElementById('fitness-level').disabled = false;
     document.getElementById('terrain-enabled').checked = false;
+    document.getElementById('skill-level').value = 0.5;
+    document.getElementById('default-terrain-type').value = '';
     terrainSkillContainer.style.display = 'none';
     
     // Regenerate checkpoint inputs
