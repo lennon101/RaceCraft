@@ -728,32 +728,9 @@ async function savePlan(forceSaveAs = false) {
         return;
     }
 
-    // When using Save As, check if a plan with this name already exists
-    if (forceSaveAs) {
-        try {
-            const listResponse = await fetch('/api/list-plans');
-            const listData = await listResponse.json();
-            
-            if (listResponse.ok) {
-                // Sanitize the plan name the same way the backend does (add .json extension)
-                const sanitizedName = planName.endsWith('.json') ? planName : planName + '.json';
-                
-                // Check if any existing plan has the same filename (after sanitization)
-                const existingPlan = listData.plans.find(plan => plan.filename === sanitizedName);
-                
-                if (existingPlan) {
-                    alert('A plan with this name already exists. Please choose a different name.');
-                    return;  // Keep modal open so user can rename
-                }
-            }
-        } catch (error) {
-            console.error('Error checking existing plans:', error);
-            // Continue with save attempt even if check fails
-        }
-    }
-
     const saveData = {
         plan_name: planName,
+        force_save_as: forceSaveAs,  // Let backend know this is a Save As operation
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
         segment_terrain_types: currentPlan.segment_terrain_types,
@@ -796,6 +773,10 @@ async function savePlan(forceSaveAs = false) {
                 alert('Plan saved successfully!');
             }
             hideModal(saveModal);
+        } else if (response.status === 409) {
+            // Conflict - plan already exists
+            alert(data.error);
+            // Keep modal open so user can rename
         } else {
             alert('Error saving plan: ' + data.error);
         }
