@@ -490,7 +490,7 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
         # Add gel calculations if carbs_per_gel is provided
         if carbs_per_gel and carbs_per_gel > 0:
             num_gels = round(carb_target / carbs_per_gel)
-            actual_carbs = num_gels * carbs_per_gel
+            actual_carbs = round(num_gels * carbs_per_gel, 2)
             start_item['num_gels'] = num_gels
             start_item['actual_carbs'] = actual_carbs
         
@@ -550,7 +550,7 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
         # Add gel calculations if carbs_per_gel is provided
         if carbs_per_gel and carbs_per_gel > 0:
             num_gels = round(carb_target / carbs_per_gel)  # Round to nearest whole number
-            actual_carbs = num_gels * carbs_per_gel
+            actual_carbs = round(num_gels * carbs_per_gel, 2)
             dropbag_item['num_gels'] = num_gels
             dropbag_item['actual_carbs'] = actual_carbs
         
