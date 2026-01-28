@@ -547,14 +547,27 @@ async function calculateRacePlan() {
 
     // Gather checkpoint distances
     const checkpointInputs = document.querySelectorAll('.checkpoint-distance');
-    currentPlan.checkpoint_distances = Array.from(checkpointInputs)
-        .map(input => parseFloat(input.value))
-        .filter(val => !isNaN(val));
-
-    // Gather checkpoint dropbag status
+    const checkpointDistances = Array.from(checkpointInputs)
+        .map(input => parseFloat(input.value));
+    
+    // Gather checkpoint dropbag status - must align with checkpoint distances
     const dropbagCheckboxes = document.querySelectorAll('.checkpoint-dropbag');
-    currentPlan.checkpoint_dropbags = Array.from(dropbagCheckboxes)
+    const checkpointDropbags = Array.from(dropbagCheckboxes)
         .map(checkbox => checkbox.checked);
+    
+    // Filter out invalid distances and their corresponding dropbag values
+    const validCheckpoints = [];
+    const validDropbags = [];
+    
+    for (let i = 0; i < checkpointDistances.length; i++) {
+        if (!isNaN(checkpointDistances[i])) {
+            validCheckpoints.push(checkpointDistances[i]);
+            validDropbags.push(checkpointDropbags[i] || false);
+        }
+    }
+    
+    currentPlan.checkpoint_distances = validCheckpoints;
+    currentPlan.checkpoint_dropbags = validDropbags;
 
     // Gather segment terrain types (only if terrain difficulty is enabled)
     const terrainEnabled = terrainEnabledInput.checked;

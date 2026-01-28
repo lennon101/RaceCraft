@@ -451,7 +451,7 @@ def format_time(minutes):
     secs = int((minutes % 1) * 60)
     return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-def calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints):
+def calculate_dropbag_contents(segments, checkpoint_dropbags):
     """
     Calculate dropbag contents for each checkpoint with a dropbag.
     
@@ -460,10 +460,12 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints):
       until the next checkpoint with a dropbag.
     - If a checkpoint doesn't have a dropbag, accumulate to the previous checkpoint with a dropbag.
     
+    Note: Runners pick up supplies from dropbags at checkpoints and carry them for upcoming segments.
+    The first segment (Start -> CP1) uses starting supplies, not dropbag supplies.
+    
     Args:
         segments: List of calculated segments with target_carbs and target_water
         checkpoint_dropbags: List of booleans indicating which checkpoints have dropbags
-        num_checkpoints: Number of checkpoints
         
     Returns:
         List of dropbag contents: [{'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5}, ...]
@@ -489,7 +491,7 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints):
     # Iterate through segments and accumulate nutrition
     # Segments: Start -> CP1 (seg 0), CP1 -> CP2 (seg 1), ..., CPn -> Finish (seg n)
     for seg_idx, segment in enumerate(segments):
-        # Skip the first segment (Start -> CP1) as it's not part of any dropbag
+        # Skip the first segment (Start -> CP1) - runner uses starting supplies, not dropbag
         if seg_idx == 0:
             continue
         
@@ -514,7 +516,7 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints):
         contents = dropbag_accumulation[cp_idx]
         dropbag_contents.append({
             'checkpoint': f'CP{cp_idx + 1}',
-            'carbs': contents['carbs'],
+            'carbs': round(contents['carbs']),  # Round to whole grams
             'hydration': round(contents['hydration'], 1)
         })
     
@@ -734,7 +736,7 @@ def calculate():
             elevation_profile = elevation_profile[::step]
         
         # Calculate dropbag contents
-        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints)
+        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags)
         
         return jsonify({
             'segments': segments,
@@ -777,11 +779,12 @@ def save_plan():
         if force_save_as and os.path.exists(filepath):
             return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
         
-        # Include elevation_profile in saved data
+        # Include elevation_profile and dropbag data in saved data
         save_data = {
             'plan_name': data.get('plan_name'),
             'gpx_filename': data.get('gpx_filename'),
             'checkpoint_distances': data.get('checkpoint_distances', []),
+            'checkpoint_dropbags': data.get('checkpoint_dropbags', []),
             'segment_terrain_types': data.get('segment_terrain_types', []),
             'avg_cp_time': data.get('avg_cp_time'),
             'z2_pace': data.get('z2_pace'),
@@ -794,7 +797,8 @@ def save_plan():
             'skill_level': data.get('skill_level'),
             'segments': data.get('segments'),
             'summary': data.get('summary'),
-            'elevation_profile': data.get('elevation_profile')
+            'elevation_profile': data.get('elevation_profile'),
+            'dropbag_contents': data.get('dropbag_contents')
         }
         
         with open(filepath, 'w') as f:
