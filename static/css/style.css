@@ -284,6 +284,12 @@ header h2.subtitle {
     color: var(--text-secondary);
 }
 
+.checkpoint-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .checkpoint-input input,
 .checkpoint-input select {
     width: 100%;
@@ -292,14 +298,20 @@ header h2.subtitle {
     border-radius: 6px;
 }
 
+.checkpoint-input-row input[type="number"] {
+    flex: 1;
+}
+
 .checkpoint-input select {
     background-color: white;
     cursor: pointer;
 }
 
 .dropbag-label {
-    display: inline-block;
-    margin-top: 5px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    margin: 0;
     font-size: 0.85rem;
     color: var(--text-secondary);
     cursor: pointer;

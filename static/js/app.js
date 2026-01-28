@@ -433,20 +433,22 @@ function generateCheckpointInputs() {
         
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
-            <input type="number" 
-                   class="checkpoint-distance" 
-                   data-index="${i}" 
-                   step="0.1" 
-                   min="0"
-                   value="${currentPlan.checkpoint_distances[i] || ''}"
-                   placeholder="e.g., 25.0" />
-            <label class="dropbag-label">
-                <input type="checkbox" 
-                       class="checkpoint-dropbag" 
-                       data-index="${i}"
-                       ${hasDropbag ? 'checked' : ''} />
-                Dropbag
-            </label>
+            <div class="checkpoint-input-row">
+                <input type="number" 
+                       class="checkpoint-distance" 
+                       data-index="${i}" 
+                       step="0.1" 
+                       min="0"
+                       value="${currentPlan.checkpoint_distances[i] || ''}"
+                       placeholder="e.g., 25.0" />
+                <label class="dropbag-label">
+                    <input type="checkbox" 
+                           class="checkpoint-dropbag" 
+                           data-index="${i}"
+                           ${hasDropbag ? 'checked' : ''} />
+                    Dropbag
+                </label>
+            </div>
         `;
         checkpointDistancesContainer.appendChild(div);
     }
