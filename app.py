@@ -451,6 +451,75 @@ def format_time(minutes):
     secs = int((minutes % 1) * 60)
     return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
+def calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints):
+    """
+    Calculate dropbag contents for each checkpoint with a dropbag.
+    
+    Logic:
+    - If a checkpoint has a dropbag, it contains carbs/hydration for the next segment(s)
+      until the next checkpoint with a dropbag.
+    - If a checkpoint doesn't have a dropbag, accumulate to the previous checkpoint with a dropbag.
+    
+    Args:
+        segments: List of calculated segments with target_carbs and target_water
+        checkpoint_dropbags: List of booleans indicating which checkpoints have dropbags
+        num_checkpoints: Number of checkpoints
+        
+    Returns:
+        List of dropbag contents: [{'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5}, ...]
+    """
+    if not checkpoint_dropbags or len(checkpoint_dropbags) == 0:
+        return []
+    
+    dropbag_contents = []
+    
+    # Build a mapping of checkpoint index to their dropbag contents
+    # dropbag_accumulation[cp_index] = {'carbs': X, 'hydration': Y}
+    dropbag_accumulation = {}
+    
+    # Initialize dropbag checkpoints
+    for i, has_dropbag in enumerate(checkpoint_dropbags):
+        if has_dropbag:
+            dropbag_accumulation[i] = {'carbs': 0, 'hydration': 0.0}
+    
+    # If no dropbags are checked, return empty
+    if not dropbag_accumulation:
+        return []
+    
+    # Iterate through segments and accumulate nutrition
+    # Segments: Start -> CP1 (seg 0), CP1 -> CP2 (seg 1), ..., CPn -> Finish (seg n)
+    for seg_idx, segment in enumerate(segments):
+        # Skip the first segment (Start -> CP1) as it's not part of any dropbag
+        if seg_idx == 0:
+            continue
+        
+        # seg_idx corresponds to: seg 1 = CP1->CP2, seg 2 = CP2->CP3, etc.
+        # The checkpoint that would carry this segment's nutrition is at index seg_idx - 1
+        checkpoint_idx = seg_idx - 1
+        
+        # Find the last checkpoint with a dropbag at or before this checkpoint
+        target_dropbag_cp = None
+        for i in range(checkpoint_idx, -1, -1):
+            if i in dropbag_accumulation:
+                target_dropbag_cp = i
+                break
+        
+        # If we found a dropbag checkpoint, accumulate this segment's nutrition
+        if target_dropbag_cp is not None:
+            dropbag_accumulation[target_dropbag_cp]['carbs'] += segment['target_carbs']
+            dropbag_accumulation[target_dropbag_cp]['hydration'] += segment['target_water']
+    
+    # Convert to output format
+    for cp_idx in sorted(dropbag_accumulation.keys()):
+        contents = dropbag_accumulation[cp_idx]
+        dropbag_contents.append({
+            'checkpoint': f'CP{cp_idx + 1}',
+            'carbs': contents['carbs'],
+            'hydration': round(contents['hydration'], 1)
+        })
+    
+    return dropbag_contents
+
 @app.route('/')
 def index():
     """Render main page."""
@@ -522,6 +591,7 @@ def calculate():
         
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
+        checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
         segment_terrain_types = data.get('segment_terrain_types', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
@@ -663,9 +733,13 @@ def calculate():
             step = len(elevation_profile) // 500
             elevation_profile = elevation_profile[::step]
         
+        # Calculate dropbag contents
+        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, num_checkpoints)
+        
         return jsonify({
             'segments': segments,
             'elevation_profile': elevation_profile,
+            'dropbag_contents': dropbag_contents,
             'summary': {
                 'total_distance': round(total_distance, 2),
                 'total_moving_time': round(total_moving_time, 2),

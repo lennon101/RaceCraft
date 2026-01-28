@@ -2,10 +2,12 @@
 let currentPlan = {
     gpx_filename: null,
     checkpoint_distances: [],
+    checkpoint_dropbags: [],  // Track which checkpoints have dropbags
     segment_terrain_types: [],
     segments: null,
     summary: null,
     elevation_profile: null,
+    dropbag_contents: null,  // Calculated dropbag contents for each CP
     loadedFilename: null  // Track the currently loaded plan filename
 };
 
@@ -422,10 +424,12 @@ function generateCheckpointInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
 
-    // Create only checkpoint distance inputs
+    // Create checkpoint distance inputs with dropbag checkbox
     for (let i = 0; i < numCheckpoints; i++) {
         const div = document.createElement('div');
         div.className = 'checkpoint-input';
+        
+        const hasDropbag = currentPlan.checkpoint_dropbags[i] || false;
         
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
@@ -436,6 +440,13 @@ function generateCheckpointInputs() {
                    min="0"
                    value="${currentPlan.checkpoint_distances[i] || ''}"
                    placeholder="e.g., 25.0" />
+            <label class="dropbag-label">
+                <input type="checkbox" 
+                       class="checkpoint-dropbag" 
+                       data-index="${i}"
+                       ${hasDropbag ? 'checked' : ''} />
+                Dropbag
+            </label>
         `;
         checkpointDistancesContainer.appendChild(div);
     }
@@ -443,6 +454,15 @@ function generateCheckpointInputs() {
     // Add event listeners for real-time updates
     document.querySelectorAll('.checkpoint-distance').forEach(input => {
         input.addEventListener('change', () => {
+            if (currentPlan.gpx_filename) {
+                calculateRacePlan();
+            }
+        });
+    });
+    
+    // Add event listeners for dropbag checkboxes
+    document.querySelectorAll('.checkpoint-dropbag').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
             }
@@ -531,6 +551,11 @@ async function calculateRacePlan() {
         .map(input => parseFloat(input.value))
         .filter(val => !isNaN(val));
 
+    // Gather checkpoint dropbag status
+    const dropbagCheckboxes = document.querySelectorAll('.checkpoint-dropbag');
+    currentPlan.checkpoint_dropbags = Array.from(dropbagCheckboxes)
+        .map(checkbox => checkbox.checked);
+
     // Gather segment terrain types (only if terrain difficulty is enabled)
     const terrainEnabled = terrainEnabledInput.checked;
     if (terrainEnabled) {
@@ -562,6 +587,7 @@ async function calculateRacePlan() {
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
+        checkpoint_dropbags: currentPlan.checkpoint_dropbags,
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: avgCpTime,
         z2_pace: z2Pace,
@@ -601,10 +627,11 @@ async function calculateRacePlan() {
 }
 
 function displayResults(data) {
-    const { segments, summary, elevation_profile } = data;
+    const { segments, summary, elevation_profile, dropbag_contents } = data;
 
-    // Store elevation profile
+    // Store elevation profile and dropbag contents
     currentPlan.elevation_profile = elevation_profile;
+    currentPlan.dropbag_contents = dropbag_contents;
     
     // Render elevation chart if profile exists
     if (elevation_profile && elevation_profile.length > 0) {
@@ -674,6 +701,28 @@ function displayResults(data) {
         tbody.appendChild(row);
     });
 
+    // Render dropbag table if dropbag_contents exists
+    const dropbagTableContainer = document.getElementById('dropbag-table-container');
+    const dropbagTbody = document.getElementById('dropbag-tbody');
+    
+    if (dropbag_contents && dropbag_contents.length > 0) {
+        dropbagTbody.innerHTML = '';
+        
+        dropbag_contents.forEach(item => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${item.checkpoint}</strong></td>
+                <td>${item.carbs}</td>
+                <td>${item.hydration}</td>
+            `;
+            dropbagTbody.appendChild(row);
+        });
+        
+        dropbagTableContainer.style.display = 'block';
+    } else {
+        dropbagTableContainer.style.display = 'none';
+    }
+
     // Show results
     noResults.style.display = 'none';
     resultsContainer.style.display = 'block';
@@ -733,6 +782,7 @@ async function savePlan(forceSaveAs = false) {
         force_save_as: forceSaveAs,  // Let backend know this is a Save As operation
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
+        checkpoint_dropbags: currentPlan.checkpoint_dropbags,
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value),
         z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + parseFloat(document.getElementById('z2-pace-sec').value) / 60,
@@ -745,7 +795,8 @@ async function savePlan(forceSaveAs = false) {
         skill_level: parseFloat(document.getElementById('skill-level').value),
         segments: currentPlan.segments,
         summary: currentPlan.summary,
-        elevation_profile: currentPlan.elevation_profile
+        elevation_profile: currentPlan.elevation_profile,
+        dropbag_contents: currentPlan.dropbag_contents
     };
 
     try {
@@ -837,6 +888,7 @@ async function loadPlan(filename) {
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
+            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
             currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
@@ -860,7 +912,7 @@ async function loadPlan(filename) {
             document.getElementById('skill-level').value = data.skill_level || 0.5;
             terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
-            // Generate checkpoint inputs and populate
+            // Generate checkpoint inputs and populate (this will restore dropbag checkboxes)
             generateCheckpointInputs();
 
             // Load results if available
@@ -869,6 +921,7 @@ async function loadPlan(filename) {
                 currentPlan.summary = data.summary;
                 currentPlan.race_start_time = data.race_start_time;
                 currentPlan.elevation_profile = data.elevation_profile || null;
+                currentPlan.dropbag_contents = data.dropbag_contents || null;
                 
                 // If no elevation profile, recalculate to get it
                 if (!currentPlan.elevation_profile) {
