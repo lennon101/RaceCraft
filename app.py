@@ -451,6 +451,113 @@ def format_time(minutes):
     secs = int((minutes % 1) * 60)
     return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
+def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None):
+    """
+    Calculate dropbag contents for each checkpoint with a dropbag, plus starting supplies.
+    
+    Logic:
+    - Include a "Start" entry for the first segment (Start -> CP1)
+    - If a checkpoint has a dropbag, it contains carbs/hydration for the next segment(s)
+      until the next checkpoint with a dropbag.
+    - If a checkpoint doesn't have a dropbag, accumulate to the previous checkpoint with a dropbag.
+    
+    Note: Runners pick up supplies from dropbags at checkpoints and carry them for upcoming segments.
+    The first segment (Start -> CP1) uses starting supplies that must be packed before the race.
+    
+    Args:
+        segments: List of calculated segments with target_carbs and target_water
+        checkpoint_dropbags: List of booleans indicating which checkpoints have dropbags
+        carbs_per_gel: Optional carbs per gel/sachet in grams. If provided, calculates gel quantities.
+        
+    Returns:
+        List of dropbag contents: [{'checkpoint': 'Start', 'carbs': 20, 'hydration': 0.2},
+                                     {'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5, 
+                                      'num_gels': 5, 'actual_carbs': 125}, ...]
+    """
+    dropbag_contents = []
+    
+    # Always include Start segment (segment 0: Start -> CP1)
+    if segments and len(segments) > 0:
+        start_segment = segments[0]
+        carb_target = round(start_segment['target_carbs'])
+        
+        start_item = {
+            'checkpoint': 'Start',
+            'carbs': carb_target,
+            'hydration': round(start_segment['target_water'], 1)
+        }
+        
+        # Add gel calculations if carbs_per_gel is provided
+        if carbs_per_gel and carbs_per_gel > 0:
+            num_gels = round(carb_target / carbs_per_gel)
+            actual_carbs = round(num_gels * carbs_per_gel, 2)
+            start_item['num_gels'] = num_gels
+            start_item['actual_carbs'] = actual_carbs
+        
+        dropbag_contents.append(start_item)
+    
+    # If no checkpoints have dropbags, only return Start
+    if not checkpoint_dropbags or len(checkpoint_dropbags) == 0:
+        return dropbag_contents
+    
+    # Build a mapping of checkpoint index to their dropbag contents
+    # dropbag_accumulation[cp_index] = {'carbs': X, 'hydration': Y}
+    dropbag_accumulation = {}
+    
+    # Initialize dropbag checkpoints
+    for i, has_dropbag in enumerate(checkpoint_dropbags):
+        if has_dropbag:
+            dropbag_accumulation[i] = {'carbs': 0, 'hydration': 0.0}
+    
+    # If no dropbags are checked, return only Start
+    if not dropbag_accumulation:
+        return dropbag_contents
+    
+    # Iterate through segments and accumulate nutrition
+    # Segments: Start -> CP1 (seg 0), CP1 -> CP2 (seg 1), ..., CPn -> Finish (seg n)
+    for seg_idx, segment in enumerate(segments):
+        # Skip the first segment (Start -> CP1) - already handled above
+        if seg_idx == 0:
+            continue
+        
+        # seg_idx corresponds to: seg 1 = CP1->CP2, seg 2 = CP2->CP3, etc.
+        # The checkpoint that would carry this segment's nutrition is at index seg_idx - 1
+        checkpoint_idx = seg_idx - 1
+        
+        # Find the last checkpoint with a dropbag at or before this checkpoint
+        target_dropbag_cp = None
+        for i in range(checkpoint_idx, -1, -1):
+            if i in dropbag_accumulation:
+                target_dropbag_cp = i
+                break
+        
+        # If we found a dropbag checkpoint, accumulate this segment's nutrition
+        if target_dropbag_cp is not None:
+            dropbag_accumulation[target_dropbag_cp]['carbs'] += segment['target_carbs']
+            dropbag_accumulation[target_dropbag_cp]['hydration'] += segment['target_water']
+    
+    # Convert to output format
+    for cp_idx in sorted(dropbag_accumulation.keys()):
+        contents = dropbag_accumulation[cp_idx]
+        carb_target = round(contents['carbs'])  # Round to whole grams
+        
+        dropbag_item = {
+            'checkpoint': f'CP{cp_idx + 1}',
+            'carbs': carb_target,
+            'hydration': round(contents['hydration'], 1)
+        }
+        
+        # Add gel calculations if carbs_per_gel is provided
+        if carbs_per_gel and carbs_per_gel > 0:
+            num_gels = round(carb_target / carbs_per_gel)  # Round to nearest whole number
+            actual_carbs = round(num_gels * carbs_per_gel, 2)
+            dropbag_item['num_gels'] = num_gels
+            dropbag_item['actual_carbs'] = actual_carbs
+        
+        dropbag_contents.append(dropbag_item)
+    
+    return dropbag_contents
+
 @app.route('/')
 def index():
     """Render main page."""
@@ -522,11 +629,17 @@ def calculate():
         
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
+        checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
         segment_terrain_types = data.get('segment_terrain_types', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
         carbs_per_hour = float(data.get('carbs_per_hour', DEFAULT_CARBS_PER_HOUR))
         water_per_hour = float(data.get('water_per_hour', DEFAULT_WATER_PER_HOUR))
+        carbs_per_gel = data.get('carbs_per_gel')  # Optional: carbs per gel/sachet
+        if carbs_per_gel is not None and carbs_per_gel != '':
+            carbs_per_gel = float(carbs_per_gel)
+        else:
+            carbs_per_gel = None
         climbing_ability = data.get('climbing_ability', 'moderate')
         race_start_time = data.get('race_start_time')  # "HH:MM" or None
         
@@ -663,9 +776,13 @@ def calculate():
             step = len(elevation_profile) // 500
             elevation_profile = elevation_profile[::step]
         
+        # Calculate dropbag contents
+        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
+        
         return jsonify({
             'segments': segments,
             'elevation_profile': elevation_profile,
+            'dropbag_contents': dropbag_contents,
             'summary': {
                 'total_distance': round(total_distance, 2),
                 'total_moving_time': round(total_moving_time, 2),
@@ -703,24 +820,27 @@ def save_plan():
         if force_save_as and os.path.exists(filepath):
             return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
         
-        # Include elevation_profile in saved data
+        # Include elevation_profile and dropbag data in saved data
         save_data = {
             'plan_name': data.get('plan_name'),
             'gpx_filename': data.get('gpx_filename'),
             'checkpoint_distances': data.get('checkpoint_distances', []),
+            'checkpoint_dropbags': data.get('checkpoint_dropbags', []),
             'segment_terrain_types': data.get('segment_terrain_types', []),
             'avg_cp_time': data.get('avg_cp_time'),
             'z2_pace': data.get('z2_pace'),
             'climbing_ability': data.get('climbing_ability'),
             'carbs_per_hour': data.get('carbs_per_hour'),
             'water_per_hour': data.get('water_per_hour'),
+            'carbs_per_gel': data.get('carbs_per_gel'),
             'race_start_time': data.get('race_start_time'),
             'fatigue_enabled': data.get('fatigue_enabled'),
             'fitness_level': data.get('fitness_level'),
             'skill_level': data.get('skill_level'),
             'segments': data.get('segments'),
             'summary': data.get('summary'),
-            'elevation_profile': data.get('elevation_profile')
+            'elevation_profile': data.get('elevation_profile'),
+            'dropbag_contents': data.get('dropbag_contents')
         }
         
         with open(filepath, 'w') as f:
@@ -790,6 +910,7 @@ def export_csv():
         segments = data.get('segments', [])
         summary = data.get('summary', {})
         race_start_time = data.get('race_start_time')
+        dropbag_contents = data.get('dropbag_contents', [])
         
         # Generate CSV
         csv_filename = f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -840,6 +961,29 @@ def export_csv():
             writer.writerow(['Total Elev Gain (m)', summary.get('total_elev_gain')])
             writer.writerow(['Total Carbs (g)', summary.get('total_carbs')])
             writer.writerow(['Total Water (L)', summary.get('total_water')])
+            
+            # Dropbag contents
+            if dropbag_contents and len(dropbag_contents) > 0:
+                writer.writerow([])
+                writer.writerow(['DROP BAG CONTENTS'])
+                
+                # Check if gel data is present
+                has_gel_data = any('num_gels' in dropbag for dropbag in dropbag_contents)
+                
+                if has_gel_data:
+                    writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Gels', 'Actual Carbs (g)', 'Hydration Target (L)'])
+                    for dropbag in dropbag_contents:
+                        writer.writerow([
+                            dropbag['checkpoint'], 
+                            dropbag['carbs'], 
+                            dropbag.get('num_gels', ''),
+                            dropbag.get('actual_carbs', ''),
+                            dropbag['hydration']
+                        ])
+                else:
+                    writer.writerow(['Checkpoint', 'Carb Target (g)', 'Hydration Target (L)'])
+                    for dropbag in dropbag_contents:
+                        writer.writerow([dropbag['checkpoint'], dropbag['carbs'], dropbag['hydration']])
         
         return send_file(csv_path, as_attachment=True, download_name=csv_filename)
     except Exception as e:

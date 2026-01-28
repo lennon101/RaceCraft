@@ -284,6 +284,12 @@ header h2.subtitle {
     color: var(--text-secondary);
 }
 
+.checkpoint-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .checkpoint-input input,
 .checkpoint-input select {
     width: 100%;
@@ -292,8 +298,28 @@ header h2.subtitle {
     border-radius: 6px;
 }
 
+.checkpoint-input-row input[type="number"] {
+    flex: 1;
+}
+
 .checkpoint-input select {
     background-color: white;
+    cursor: pointer;
+}
+
+.dropbag-label {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.dropbag-label input[type="checkbox"] {
+    width: auto;
+    margin-right: 5px;
     cursor: pointer;
 }
 
@@ -398,6 +424,14 @@ header h2.subtitle {
     overflow-x: auto;
     border-radius: 8px;
     border: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.table-container h3 {
+    margin: 0 0 15px 0;
+    padding: 15px 15px 0 15px;
+    color: var(--text-primary);
+    font-size: 1.1rem;
 }
 
 table {

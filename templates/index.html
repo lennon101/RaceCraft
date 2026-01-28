@@ -179,6 +179,15 @@
                         <label for="water-per-hour">Water per Hour (mL):</label>
                         <input type="number" id="water-per-hour" min="0" step="50" value="500" />
                     </div>
+                    <div class="input-group">
+                        <label for="carbs-per-gel">
+                            Carbs per Gel/Sachet (g, optional):
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="If specified, the dropbag table will show how many gels/sachets to pack in each dropbag to meet your carb targets. Leave empty to only show total carbs."></span>
+                        </label>
+                        <input type="number" id="carbs-per-gel" min="0" step="1" placeholder="e.g., 25" />
+                    </div>
                 </section>
 
                 <!-- Actions -->
@@ -256,6 +265,23 @@
                             </thead>
                             <tbody id="segments-tbody">
                                 <!-- Segments will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Drop Bag Table -->
+                    <div class="table-container" id="dropbag-table-container" style="display: none;">
+                        <h3>Drop Bag Contents for Each CP</h3>
+                        <table id="dropbag-table">
+                            <thead>
+                                <tr>
+                                    <th>Checkpoint</th>
+                                    <th>Carb Target (g)</th>
+                                    <th>Hydration Target (L)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dropbag-tbody">
+                                <!-- Dropbag contents will be populated here -->
                             </tbody>
                         </table>
                     </div>
