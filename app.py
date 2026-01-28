@@ -864,6 +864,7 @@ def export_csv():
         segments = data.get('segments', [])
         summary = data.get('summary', {})
         race_start_time = data.get('race_start_time')
+        dropbag_contents = data.get('dropbag_contents', [])
         
         # Generate CSV
         csv_filename = f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -914,6 +915,14 @@ def export_csv():
             writer.writerow(['Total Elev Gain (m)', summary.get('total_elev_gain')])
             writer.writerow(['Total Carbs (g)', summary.get('total_carbs')])
             writer.writerow(['Total Water (L)', summary.get('total_water')])
+            
+            # Dropbag contents
+            if dropbag_contents and len(dropbag_contents) > 0:
+                writer.writerow([])
+                writer.writerow(['DROP BAG CONTENTS'])
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Hydration Target (L)'])
+                for dropbag in dropbag_contents:
+                    writer.writerow([dropbag['checkpoint'], dropbag['carbs'], dropbag['hydration']])
         
         return send_file(csv_path, as_attachment=True, download_name=csv_filename)
     except Exception as e:

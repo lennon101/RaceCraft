@@ -975,7 +975,8 @@ async function exportToCSV() {
     const exportData = {
         segments: currentPlan.segments,
         summary: currentPlan.summary,
-        race_start_time: currentPlan.race_start_time
+        race_start_time: currentPlan.race_start_time,
+        dropbag_contents: currentPlan.dropbag_contents || []
     };
 
     try {
