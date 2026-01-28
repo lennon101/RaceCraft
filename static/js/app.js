@@ -771,6 +771,209 @@ async function calculateRacePlan() {
     }
 }
 
+function renderSegmentsTable(segments) {
+    const tbody = document.getElementById('segments-tbody');
+    tbody.innerHTML = '';
+
+    const hasTimeOfDay = segments.some(seg => seg.time_of_day !== null);
+    const timeOfDayCols = document.querySelectorAll('.time-of-day-col');
+    timeOfDayCols.forEach(col => {
+        col.style.display = hasTimeOfDay ? 'table-cell' : 'none';
+    });
+
+    // Check if fatigue is enabled to show/hide fatigue column
+    const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
+    const hasFatigue = fatigueEnabled && segments.some(seg => seg.fatigue_seconds > 0);
+    const fatigueCols = document.querySelectorAll('.fatigue-col');
+    fatigueCols.forEach(col => {
+        col.style.display = hasFatigue ? 'table-cell' : 'none';
+    });
+
+    // Check if terrain is enabled to show/hide terrain columns
+    const terrainEnabled = document.getElementById('terrain-enabled').checked;
+    const terrainCols = document.querySelectorAll('.terrain-col');
+    terrainCols.forEach(col => {
+        col.style.display = terrainEnabled ? 'table-cell' : 'none';
+    });
+
+    // Get waterpoint distances and check if they should be shown in table
+    const showWaterpoints = showWaterpointsInTableInput.checked;
+    const waterpointDistances = currentPlan.waterpoint_distances || [];
+    
+    if (!showWaterpoints || waterpointDistances.length === 0) {
+        // No waterpoints to show, render segments normally
+        segments.forEach(seg => {
+            const row = document.createElement('tr');
+            const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
+            const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
+            
+            // Format terrain type for display
+            const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
+            const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
+            
+            row.innerHTML = `
+                <td><strong>${seg.from} → ${seg.to}</strong></td>
+                <td>${seg.distance}</td>
+                <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
+                <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
+                <td>${seg.elev_pace_str}</td>
+                <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
+                <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
+                <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
+                <td>${seg.segment_time_str}</td>
+                <td>${seg.target_carbs}</td>
+                <td>${seg.target_water}</td>
+                <td><strong>${seg.cumulative_time_str}</strong></td>
+                <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
+                    ${timeOfArrival}
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        return;
+    }
+    
+    // Build a list of all points (checkpoints and waterpoints) with their distances
+    const allPoints = [];
+    let cumulativeDist = 0;
+    
+    // Add start point
+    allPoints.push({
+        type: 'checkpoint',
+        label: 'Start',
+        distance: 0
+    });
+    
+    // Process segments and add checkpoints and waterpoints
+    segments.forEach((seg, idx) => {
+        cumulativeDist += seg.distance;
+        
+        // Add checkpoint (if not the last segment which ends at Finish)
+        if (idx < segments.length - 1) {
+            allPoints.push({
+                type: 'checkpoint',
+                label: seg.to,
+                distance: cumulativeDist
+            });
+        }
+    });
+    
+    // Add finish point
+    allPoints.push({
+        type: 'checkpoint',
+        label: 'Finish',
+        distance: cumulativeDist
+    });
+    
+    // Add waterpoints
+    waterpointDistances.forEach((wpDist, wpIdx) => {
+        const wp = parseFloat(wpDist);
+        allPoints.push({
+            type: 'waterpoint',
+            label: `WP${wpIdx + 1}`,
+            distance: wp
+        });
+    });
+    
+    // Sort all points by distance
+    allPoints.sort((a, b) => a.distance - b.distance);
+    
+    // Now create segments between consecutive points
+    const displaySegments = [];
+    for (let i = 0; i < allPoints.length - 1; i++) {
+        const fromPoint = allPoints[i];
+        const toPoint = allPoints[i + 1];
+        const segmentDistance = toPoint.distance - fromPoint.distance;
+        
+        // Find the original segment that contains this sub-segment
+        let originalSeg = null;
+        let accumulatedDist = 0;
+        for (const seg of segments) {
+            const segmentEnd = accumulatedDist + seg.distance;
+            if (fromPoint.distance >= accumulatedDist && toPoint.distance <= segmentEnd + 0.001) {
+                originalSeg = seg;
+                break;
+            }
+            accumulatedDist = segmentEnd;
+        }
+        
+        if (!originalSeg) {
+            console.warn(`Could not find original segment for ${fromPoint.label} → ${toPoint.label}`);
+            continue;
+        }
+        
+        // Calculate proportional values for this sub-segment
+        const proportion = segmentDistance / originalSeg.distance;
+        
+        displaySegments.push({
+            from: fromPoint.label,
+            to: toPoint.label,
+            distance: segmentDistance.toFixed(2),
+            elev_gain: Math.round(originalSeg.elev_gain * proportion),
+            elev_loss: Math.round(originalSeg.elev_loss * proportion),
+            net_elev: Math.round((originalSeg.elev_gain - originalSeg.elev_loss) * proportion),
+            elev_pace_str: originalSeg.elev_pace_str,
+            pace_capped: originalSeg.pace_capped,
+            pace_str: originalSeg.pace_str,
+            fatigue_str: originalSeg.fatigue_str,
+            terrain_type: originalSeg.terrain_type,
+            terrain_factor: originalSeg.terrain_factor,
+            segment_time_str: '—',  // Sub-segments don't show individual times
+            target_carbs: Math.round(originalSeg.target_carbs * proportion),
+            target_water: (originalSeg.target_water * proportion).toFixed(1),
+            cumulative_time_str: '--',  // Will be calculated in display
+            time_of_day: null,
+            isWaterpointSegment: fromPoint.type === 'waterpoint' || toPoint.type === 'waterpoint'
+        });
+    }
+    
+    // Render the display segments
+    displaySegments.forEach(seg => {
+        const row = document.createElement('tr');
+        const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
+        
+        // Format terrain type for display
+        const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
+        const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
+        
+        // Highlight waterpoint segments with light blue background
+        if (seg.isWaterpointSegment) {
+            row.style.backgroundColor = '#eff6ff';
+        }
+        
+        row.innerHTML = `
+            <td><strong>${seg.from} → ${seg.to}</strong></td>
+            <td>${seg.distance}</td>
+            <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
+            <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
+            <td>${seg.elev_pace_str}</td>
+            <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
+            <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
+            <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
+            <td>${seg.segment_time_str}</td>
+            <td>${seg.target_carbs}</td>
+            <td>${seg.target_water}</td>
+            <td><strong>${seg.cumulative_time_str}</strong></td>
+            <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
+                --
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Helper function to parse time string like "1:23:45" to minutes
+function parseTimeStr(timeStr) {
+    if (!timeStr || timeStr === '--') return 0;
+    const parts = timeStr.split(':');
+    if (parts.length === 3) {
+        return parseInt(parts[0]) * 60 + parseInt(parts[1]) + parseInt(parts[2]) / 60;
+    } else if (parts.length === 2) {
+        return parseInt(parts[0]) + parseInt(parts[1]) / 60;
+    }
+    return 0;
+}
+
 function displayResults(data) {
     const { segments, summary, elevation_profile, dropbag_contents } = data;
 
@@ -802,117 +1005,8 @@ function displayResults(data) {
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
     document.getElementById('summary-water').textContent = `${summary.total_water} L`;
 
-    // Update segments table
-    const tbody = document.getElementById('segments-tbody');
-    tbody.innerHTML = '';
-
-    const hasTimeOfDay = segments.some(seg => seg.time_of_day !== null);
-    const timeOfDayCols = document.querySelectorAll('.time-of-day-col');
-    timeOfDayCols.forEach(col => {
-        col.style.display = hasTimeOfDay ? 'table-cell' : 'none';
-    });
-
-    // Check if fatigue is enabled to show/hide fatigue column
-    const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
-    const hasFatigue = fatigueEnabled && segments.some(seg => seg.fatigue_seconds > 0);
-    const fatigueCols = document.querySelectorAll('.fatigue-col');
-    fatigueCols.forEach(col => {
-        col.style.display = hasFatigue ? 'table-cell' : 'none';
-    });
-
-    // Check if terrain is enabled to show/hide terrain columns
-    const terrainEnabled = document.getElementById('terrain-enabled').checked;
-    const terrainCols = document.querySelectorAll('.terrain-col');
-    terrainCols.forEach(col => {
-        col.style.display = terrainEnabled ? 'table-cell' : 'none';
-    });
-
-    // Get waterpoint distances and check if they should be shown in table
-    const showWaterpoints = showWaterpointsInTableInput.checked;
-    const waterpointDistances = currentPlan.waterpoint_distances || [];
-    
-    // Build a combined list of segments and waterpoints
-    const displayRows = [];
-    let cumulativeDist = 0;
-    
-    segments.forEach((seg, idx) => {
-        // Add any waterpoints that fall before this segment ends
-        const segmentEndDist = cumulativeDist + seg.distance;
-        
-        if (showWaterpoints) {
-            waterpointDistances.forEach((wpDist, wpIdx) => {
-                const wp = parseFloat(wpDist);
-                if (wp > cumulativeDist && wp <= segmentEndDist) {
-                    displayRows.push({
-                        type: 'waterpoint',
-                        label: `WP${wpIdx + 1}`,
-                        distance: wp
-                    });
-                }
-            });
-        }
-        
-        // Add the segment
-        displayRows.push({
-            type: 'segment',
-            segment: seg
-        });
-        
-        cumulativeDist = segmentEndDist;
-    });
-    
-    // Sort by distance for waterpoints
-    displayRows.sort((a, b) => {
-        const distA = a.type === 'waterpoint' ? a.distance : 0;
-        const distB = b.type === 'waterpoint' ? b.distance : 0;
-        if (a.type === 'segment' && b.type === 'segment') return 0;
-        if (a.type === 'waterpoint' && b.type === 'waterpoint') return distA - distB;
-        if (a.type === 'segment') return 1;
-        return -1;
-    });
-
-    displayRows.forEach(item => {
-        if (item.type === 'waterpoint') {
-            // Render waterpoint row
-            const row = document.createElement('tr');
-            row.style.backgroundColor = '#eff6ff';  // Light blue background
-            row.innerHTML = `
-                <td colspan="${terrainEnabled ? '13' : '12'}" style="text-align: center; font-style: italic; color: #2563eb;">
-                    <strong>${item.label}</strong> @ ${item.distance.toFixed(1)} km
-                </td>
-            `;
-            tbody.appendChild(row);
-        } else {
-            // Render segment row
-            const seg = item.segment;
-            const row = document.createElement('tr');
-            const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
-            const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
-            
-            // Format terrain type for display
-            const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
-            const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
-            
-            row.innerHTML = `
-                <td><strong>${seg.from} → ${seg.to}</strong></td>
-                <td>${seg.distance}</td>
-                <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
-                <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
-                <td>${seg.elev_pace_str}</td>
-                <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
-                <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-                <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
-                <td>${seg.segment_time_str}</td>
-                <td>${seg.target_carbs}</td>
-                <td>${seg.target_water}</td>
-                <td><strong>${seg.cumulative_time_str}</strong></td>
-                <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
-                    ${timeOfArrival}
-                </td>
-            `;
-            tbody.appendChild(row);
-        }
-    });
+    // Render the segments table
+    renderSegmentsTable(segments);
 
     // Render dropbag table if dropbag_contents exists
     const dropbagTableContainer = document.getElementById('dropbag-table-container');
