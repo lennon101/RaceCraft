@@ -6,6 +6,7 @@
     <title>Race Fuel & Pacing Planner</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -46,7 +47,12 @@
                         <input type="number" id="num-checkpoints" min="0" max="20" value="3" />
                     </div>
                     <div class="input-group">
-                        <label for="avg-cp-time">Avg CP Stop Time (minutes):</label>
+                        <label for="avg-cp-time">
+                            Avg CP Stop Time (minutes):
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Average time you expect to spend at each checkpoint for refueling, nutrition, and rest. This time is added to your total race time but not included in moving time calculations."></span>
+                        </label>
                         <input type="number" id="avg-cp-time" min="0" step="0.5" value="5" />
                     </div>
                     <div id="checkpoint-distances"></div>
@@ -57,11 +63,21 @@
                     <h3>3. Terrain Difficulty</h3>
                     <div class="input-group checkbox-group">
                         <input type="checkbox" id="terrain-enabled" />
-                        <label for="terrain-enabled">Include Terrain Difficulty Adjustments</label>
+                        <label for="terrain-enabled">
+                            Include Terrain Difficulty Adjustments
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Adjusts pace based on terrain type (road, trail, technical, etc.). Different terrain types have different speed multipliers. Your technical skill level determines how much these penalties are reduced."></span>
+                        </label>
                     </div>
                     <div id="terrain-skill-container" style="display: none;">
                         <div class="input-group">
-                            <label for="skill-level">Technical Skill Level:</label>
+                            <label for="skill-level">
+                                Technical Skill Level:
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Your ability to navigate technical terrain efficiently. Higher skill levels reduce terrain difficulty penalties. Novice runners experience full terrain slowdown, while Expert runners can maintain near-normal pace on technical trails."></span>
+                            </label>
                             <select id="skill-level">
                                 <option value="0.0">Novice (0% reduction)</option>
                                 <option value="0.25">Beginner (25% reduction)</option>
@@ -71,7 +87,12 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label for="default-terrain-type">Default Terrain Type (applies to all segments):</label>
+                            <label for="default-terrain-type">
+                                Default Terrain Type:
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Sets the terrain type for all segments at once. Each terrain type has a pace multiplier - smoother terrain is faster, technical terrain is slower. You can override individual segments later if needed."></span>
+                            </label>
                             <select id="default-terrain-type">
                                 <option value="">-- Select to apply to all --</option>
                                 <option value="road">Road/Track (0.95×)</option>
@@ -91,7 +112,12 @@
                 <section class="input-section">
                     <h3>4. Pacing</h3>
                     <div class="input-group">
-                        <label for="z2-pace-min">Z2 Pace (flat):</label>
+                        <label for="z2-pace-min">
+                            Flat Terrain Pace
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                        </label>
                         <div class="pace-input">
                             <input type="number" id="z2-pace-min" min="3" max="20" value="6" />
                             <span>:</span>
@@ -100,7 +126,12 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="climbing-ability">Climbing Ability:</label>
+                        <label for="climbing-ability">
+                            Climbing Ability:
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Your vertical ascent rate capability. This determines how much climbing affects your pace on uphills. Conservative climbers slow down more on steep ascents, while elite climbers maintain better speed on climbs."></span>
+                        </label>
                         <select id="climbing-ability">
                             <option value="conservative">Conservative Climber (600 m/h)</option>
                             <option value="moderate" selected>Moderate Climber (800 m/h)</option>
@@ -111,10 +142,20 @@
                     </div>
                     <div class="input-group checkbox-group">
                         <input type="checkbox" id="fatigue-enabled" checked />
-                        <label for="fatigue-enabled">Include Fatigue Penalty</label>
+                        <label for="fatigue-enabled">
+                            Include Fatigue Penalty
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="When enabled, your pace will gradually slow down as accumulated distance and elevation increase throughout the race, simulating the natural effects of physical fatigue. Disable this for fresh or well-rested segment predictions."></span>
+                        </label>
                     </div>
                     <div class="input-group" id="fitness-level-group">
-                        <label for="fitness-level">Fitness Level:</label>
+                        <label for="fitness-level">
+                            Fitness Level:
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Your endurance fitness level determines how fatigue accumulates over the race distance. FOP (Fatigue Onset Point) indicates the distance where you start experiencing significant pace degradation. Higher fitness levels delay fatigue onset and reduce its impact."></span>
+                        </label>
                         <select id="fitness-level">
                             <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
                             <option value="recreational" selected>Recreational (FOP: 30-45 km-effort)</option>
