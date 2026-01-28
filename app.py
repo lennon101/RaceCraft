@@ -839,6 +839,8 @@ def save_plan():
             'gpx_filename': data.get('gpx_filename'),
             'checkpoint_distances': data.get('checkpoint_distances', []),
             'checkpoint_dropbags': data.get('checkpoint_dropbags', []),
+            'waterpoint_distances': data.get('waterpoint_distances', []),
+            'avg_wp_time': data.get('avg_wp_time', 2),
             'segment_terrain_types': data.get('segment_terrain_types', []),
             'avg_cp_time': data.get('avg_cp_time'),
             'z2_pace': data.get('z2_pace'),
