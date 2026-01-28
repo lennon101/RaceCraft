@@ -735,8 +735,11 @@ async function savePlan(forceSaveAs = false) {
             const listData = await listResponse.json();
             
             if (listResponse.ok) {
-                // Check if any existing plan has the same name
-                const existingPlan = listData.plans.find(plan => plan.name === planName);
+                // Sanitize the plan name the same way the backend does (add .json extension)
+                const sanitizedName = planName.endsWith('.json') ? planName : planName + '.json';
+                
+                // Check if any existing plan has the same filename (after sanitization)
+                const existingPlan = listData.plans.find(plan => plan.filename === sanitizedName);
                 
                 if (existingPlan) {
                     alert('A plan with this name already exists. Please choose a different name.');
