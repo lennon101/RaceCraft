@@ -1,6 +1,6 @@
 :root {
-    --primary-color: #1a1f2b;
-    --primary-hover: #2a3142;
+    --primary-color: #141822;
+    --primary-hover: #2f3950;
     --secondary-color: #64748b;
     --success-color: #10b981;
     --danger-color: #ef4444;
@@ -70,12 +70,6 @@ header h2.subtitle {
     margin-bottom: 5px;
     font-weight: 400;
     opacity: 0.95;
-}
-
-.slogan {
-    font-size: 0.95rem;
-    opacity: 0.85;
-    font-style: italic;
 }
 
 .subtitle {

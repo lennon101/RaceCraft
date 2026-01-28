@@ -221,7 +221,7 @@ def calculate_terrain_efficiency_factor(terrain_type='smooth_trail', gradient=0.
     # Ensure factor is at least 1.0 (terrain can only slow down, not speed up beyond smooth trail)
     return max(1.0, skill_adjusted_factor)
 
-def calculate_vertical_speed(base_vertical_speed, gradient):
+def calculate_vertical_speed(base_vertical_speed, gradient, skill_level=0.5):
     """
     Calculate gradient-aware vertical speed in m/h.
     
@@ -232,9 +232,12 @@ def calculate_vertical_speed(base_vertical_speed, gradient):
     - 12-18%: Still efficient (95-85% - steep but manageable)
     - >18%: Declining efficiency (85-70% - very steep, forced to slow)
     
+    Technical skill improves climbing efficiency, especially on steep grades.
+    
     Args:
         base_vertical_speed: Athlete's base vertical speed in m/h
         gradient: Grade as decimal (e.g., 0.10 = 10%)
+        skill_level: Athlete technical skill (0.0 = novice, 1.0 = expert)
         
     Returns:
         Adjusted vertical speed in m/h
@@ -261,18 +264,27 @@ def calculate_vertical_speed(base_vertical_speed, gradient):
         # Extremely steep: 70% efficiency
         efficiency = 0.70
     
+    # Technical skill improves climbing efficiency on steeper grades
+    # On steep climbs (>12%), skilled runners maintain better technique
+    # Bonus scales from 0% (novice) to 5% (expert) on very steep terrain
+    if gradient_pct > 12.0:
+        skill_bonus = skill_level * 0.05 * min(1.0, (gradient_pct - 12.0) / 13.0)
+        efficiency = min(1.0, efficiency + skill_bonus)
+    
     return base_vertical_speed * efficiency
 
-def calculate_downhill_multiplier(gradient, terrain_type='smooth_trail'):
+def calculate_downhill_multiplier(gradient, terrain_type='smooth_trail', skill_level=0.5):
     """
     Calculate downhill speed multiplier based on gradient.
     
     Downhills are modeled separately from climbs using speed multipliers
     rather than negative penalties. Speed is capped by terrain and gradient.
+    Technical skill affects how confidently and quickly an athlete can descend.
     
     Args:
         gradient: Grade as decimal (negative for downhill, e.g., -0.10 = -10%)
         terrain_type: Type of terrain (affects maximum safe downhill speed)
+        skill_level: Athlete technical skill (0.0 = novice, 1.0 = expert)
         
     Returns:
         Speed multiplier (≥1.0, where 1.0 = flat pace)
@@ -294,7 +306,8 @@ def calculate_downhill_multiplier(gradient, terrain_type='smooth_trail'):
         base_multiplier = 1.10
     
     # Terrain limits maximum downhill speed
-    terrain_downhill_caps = {
+    # Novice runners are more cautious, experts can push limits
+    terrain_downhill_caps_base = {
         'road': 1.0,              # Full speed possible
         'smooth_trail': 0.95,     # Slight reduction
         'dirt_road': 0.90,        # More caution needed
@@ -304,7 +317,13 @@ def calculate_downhill_multiplier(gradient, terrain_type='smooth_trail'):
         'scrambling': 0.50        # Extremely slow descent
     }
     
-    terrain_cap = terrain_downhill_caps.get(terrain_type, 0.90)
+    base_terrain_cap = terrain_downhill_caps_base.get(terrain_type, 0.90)
+    
+    # Skill level increases the terrain cap - experts can descend faster on technical terrain
+    # skill_bonus ranges from 0 (novice) to 30% of remaining headroom (expert)
+    # This means on technical terrain (0.70 cap), expert gets: 0.70 + 0.3 * (1.0 - 0.70) = 0.79
+    skill_bonus = skill_level * 0.3 * (1.0 - base_terrain_cap)
+    terrain_cap = min(1.0, base_terrain_cap + skill_bonus)
     
     # Apply terrain cap: multiplier_adjusted = 1 + (multiplier - 1) × terrain_cap
     adjusted_multiplier = 1.0 + (base_multiplier - 1.0) * terrain_cap
@@ -363,14 +382,14 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     
     # 2. Climbing time (minutes)
     if elevation_gain > 0:
-        adjusted_vertical_speed = calculate_vertical_speed(base_vertical_speed, gradient)
+        adjusted_vertical_speed = calculate_vertical_speed(base_vertical_speed, gradient, skill_level)
         climb_time = (elevation_gain / adjusted_vertical_speed) * 60.0  # minutes
     else:
         climb_time = 0.0
     
     # 3. Descent time adjustment (minutes)
     if elevation_loss > 0 and is_descent:
-        downhill_multiplier = calculate_downhill_multiplier(gradient, terrain_type)
+        downhill_multiplier = calculate_downhill_multiplier(gradient, terrain_type, skill_level)
         # Descent saves time: reduce horizontal time proportionally
         descent_time_savings = horizontal_time * (1.0 - 1.0 / downhill_multiplier)
     else:
@@ -390,6 +409,11 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
         is_descent=is_descent
     )
     
+    # === Apply general skill efficiency bonus ===
+    # Skilled runners are more efficient in all conditions (better form, foot placement, etc.)
+    # This provides 0-3% improvement from novice to expert
+    skill_efficiency_bonus = 1.0 - (skill_level * 0.03)
+    
     # === Apply fatigue multiplier ===
     fatigue_multiplier = 1.0
     if fatigue_enabled:
@@ -404,8 +428,8 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
             fatigue_multiplier = 1.0 + alpha * (((cumulative_effort - fop) / fop) ** beta)
     
     # === Combine all factors ===
-    # segment_time = base_time × terrain_factor × fatigue_multiplier
-    adjusted_segment_time = base_segment_time * terrain_factor * fatigue_multiplier
+    # segment_time = base_time × terrain_factor × fatigue_multiplier × skill_efficiency
+    adjusted_segment_time = base_segment_time * terrain_factor * fatigue_multiplier * skill_efficiency_bonus
     final_pace = adjusted_segment_time / distance_km
     
     # Calculate fatigue penalty in seconds per km (for reporting)
