@@ -453,15 +453,16 @@ def format_time(minutes):
 
 def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None):
     """
-    Calculate dropbag contents for each checkpoint with a dropbag.
+    Calculate dropbag contents for each checkpoint with a dropbag, plus starting supplies.
     
     Logic:
+    - Include a "Start" entry for the first segment (Start -> CP1)
     - If a checkpoint has a dropbag, it contains carbs/hydration for the next segment(s)
       until the next checkpoint with a dropbag.
     - If a checkpoint doesn't have a dropbag, accumulate to the previous checkpoint with a dropbag.
     
     Note: Runners pick up supplies from dropbags at checkpoints and carry them for upcoming segments.
-    The first segment (Start -> CP1) uses starting supplies, not dropbag supplies.
+    The first segment (Start -> CP1) uses starting supplies that must be packed before the race.
     
     Args:
         segments: List of calculated segments with target_carbs and target_water
@@ -469,13 +470,35 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
         carbs_per_gel: Optional carbs per gel/sachet in grams. If provided, calculates gel quantities.
         
     Returns:
-        List of dropbag contents: [{'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5, 
-                                     'num_gels': 5, 'actual_carbs': 125}, ...]
+        List of dropbag contents: [{'checkpoint': 'Start', 'carbs': 20, 'hydration': 0.2},
+                                     {'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5, 
+                                      'num_gels': 5, 'actual_carbs': 125}, ...]
     """
-    if not checkpoint_dropbags or len(checkpoint_dropbags) == 0:
-        return []
-    
     dropbag_contents = []
+    
+    # Always include Start segment (segment 0: Start -> CP1)
+    if segments and len(segments) > 0:
+        start_segment = segments[0]
+        carb_target = round(start_segment['target_carbs'])
+        
+        start_item = {
+            'checkpoint': 'Start',
+            'carbs': carb_target,
+            'hydration': round(start_segment['target_water'], 1)
+        }
+        
+        # Add gel calculations if carbs_per_gel is provided
+        if carbs_per_gel and carbs_per_gel > 0:
+            num_gels = round(carb_target / carbs_per_gel)
+            actual_carbs = num_gels * carbs_per_gel
+            start_item['num_gels'] = num_gels
+            start_item['actual_carbs'] = actual_carbs
+        
+        dropbag_contents.append(start_item)
+    
+    # If no checkpoints have dropbags, only return Start
+    if not checkpoint_dropbags or len(checkpoint_dropbags) == 0:
+        return dropbag_contents
     
     # Build a mapping of checkpoint index to their dropbag contents
     # dropbag_accumulation[cp_index] = {'carbs': X, 'hydration': Y}
@@ -486,14 +509,14 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
         if has_dropbag:
             dropbag_accumulation[i] = {'carbs': 0, 'hydration': 0.0}
     
-    # If no dropbags are checked, return empty
+    # If no dropbags are checked, return only Start
     if not dropbag_accumulation:
-        return []
+        return dropbag_contents
     
     # Iterate through segments and accumulate nutrition
     # Segments: Start -> CP1 (seg 0), CP1 -> CP2 (seg 1), ..., CPn -> Finish (seg n)
     for seg_idx, segment in enumerate(segments):
-        # Skip the first segment (Start -> CP1) - runner uses starting supplies, not dropbag
+        # Skip the first segment (Start -> CP1) - already handled above
         if seg_idx == 0:
             continue
         
