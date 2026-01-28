@@ -666,6 +666,7 @@ def save_plan():
         if data is None:
             return jsonify({'error': 'Invalid JSON data'}), 400
         plan_name = data.get('plan_name', f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        force_save_as = data.get('force_save_as', False)
         
         # Sanitize filename
         plan_name = secure_filename(plan_name)
@@ -673,6 +674,10 @@ def save_plan():
             plan_name += '.json'
         
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], plan_name)
+        
+        # Check if file exists when using Save As
+        if force_save_as and os.path.exists(filepath):
+            return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
         
         # Include elevation_profile in saved data
         save_data = {

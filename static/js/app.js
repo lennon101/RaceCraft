@@ -5,7 +5,8 @@ let currentPlan = {
     segment_terrain_types: [],
     segments: null,
     summary: null,
-    elevation_profile: null
+    elevation_profile: null,
+    loadedFilename: null  // Track the currently loaded plan filename
 };
 
 let elevationChart = null;
@@ -27,6 +28,7 @@ const noResults = document.getElementById('no-results');
 const saveModal = document.getElementById('save-modal');
 const loadModal = document.getElementById('load-modal');
 const saveConfirmBtn = document.getElementById('save-confirm-btn');
+const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
@@ -48,7 +50,8 @@ saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
 exportBtn.addEventListener('click', exportToCSV);
 clearBtn.addEventListener('click', clearAll);
-saveConfirmBtn.addEventListener('click', savePlan);
+saveConfirmBtn.addEventListener('click', () => savePlan(false));
+saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 
@@ -330,7 +333,8 @@ function clearAll() {
         segment_difficulties: [],
         segments: null,
         summary: null,
-        elevation_profile: null
+        elevation_profile: null,
+        loadedFilename: null  // Clear loaded filename
     };
     
     // Destroy chart
@@ -392,6 +396,7 @@ async function handleGPXUpload(event) {
 
         if (response.ok) {
             currentPlan.gpx_filename = data.filename;
+            currentPlan.loadedFilename = null;  // Clear loaded filename when uploading new GPX
             
             gpxInfoBox.innerHTML = `
                 <strong>Route Loaded:</strong><br>
@@ -680,10 +685,23 @@ function showSaveModal() {
         return;
     }
     
-    // Generate default name
-    const now = new Date();
-    const defaultName = `race_plan_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
-    planNameInput.value = defaultName;
+    // If a plan is loaded, show both Save and Save As buttons
+    if (currentPlan.loadedFilename) {
+        // Set the plan name to the loaded filename (without .json extension)
+        const loadedPlanName = currentPlan.loadedFilename.replace(/\.json$/, '');
+        planNameInput.value = loadedPlanName;
+        
+        // Show Save As button for loaded plans
+        saveAsBtn.style.display = 'inline-block';
+    } else {
+        // Generate default name for new plans
+        const now = new Date();
+        const defaultName = `race_plan_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
+        planNameInput.value = defaultName;
+        
+        // Hide Save As button for new plans
+        saveAsBtn.style.display = 'none';
+    }
     
     saveModal.classList.add('active');
 }
@@ -697,7 +715,7 @@ function hideModal(modal) {
     modal.classList.remove('active');
 }
 
-async function savePlan() {
+async function savePlan(forceSaveAs = false) {
     const planName = planNameInput.value.trim();
     
     if (!planName) {
@@ -712,6 +730,7 @@ async function savePlan() {
 
     const saveData = {
         plan_name: planName,
+        force_save_as: forceSaveAs,  // Let backend know this is a Save As operation
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
         segment_terrain_types: currentPlan.segment_terrain_types,
@@ -741,8 +760,23 @@ async function savePlan() {
         const data = await response.json();
 
         if (response.ok) {
-            alert('Plan saved successfully!');
+            // Determine if this was an update or a new save
+            const wasUpdate = !forceSaveAs && currentPlan.loadedFilename;
+            
+            // Always update to the filename returned by the server
+            currentPlan.loadedFilename = data.filename;
+            
+            // Show appropriate message based on operation
+            if (wasUpdate) {
+                alert('Plan updated successfully!');
+            } else {
+                alert('Plan saved successfully!');
+            }
             hideModal(saveModal);
+        } else if (response.status === 409) {
+            // Conflict - plan already exists
+            alert(data.error);
+            // Keep modal open so user can rename
         } else {
             alert('Error saving plan: ' + data.error);
         }
@@ -797,6 +831,9 @@ async function loadPlan(filename) {
         const data = await response.json();
 
         if (response.ok) {
+            // Track the loaded filename for save/save-as functionality
+            currentPlan.loadedFilename = filename;
+            
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
