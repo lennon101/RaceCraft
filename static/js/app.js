@@ -332,10 +332,12 @@ function clearAll() {
     currentPlan = {
         gpx_filename: null,
         checkpoint_distances: [],
-        segment_difficulties: [],
+        checkpoint_dropbags: [],
+        segment_terrain_types: [],
         segments: null,
         summary: null,
         elevation_profile: null,
+        dropbag_contents: null,
         loadedFilename: null  // Clear loaded filename
     };
     
@@ -358,6 +360,7 @@ function clearAll() {
     document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
+    document.getElementById('carbs-per-gel').value = '';
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
     document.getElementById('fitness-level').value = 'recreational';
