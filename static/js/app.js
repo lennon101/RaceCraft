@@ -728,6 +728,27 @@ async function savePlan(forceSaveAs = false) {
         return;
     }
 
+    // When using Save As, check if a plan with this name already exists
+    if (forceSaveAs) {
+        try {
+            const listResponse = await fetch('/api/list-plans');
+            const listData = await listResponse.json();
+            
+            if (listResponse.ok) {
+                // Check if any existing plan has the same name
+                const existingPlan = listData.plans.find(plan => plan.name === planName);
+                
+                if (existingPlan) {
+                    alert('A plan with this name already exists. Please choose a different name.');
+                    return;  // Keep modal open so user can rename
+                }
+            }
+        } catch (error) {
+            console.error('Error checking existing plans:', error);
+            // Continue with save attempt even if check fails
+        }
+    }
+
     const saveData = {
         plan_name: planName,
         gpx_filename: currentPlan.gpx_filename,
