@@ -102,6 +102,7 @@ header h2.subtitle {
     top: 20px;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
+    overflow-x: visible;
 }
 
 .panel h2 {
@@ -128,6 +129,7 @@ header h2.subtitle {
 
 .input-group {
     margin-bottom: 15px;
+    position: relative;
 }
 
 .input-group label {
@@ -144,7 +146,7 @@ header h2.subtitle {
     font-size: 1.1rem;
     cursor: help;
     color: var(--primary-color);
-    position: relative;
+    /* position: relative; */
     opacity: 0.7;
     transition: opacity 0.2s;
     vertical-align: middle;
@@ -154,32 +156,33 @@ header h2.subtitle {
 .info-icon:focus {
     opacity: 1;
     outline: none;
+    cursor: none;
 }
 
-.info-icon[title]:hover::after,
-.info-icon[title]:focus::after {
-    content: attr(title);
+.info-icon[data-tooltip]:hover::after,
+.info-icon[data-tooltip]:focus::after {
+    content: attr(data-tooltip);
     position: absolute;
-    left: 25px;
+    left: 70px;
     top: 50%;
     transform: translateY(-50%);
     background: var(--primary-color);
     color: white;
-    padding: 10px 15px;
+    padding: 12px 16px;
     border-radius: 8px;
     white-space: normal;
-    max-width: 280px;
-    font-size: 0.85rem;
+    width: auto;
+    font-size: 0.875rem;
     font-weight: 400;
-    line-height: 1.4;
+    line-height: 1.5;
     box-shadow: var(--shadow-lg);
-    z-index: 100;
+    z-index: 10000;
     pointer-events: none;
 }
 
 @media (max-width: 768px) {
-    .info-icon[title]:hover::after,
-    .info-icon[title]:focus::after {
+    .info-icon[data-tooltip]:hover::after,
+    .info-icon[data-tooltip]:focus::after {
         left: auto;
         right: 0;
         max-width: 200px;
