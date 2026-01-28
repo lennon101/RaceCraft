@@ -637,6 +637,8 @@ def calculate():
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
         checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
+        waterpoint_distances = data.get('waterpoint_distances', [])  # New: waterpoint distances
+        avg_wp_time = float(data.get('avg_wp_time', 2))  # New: avg waterpoint stop time
         segment_terrain_types = data.get('segment_terrain_types', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
@@ -764,6 +766,7 @@ def calculate():
         total_carbs = sum(s['target_carbs'] for s in segments)
         total_water = sum(s['target_water'] for s in segments)
         total_cp_time = avg_cp_time * num_checkpoints
+        total_wp_time = avg_wp_time * len(waterpoint_distances)  # New: waterpoint stop time
         
         # Build elevation profile data
         elevation_profile = []
@@ -790,14 +793,17 @@ def calculate():
             'segments': segments,
             'elevation_profile': elevation_profile,
             'dropbag_contents': dropbag_contents,
+            'waterpoint_distances': waterpoint_distances,  # New: return waterpoint data
             'summary': {
                 'total_distance': round(total_distance, 2),
                 'total_moving_time': round(total_moving_time, 2),
                 'total_moving_time_str': format_time(total_moving_time),
                 'total_cp_time': round(total_cp_time, 2),
                 'total_cp_time_str': format_time(total_cp_time),
-                'total_race_time': round(cumulative_time, 2),
-                'total_race_time_str': format_time(cumulative_time),
+                'total_wp_time': round(total_wp_time, 2),  # New: waterpoint time
+                'total_wp_time_str': format_time(total_wp_time),  # New: waterpoint time formatted
+                'total_race_time': round(cumulative_time + total_wp_time, 2),  # Modified: include WP time
+                'total_race_time_str': format_time(cumulative_time + total_wp_time),  # Modified: include WP time
                 'total_elev_gain': total_elev_gain,
                 'total_carbs': total_carbs,
                 'total_water': round(total_water, 1)

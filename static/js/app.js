@@ -3,6 +3,7 @@ let currentPlan = {
     gpx_filename: null,
     checkpoint_distances: [],
     checkpoint_dropbags: [],  // Track which checkpoints have dropbags
+    waterpoint_distances: [],  // Track waterpoint distances
     segment_terrain_types: [],
     segments: null,
     summary: null,
@@ -43,10 +44,16 @@ const terrainSkillContainer = document.getElementById('terrain-skill-container')
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
 const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
+const numWaterpointsInput = document.getElementById('num-waterpoints');
+const waterpointDistancesContainer = document.getElementById('waterpoint-distances');
+const avgWpTimeContainer = document.getElementById('avg-wp-time-container');
+const showWaterpointsContainer = document.getElementById('show-waterpoints-container');
+const showWaterpointsInTableInput = document.getElementById('show-waterpoints-in-table');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
 numCheckpointsInput.addEventListener('change', generateCheckpointInputs);
+numWaterpointsInput.addEventListener('change', generateWaterpointInputs);
 calculateBtn.addEventListener('click', calculateRacePlan);
 saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
@@ -92,9 +99,16 @@ defaultTerrainTypeInput.addEventListener('change', () => {
     }
 });
 
+// Show waterpoints checkbox toggles table display
+showWaterpointsInTableInput.addEventListener('change', () => {
+    if (currentPlan.segments) {
+        renderSegmentsTable(currentPlan.segments);
+    }
+});
+
 // Add real-time calculation on input changes
 document.querySelectorAll('input, select').forEach(input => {
-    if (input.id !== 'gpx-file' && input.id !== 'plan-name' && input.id !== 'default-terrain-type') {
+    if (input.id !== 'gpx-file' && input.id !== 'plan-name' && input.id !== 'default-terrain-type' && input.id !== 'show-waterpoints-in-table') {
         input.addEventListener('change', () => {
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
@@ -105,6 +119,7 @@ document.querySelectorAll('input, select').forEach(input => {
 
 // Initialize
 generateCheckpointInputs();
+generateWaterpointInputs();
 
 // Functions
 function renderElevationChart(elevationProfile, segments) {
@@ -138,6 +153,15 @@ function renderElevationChart(elevationProfile, segments) {
                 waterToNext: waterToNext
             });
         }
+    });
+    
+    // Prepare waterpoint data
+    const waterpointData = [];
+    currentPlan.waterpoint_distances.forEach((dist, idx) => {
+        waterpointData.push({
+            distance: parseFloat(dist),
+            label: `WP${idx + 1}`
+        });
     });
     
     // Create gradient
@@ -184,6 +208,43 @@ function renderElevationChart(elevationProfile, segments) {
                 ctx.font = 'bold 11px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText(cp.label, xPos, top - 5);
+                ctx.restore();
+            });
+            
+            // Draw waterpoint lines (in blue)
+            waterpointData.forEach(wp => {
+                // Find the closest index in elevation profile to this waterpoint distance
+                let closestIndex = 0;
+                let minDiff = Math.abs(elevationProfile[0].distance - wp.distance);
+                
+                for (let i = 1; i < elevationProfile.length; i++) {
+                    const diff = Math.abs(elevationProfile[i].distance - wp.distance);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                }
+                
+                // Get pixel position using the index
+                const xPos = x.getPixelForValue(closestIndex);
+                
+                // Draw vertical dotted line (blue for waterpoints)
+                ctx.save();
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(xPos, top);
+                ctx.lineTo(xPos, bottom);
+                ctx.stroke();
+                ctx.restore();
+                
+                // Draw waterpoint label
+                ctx.save();
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(wp.label, xPos, top - 5);
                 ctx.restore();
             });
         }
@@ -333,6 +394,7 @@ function clearAll() {
         gpx_filename: null,
         checkpoint_distances: [],
         checkpoint_dropbags: [],
+        waterpoint_distances: [],
         segment_terrain_types: [],
         segments: null,
         summary: null,
@@ -370,8 +432,14 @@ function clearAll() {
     document.getElementById('default-terrain-type').value = '';
     terrainSkillContainer.style.display = 'none';
     
+    // Reset waterpoint inputs
+    document.getElementById('num-waterpoints').value = 0;
+    document.getElementById('avg-wp-time').value = 2;
+    document.getElementById('show-waterpoints-in-table').checked = false;
+    
     // Regenerate checkpoint inputs
     generateCheckpointInputs();
+    generateWaterpointInputs();
     
     // Hide results
     resultsContainer.style.display = 'none';
@@ -480,6 +548,47 @@ function generateCheckpointInputs() {
     }
 }
 
+function generateWaterpointInputs() {
+    const numWaterpoints = parseInt(numWaterpointsInput.value) || 0;
+    waterpointDistancesContainer.innerHTML = '';
+    
+    // Show/hide the avg stop time and show waterpoints checkbox containers
+    if (numWaterpoints > 0) {
+        avgWpTimeContainer.style.display = 'block';
+        showWaterpointsContainer.style.display = 'block';
+    } else {
+        avgWpTimeContainer.style.display = 'none';
+        showWaterpointsContainer.style.display = 'none';
+    }
+    
+    // Create waterpoint distance inputs (no dropbag checkbox)
+    for (let i = 0; i < numWaterpoints; i++) {
+        const div = document.createElement('div');
+        div.className = 'checkpoint-input';
+        
+        div.innerHTML = `
+            <label>Waterpoint ${i + 1} Distance (km):</label>
+            <input type="number" 
+                   class="waterpoint-distance" 
+                   data-index="${i}" 
+                   step="0.1" 
+                   min="0"
+                   value="${currentPlan.waterpoint_distances[i] || ''}"
+                   placeholder="e.g., 10.0" />
+        `;
+        waterpointDistancesContainer.appendChild(div);
+    }
+    
+    // Add event listeners for real-time updates
+    document.querySelectorAll('.waterpoint-distance').forEach(input => {
+        input.addEventListener('change', () => {
+            if (currentPlan.gpx_filename) {
+                calculateRacePlan();
+            }
+        });
+    });
+}
+
 function generateTerrainDifficultyInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     terrainDifficultiesContainer.innerHTML = '';
@@ -574,6 +683,14 @@ async function calculateRacePlan() {
     currentPlan.checkpoint_distances = validCheckpoints;
     currentPlan.checkpoint_dropbags = validDropbags;
 
+    // Gather waterpoint distances
+    const waterpointInputs = document.querySelectorAll('.waterpoint-distance');
+    const waterpointDistances = Array.from(waterpointInputs)
+        .map(input => parseFloat(input.value))
+        .filter(dist => !isNaN(dist));
+    
+    currentPlan.waterpoint_distances = waterpointDistances;
+
     // Gather segment terrain types (only if terrain difficulty is enabled)
     const terrainEnabled = terrainEnabledInput.checked;
     if (terrainEnabled) {
@@ -605,11 +722,16 @@ async function calculateRacePlan() {
     // Get carbs per gel (optional)
     const carbsPerGelInput = document.getElementById('carbs-per-gel').value;
     const carbsPerGel = carbsPerGelInput && carbsPerGelInput.trim() !== '' ? parseFloat(carbsPerGelInput) : null;
+    
+    // Get waterpoint settings
+    const avgWpTime = parseFloat(document.getElementById('avg-wp-time').value) || 2;
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
         checkpoint_dropbags: currentPlan.checkpoint_dropbags,
+        waterpoint_distances: currentPlan.waterpoint_distances,
+        avg_wp_time: avgWpTime,
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: avgCpTime,
         z2_pace: z2Pace,
@@ -665,6 +787,16 @@ function displayResults(data) {
     document.getElementById('summary-distance').textContent = `${summary.total_distance} km`;
     document.getElementById('summary-moving-time').textContent = summary.total_moving_time_str;
     document.getElementById('summary-cp-time').textContent = summary.total_cp_time_str;
+    
+    // Show/hide WP Time card if there are waterpoints
+    const wpTimeCard = document.getElementById('summary-wp-time-card');
+    if (summary.total_wp_time && summary.total_wp_time > 0) {
+        wpTimeCard.style.display = 'block';
+        document.getElementById('summary-wp-time').textContent = summary.total_wp_time_str;
+    } else {
+        wpTimeCard.style.display = 'none';
+    }
+    
     document.getElementById('summary-total-time').textContent = summary.total_race_time_str;
     document.getElementById('summary-elev-gain').textContent = `${summary.total_elev_gain} m`;
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
@@ -695,33 +827,91 @@ function displayResults(data) {
         col.style.display = terrainEnabled ? 'table-cell' : 'none';
     });
 
-    segments.forEach(seg => {
-        const row = document.createElement('tr');
-        const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
-        const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
+    // Get waterpoint distances and check if they should be shown in table
+    const showWaterpoints = showWaterpointsInTableInput.checked;
+    const waterpointDistances = currentPlan.waterpoint_distances || [];
+    
+    // Build a combined list of segments and waterpoints
+    const displayRows = [];
+    let cumulativeDist = 0;
+    
+    segments.forEach((seg, idx) => {
+        // Add any waterpoints that fall before this segment ends
+        const segmentEndDist = cumulativeDist + seg.distance;
         
-        // Format terrain type for display
-        const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
-        const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
+        if (showWaterpoints) {
+            waterpointDistances.forEach((wpDist, wpIdx) => {
+                const wp = parseFloat(wpDist);
+                if (wp > cumulativeDist && wp <= segmentEndDist) {
+                    displayRows.push({
+                        type: 'waterpoint',
+                        label: `WP${wpIdx + 1}`,
+                        distance: wp
+                    });
+                }
+            });
+        }
         
-        row.innerHTML = `
-            <td><strong>${seg.from} → ${seg.to}</strong></td>
-            <td>${seg.distance}</td>
-            <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
-            <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
-            <td>${seg.elev_pace_str}</td>
-            <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
-            <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-            <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
-            <td>${seg.segment_time_str}</td>
-            <td>${seg.target_carbs}</td>
-            <td>${seg.target_water}</td>
-            <td><strong>${seg.cumulative_time_str}</strong></td>
-            <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
-                ${timeOfArrival}
-            </td>
-        `;
-        tbody.appendChild(row);
+        // Add the segment
+        displayRows.push({
+            type: 'segment',
+            segment: seg
+        });
+        
+        cumulativeDist = segmentEndDist;
+    });
+    
+    // Sort by distance for waterpoints
+    displayRows.sort((a, b) => {
+        const distA = a.type === 'waterpoint' ? a.distance : 0;
+        const distB = b.type === 'waterpoint' ? b.distance : 0;
+        if (a.type === 'segment' && b.type === 'segment') return 0;
+        if (a.type === 'waterpoint' && b.type === 'waterpoint') return distA - distB;
+        if (a.type === 'segment') return 1;
+        return -1;
+    });
+
+    displayRows.forEach(item => {
+        if (item.type === 'waterpoint') {
+            // Render waterpoint row
+            const row = document.createElement('tr');
+            row.style.backgroundColor = '#eff6ff';  // Light blue background
+            row.innerHTML = `
+                <td colspan="${terrainEnabled ? '13' : '12'}" style="text-align: center; font-style: italic; color: #2563eb;">
+                    <strong>${item.label}</strong> @ ${item.distance.toFixed(1)} km
+                </td>
+            `;
+            tbody.appendChild(row);
+        } else {
+            // Render segment row
+            const seg = item.segment;
+            const row = document.createElement('tr');
+            const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
+            const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
+            
+            // Format terrain type for display
+            const terrainTypeDisplay = seg.terrain_type ? seg.terrain_type.replace(/_/g, ' ') : 'smooth trail';
+            const terrainFactorDisplay = seg.terrain_factor ? `${seg.terrain_factor.toFixed(2)}x` : '1.00x';
+            
+            row.innerHTML = `
+                <td><strong>${seg.from} → ${seg.to}</strong></td>
+                <td>${seg.distance}</td>
+                <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
+                <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
+                <td>${seg.elev_pace_str}</td>
+                <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
+                <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
+                <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
+                <td>${seg.segment_time_str}</td>
+                <td>${seg.target_carbs}</td>
+                <td>${seg.target_water}</td>
+                <td><strong>${seg.cumulative_time_str}</strong></td>
+                <td class="time-of-day-col" style="display: ${hasTimeOfDay ? 'table-cell' : 'none'}">
+                    ${timeOfArrival}
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
     });
 
     // Render dropbag table if dropbag_contents exists
@@ -840,6 +1030,8 @@ async function savePlan(forceSaveAs = false) {
         gpx_filename: currentPlan.gpx_filename,
         checkpoint_distances: currentPlan.checkpoint_distances,
         checkpoint_dropbags: currentPlan.checkpoint_dropbags,
+        waterpoint_distances: currentPlan.waterpoint_distances,
+        avg_wp_time: parseFloat(document.getElementById('avg-wp-time').value),
         segment_terrain_types: currentPlan.segment_terrain_types,
         avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value),
         z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + parseFloat(document.getElementById('z2-pace-sec').value) / 60,
@@ -947,10 +1139,15 @@ async function loadPlan(filename) {
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
             currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
+            currentPlan.waterpoint_distances = data.waterpoint_distances || [];
             currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            
+            // Load waterpoint settings
+            document.getElementById('num-waterpoints').value = currentPlan.waterpoint_distances.length;
+            document.getElementById('avg-wp-time').value = data.avg_wp_time || 2;
             
             const z2Pace = data.z2_pace || 6.5;
             document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
@@ -973,6 +1170,9 @@ async function loadPlan(filename) {
 
             // Generate checkpoint inputs and populate (this will restore dropbag checkboxes)
             generateCheckpointInputs();
+            
+            // Generate waterpoint inputs and populate
+            generateWaterpointInputs();
 
             // Load results if available
             if (data.segments && data.summary) {
@@ -1035,6 +1235,7 @@ async function exportToCSV() {
         segments: currentPlan.segments,
         summary: currentPlan.summary,
         race_start_time: currentPlan.race_start_time,
+        waterpoint_distances: currentPlan.waterpoint_distances || [],
         dropbag_contents: currentPlan.dropbag_contents || []
     };
 
