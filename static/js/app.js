@@ -598,6 +598,10 @@ async function calculateRacePlan() {
     const fatigueEnabled = document.getElementById('fatigue-enabled').checked;
     const fitnessLevel = document.getElementById('fitness-level').value;
     const skillLevel = parseFloat(document.getElementById('skill-level').value) || 0.5;
+    
+    // Get carbs per gel (optional)
+    const carbsPerGelInput = document.getElementById('carbs-per-gel').value;
+    const carbsPerGel = carbsPerGelInput && carbsPerGelInput.trim() !== '' ? parseFloat(carbsPerGelInput) : null;
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
@@ -609,6 +613,7 @@ async function calculateRacePlan() {
         climbing_ability: climbingAbility,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
+        carbs_per_gel: carbsPerGel,
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
         fitness_level: fitnessLevel,
@@ -719,17 +724,51 @@ function displayResults(data) {
     // Render dropbag table if dropbag_contents exists
     const dropbagTableContainer = document.getElementById('dropbag-table-container');
     const dropbagTbody = document.getElementById('dropbag-tbody');
+    const dropbagTableHeader = document.querySelector('#dropbag-table thead tr');
     
     if (dropbag_contents && dropbag_contents.length > 0) {
         dropbagTbody.innerHTML = '';
         
+        // Check if gel columns should be displayed (if any item has num_gels)
+        const hasGelData = dropbag_contents.some(item => item.num_gels !== undefined);
+        
+        // Update table header based on whether gel data is present
+        if (hasGelData) {
+            dropbagTableHeader.innerHTML = `
+                <th>Checkpoint</th>
+                <th>Carb Target (g)</th>
+                <th>Number of Gels</th>
+                <th>Actual Carbs (g)</th>
+                <th>Hydration Target (L)</th>
+            `;
+        } else {
+            dropbagTableHeader.innerHTML = `
+                <th>Checkpoint</th>
+                <th>Carb Target (g)</th>
+                <th>Hydration Target (L)</th>
+            `;
+        }
+        
+        // Render rows
         dropbag_contents.forEach(item => {
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td><strong>${item.checkpoint}</strong></td>
-                <td>${item.carbs}</td>
-                <td>${item.hydration}</td>
-            `;
+            
+            if (hasGelData) {
+                row.innerHTML = `
+                    <td><strong>${item.checkpoint}</strong></td>
+                    <td>${item.carbs}</td>
+                    <td>${item.num_gels}</td>
+                    <td>${item.actual_carbs}</td>
+                    <td>${item.hydration}</td>
+                `;
+            } else {
+                row.innerHTML = `
+                    <td><strong>${item.checkpoint}</strong></td>
+                    <td>${item.carbs}</td>
+                    <td>${item.hydration}</td>
+                `;
+            }
+            
             dropbagTbody.appendChild(row);
         });
         
@@ -804,6 +843,7 @@ async function savePlan(forceSaveAs = false) {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
+        carbs_per_gel: document.getElementById('carbs-per-gel').value ? parseFloat(document.getElementById('carbs-per-gel').value) : null,
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -916,6 +956,7 @@ async function loadPlan(filename) {
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
+            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
