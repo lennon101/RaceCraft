@@ -222,37 +222,50 @@ function renderElevationChart(elevationProfile, segments) {
                     callbacks: {
                         title: (context) => {
                             const distance = parseFloat(context[0].label);
-                            
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
                                 Math.abs(cp.distance - distance) < 0.5
                             );
-                            
+                            let titleLines = [];
                             if (nearCheckpoint) {
-                                return [
-                                    `${nearCheckpoint.label}`,
-                                    `Distance: ${nearCheckpoint.distance.toFixed(1)} km`
-                                ];
+                                titleLines.push(`${nearCheckpoint.label}`);
+                                titleLines.push(`Distance: ${nearCheckpoint.distance.toFixed(1)} km`);
+                            } else {
+                                titleLines.push(`Distance: ${distance} km`);
                             }
-                            
-                            return `Distance: ${distance} km`;
+                            return titleLines;
                         },
                         label: (context) => {
                             const distance = parseFloat(context.label);
                             const labels = [`Elevation: ${context.parsed.y.toFixed(0)} m`];
-                            
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
                                 Math.abs(cp.distance - distance) < 0.5
                             );
-                            
                             if (nearCheckpoint) {
                                 labels.push('');
                                 labels.push(`Next Section: ${nearCheckpoint.distanceToNext.toFixed(1)} km`);
                                 labels.push(`Fuel Needed: ${nearCheckpoint.carbsToNext}g carbs`);
                                 labels.push(`Hydration: ${nearCheckpoint.waterToNext}L water`);
+                                // Add drop bag plan at the bottom if present
+                                if (currentPlan && currentPlan.checkpoint_dropbags && currentPlan.checkpoint_dropbags[nearCheckpoint.cpNumber - 1]) {
+                                    if (currentPlan.dropbag_contents && Array.isArray(currentPlan.dropbag_contents)) {
+                                        const dropbag = currentPlan.dropbag_contents.find(db => {
+                                            return (db.checkpoint === nearCheckpoint.label) || (db.cpNumber === nearCheckpoint.cpNumber);
+                                        });
+                                        if (dropbag) {
+                                            labels.push('');
+                                            let planLine = 'Drop Bag Plan:';
+                                            if (dropbag.num_gels !== undefined) {
+                                                planLine += ` Carbs: ${dropbag.carbs}g, Gels: ${dropbag.num_gels}, Hydration: ${dropbag.hydration}L`;
+                                            } else {
+                                                planLine += ` Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
+                                            }
+                                            labels.push(planLine);
+                                        }
+                                    }
+                                }
                             }
-                            
                             return labels;
                         },
                         labelTextColor: (context) => {
