@@ -80,17 +80,17 @@
                     <div id="terrain-skill-container" style="display: none;">
                         <div class="input-group">
                             <label for="skill-level">
-                                Technical Skill Level:
-                                <span class="info-icon mdi mdi-information-outline" 
+                                  Technical Skill Level (Terrain Penalty):
+                                  <span class="info-icon mdi mdi-information-outline" 
                                       tabindex="0"
-                                      data-tooltip="Your ability to navigate technical terrain efficiently. Higher skill levels reduce terrain difficulty penalties. Novice runners experience full terrain slowdown, while Expert runners can maintain near-normal pace on technical trails."></span>
+                                      data-tooltip="How much extra time you lose on technical terrain. Novice = 100% of the terrain penalty (full slowdown), Expert = 0% penalty (no slowdown). Higher skill means less penalty. See documentation for details."></span>
                             </label>
                             <select id="skill-level">
-                                <option value="0.0">Novice (0% reduction)</option>
-                                <option value="0.25">Beginner (25% reduction)</option>
-                                <option value="0.5" selected>Intermediate (50% reduction)</option>
-                                <option value="0.75">Advanced (75% reduction)</option>
-                                <option value="1.0">Expert (100% reduction)</option>
+                                <option value="0.0">Novice (100% terrain penalty)</option>
+                                <option value="0.25">Beginner (75% terrain penalty)</option>
+                                <option value="0.5" selected>Intermediate (50% terrain penalty)</option>
+                                <option value="0.75">Advanced (25% terrain penalty)</option>
+                                <option value="1.0">Expert (0% terrain penalty)</option>
                             </select>
                         </div>
                         <div class="input-group">
