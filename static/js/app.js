@@ -402,7 +402,7 @@ async function handleGPXUpload(event) {
         if (response.ok) {
             currentPlan.gpx_filename = data.filename;
             currentPlan.loadedFilename = null;  // Clear loaded filename when uploading new GPX
-            
+
             gpxInfoBox.innerHTML = `
                 <strong>Route Loaded:</strong><br>
                 Distance: ${data.total_distance} km (${data.total_distance_miles} miles)<br>
@@ -410,6 +410,45 @@ async function handleGPXUpload(event) {
                 Trackpoints: ${data.num_trackpoints}
             `;
             gpxInfoBox.style.display = 'block';
+
+            // Update summary cards for distance and elevation gain immediately
+            document.getElementById('summary-distance').textContent = `${data.total_distance} km`;
+            document.getElementById('summary-elev-gain').textContent = `+${data.total_elev_gain} m`;
+
+            // Fetch elevation profile for vertical plot (basic, no segments yet)
+            // We'll call /api/calculate with only the GPX filename and no checkpoints to get the elevation_profile
+            try {
+                const profileResponse = await fetch('/api/calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        gpx_filename: data.filename,
+                        checkpoint_distances: [],
+                        checkpoint_dropbags: [],
+                        segment_terrain_types: ['smooth_trail'],
+                        avg_cp_time: 5,
+                        z2_pace: 6.5,
+                        climbing_ability: 'moderate',
+                        carbs_per_hour: 60,
+                        water_per_hour: 500,
+                        fatigue_enabled: true,
+                        fitness_level: 'recreational',
+                        skill_level: 0.5
+                    })
+                });
+                const profileData = await profileResponse.json();
+                if (profileResponse.ok && profileData.elevation_profile && profileData.elevation_profile.length > 0) {
+                    // Render the vertical profile with a dummy segments array (just Start→Finish)
+                    renderElevationChart(profileData.elevation_profile, [
+                        { from: 'Start', to: 'Finish', distance: data.total_distance }
+                    ]);
+                    // Show the results container and hide the placeholder
+                    resultsContainer.style.display = 'block';
+                    noResults.style.display = 'none';
+                }
+            } catch (e) {
+                // Fail silently if profile can't be rendered
+            }
 
             // Auto-calculate if checkpoints are already set
             if (currentPlan.checkpoint_distances.length > 0) {
