@@ -86,11 +86,11 @@
                                       data-tooltip="How much extra time you lose on technical terrain. Novice = 100% of the terrain penalty (full slowdown), Expert = 0% penalty (no slowdown). Higher skill means less penalty. See documentation for details."></span>
                             </label>
                             <select id="skill-level">
-                                <option value="0.0">Novice (100% terrain penalty)</option>
-                                <option value="0.25">Beginner (75% terrain penalty)</option>
-                                <option value="0.5" selected>Intermediate (50% terrain penalty)</option>
-                                <option value="0.75">Advanced (25% terrain penalty)</option>
-                                <option value="1.0">Expert (0% terrain penalty)</option>
+                                <option value="0.0" title="Struggles on rough terrain, slow pace">Conservative (slow on rough terrain)</option>
+                                <option value="0.25" title="Handles easy trails, slow on technical sections">Moderate (struggles on technical trails)</option>
+                                <option value="0.5" selected title="Comfortable on most trails, moderate pace">Strong (handles most trails)</option>
+                                <option value="0.75" title="Confident on technical terrain, maintains pace">Very Strong (confident on technical terrain)</option>
+                                <option value="1.0" title="Moves efficiently on all terrain, minimal slowdown">Elite (fast on all terrain)</option>
                             </select>
                         </div>
                         <div class="input-group">
