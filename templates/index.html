@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Race Fuel & Pacing Planner</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon-circle.png') }}">
+    <!-- iOS Home Screen & PWA Meta -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='logo.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="RaceCraft">
+    <meta name="application-name" content="RaceCraft">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='logo.png') }}">
+    <meta name="msapplication-TileColor" content="#2563eb">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
