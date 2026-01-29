@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo_header.png" alt="RaceCraft Logo" width="800">
+  <img src="static/logo-header.png" alt="RaceCraft Logo" width="800">
 </p>
 
 # RaceCraft - Fuel & Pacing Planner

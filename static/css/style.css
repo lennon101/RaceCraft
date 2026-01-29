@@ -36,7 +36,7 @@ header {
     text-align: center;
     margin-bottom: 30px;
     padding: 30px 20px;
-    background: linear-gradient(135deg, var(--primary-color), #2a3142);
+    background: linear-gradient(135deg, var(--primary-color), #3c4966);
     color: white;
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
@@ -44,14 +44,15 @@ header {
 
 .header-content {
     display: flex;
-    align-items: center;
+    flex-direction: column;   /* stack logo above text */
+    align-items: center;      /* center horizontally */
     justify-content: center;
-    gap: 20px;
+    /* gap: 10px; */
 }
 
 .header-logo {
-    width: 80px;
-    height: 80px;
+    width: 200px;
+    /* height: 400px; */
     object-fit: contain;
 }
 
@@ -66,10 +67,10 @@ header h1 {
 }
 
 header h2.subtitle {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     margin-bottom: 5px;
     font-weight: 400;
-    opacity: 0.95;
+    opacity: 0.70;
 }
 
 .subtitle {
@@ -172,6 +173,7 @@ header h2.subtitle {
     box-shadow: var(--shadow-lg);
     z-index: 10000;
     pointer-events: none;
+    opacity: 0.9;
 }
 
 @media (max-width: 768px) {

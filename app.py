@@ -1,23 +1,18 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.2.0-dropbag-table
-Release Date: January 28, 2026
+Version: v1.2.1-ui-updates
+Release Date: January 29, 2026
 
-Major Changes in v1.2.0:
-- Dropbag planning system with checkpoint selection and nutrition calculations
-- Automatic gel/sachet quantity calculation (carbs per gel configurable)
-- Start supplies tracking (pre-race nutrition requirements)
-- Comprehensive info tooltips for all configuration fields
-- Enhanced tooltip styling with dynamic width and improved visibility
-- CSV export now includes dropbag contents table
 
-Changes in v1.0.0:
-- Vertical speed climbing model (600-1500 m/h) replaces elevation penalty system
-- Gradient-aware efficiency curve (90% at 3%, 100% at 12%)
-- Improved fatigue model with linear/sub-linear growth for ultra-distance realism
-- Additive time calculation: horizontal + climb - descent
-- Terrain-aware downhill speed caps
-- BREAKING CHANGE: climbing_ability replaces elev_gain_factor in API
+Major Changes in v1.2.1:
+- Update skill level descriptions in index.html for clarity and improved user guidance
+- Update technical skill level descriptions and options in index.html
+- Update GPX upload handling to display distance and elevation gain, and fetch elevation profile
+- Add iOS Home Screen and PWA meta tags for improved app integration (issue #23)
+- Update header background color and adjust subtitle opacity
+- Remove background from logo and update CSS styling for header text
+- Update fav-icon to circle
+
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
