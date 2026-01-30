@@ -3,7 +3,7 @@ RaceCraft - Fuel & Pacing Planner
 Version: v1.2.2
 Release Date: January 30, 2026
 
-Major Changes Summary:
+Major Changes in v1.3.0:
 - CSV export now doesn't leave behind temporary files on the server 
 - Single parent directory for data storage, configurable via environment variables 
 
