@@ -3,6 +3,10 @@ RaceCraft - Fuel & Pacing Planner
 Version: v1.2.2
 Release Date: January 30, 2026
 
+Major Changes Summary:
+- CSV export now doesn't leave behind temporary files on the server 
+- Single parent directory for data storage, configurable via environment variables 
+
 Major Changes in v1.2.2:
 - Add drop bag plan to each of the tooltip hovers in the elevation profile plot #26
 - Fix incorrect gel count in drop bag plan when carbs per gel is specified 
