@@ -1,3 +1,16 @@
+// Helper to convert a string to Unicode bold (for tooltips)
+function toUnicodeBold(str) {
+    const map = {
+        A: '𝗔', B: '𝗕', C: '𝗖', D: '𝗗', E: '𝗘', F: '𝗙', G: '𝗚', H: '𝗛', I: '𝗜', J: '𝗝',
+        K: '𝗞', L: '𝗟', M: '𝗠', N: '𝗡', O: '𝗢', P: '𝗣', Q: '𝗤', R: '𝗥', S: '𝗦', T: '𝗧',
+        U: '𝗨', V: '𝗩', W: '𝗪', X: '𝗫', Y: '𝗬', Z: '𝗭',
+        a: '𝗮', b: '𝗯', c: '𝗰', d: '𝗱', e: '𝗲', f: '𝗳', g: '𝗴', h: '𝗵', i: '𝗶', j: '𝗷',
+        k: '𝗸', l: '𝗹', m: '𝗺', n: '𝗻', o: '𝗼', p: '𝗽', q: '𝗾', r: '𝗿', s: '𝘀', t: '𝘁',
+        u: '𝘂', v: '𝘃', w: '𝘄', x: '𝘅', y: '𝘆', z: '𝘇',
+        '-': '⟶'
+    };
+    return str.split('').map(c => map[c] || c).join('');
+}
 // State management
 let currentPlan = {
     gpx_filename: null,
@@ -243,9 +256,35 @@ function renderElevationChart(elevationProfile, segments) {
                                 Math.abs(cp.distance - distance) < 0.5
                             );
                             if (nearCheckpoint) {
+                                labels.push(`Next CP: ${nearCheckpoint.distanceToNext.toFixed(1)} km`);
                                 labels.push('');
-                                labels.push(`Next Section: ${nearCheckpoint.distanceToNext.toFixed(1)} km`);
-                                labels.push(`Fuel Needed: ${nearCheckpoint.carbsToNext}g carbs`);
+                                // Find previous and next checkpoint labels for the section
+                                let prevLabel = '';
+                                let nextLabel = '';
+                                if (segments && nearCheckpoint.cpNumber > 0 && nearCheckpoint.cpNumber < segments.length) {
+                                    prevLabel = segments[nearCheckpoint.cpNumber - 1].to;
+                                    nextLabel = segments[nearCheckpoint.cpNumber].to;
+                                } else {
+                                    prevLabel = 'CP?';
+                                    nextLabel = 'CP?';
+                                }
+                                const sectionLabel = `${prevLabel} to ${nextLabel} Details:`;
+                                labels.push(toUnicodeBold(sectionLabel));
+                                // Show gels/sachets needed for next section (from segment data), else carbs
+                                let fuelLine = '';
+                                // Find the next segment (this CP -> next CP)
+                                let nextSegment = null;
+                                if (segments && nearCheckpoint.cpNumber < segments.length) {
+                                    nextSegment = segments[nearCheckpoint.cpNumber];
+                                }
+                                if (nextSegment && nextSegment.num_gels !== undefined && nextSegment.num_gels !== null && nextSegment.num_gels > 0) {
+                                    fuelLine = `Fuel Needed: ${nextSegment.num_gels} gels/sachets`;
+                                } else if (nextSegment && nextSegment.target_carbs !== undefined && nextSegment.target_carbs !== null) {
+                                    fuelLine = `Fuel Needed: ${nextSegment.target_carbs}g carbs`;
+                                } else {
+                                    fuelLine = `Fuel Needed: ${nearCheckpoint.carbsToNext}g carbs`;
+                                }
+                                labels.push(fuelLine);
                                 labels.push(`Hydration: ${nearCheckpoint.waterToNext}L water`);
                                 // Add drop bag plan at the bottom if present
                                 if (currentPlan && currentPlan.checkpoint_dropbags && currentPlan.checkpoint_dropbags[nearCheckpoint.cpNumber - 1]) {
@@ -255,11 +294,13 @@ function renderElevationChart(elevationProfile, segments) {
                                         });
                                         if (dropbag) {
                                             labels.push('');
-                                            let planLine = 'Drop Bag Plan:';
+                                            const bolded = `${prevLabel} dropbag contents:`;
+                                            labels.push(toUnicodeBold(bolded));
+                                            let planLine = '';
                                             if (dropbag.num_gels !== undefined) {
-                                                planLine += ` Carbs: ${dropbag.carbs}g, Gels: ${dropbag.num_gels}, Hydration: ${dropbag.hydration}L`;
+                                                planLine = `Gels/Sachets: ${dropbag.num_gels}, Hydration: ${dropbag.hydration}L`;
                                             } else {
-                                                planLine += ` Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
+                                                planLine = `Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
                                             }
                                             labels.push(planLine);
                                         }

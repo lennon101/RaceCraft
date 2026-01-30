@@ -726,7 +726,7 @@ def calculate():
             # Calculate terrain penalty percentage for display
             terrain_penalty_pct = (terrain_factor - 1.0) * 100.0
             
-            segments.append({
+            segment_data = {
                 'from': segment_labels[i],
                 'to': segment_labels[i + 1],
                 'distance': round(segment_dist, 2),
@@ -752,7 +752,12 @@ def calculate():
                 'target_carbs': target_carbs,
                 'target_water': target_water_L,
                 'time_of_day': time_of_day
-            })
+            }
+            
+            if carbs_per_gel and carbs_per_gel > 0:
+                segment_data['num_gels'] = round(target_carbs / carbs_per_gel)
+            
+            segments.append(segment_data)
         
         # Calculate totals
         total_elev_gain = sum(s['elev_gain'] for s in segments)
