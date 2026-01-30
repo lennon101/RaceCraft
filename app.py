@@ -1,7 +1,13 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.3
+Version: v1.3.4
 Release Date: January 30, 2026
+
+Major Changes in v1.3.4:
+- fix decimal input validation for numeric fields
+    - Change input type from 'number' to 'text' for all decimal-input fields
+    - Fields updated: avg-cp-time, carbs-per-hour, water-per-hour, carbs-per-gel, checkpoint-distances
+    - Enables proper JavaScript control over decimal input without browser interference
 
 Major Changes in v1.3.3:
 - fix decimal input for checkpoint distances
