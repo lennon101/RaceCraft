@@ -30,9 +30,14 @@ from pathlib import Path
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
+
+import os
+
+# Configurable data folder paths via environment variables
+DEFAULT_DATA_ROOT = os.environ.get('DATA_ROOT', '/app/data')
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['SAVED_PLANS_FOLDER'] = 'saved_plans'
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'uploads'))
+app.config['SAVED_PLANS_FOLDER'] = os.environ.get('SAVED_PLANS_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'saved_plans'))
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure directories exist
