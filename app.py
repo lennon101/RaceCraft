@@ -11,7 +11,7 @@ Major changes and updates:
     - No Duplicates: All checkpoint distances must be unique
     - Ascending Order: CP2 > CP1, CP3 > CP2, etc.
     - Immediate Feedback: Errors show instantly with visual indicators
-
+- Keep user informed and prevent invalid submissions to input fields 
 
 Major Changes in v1.3.1:
 - quick fix to resolve port issues with docker file 
