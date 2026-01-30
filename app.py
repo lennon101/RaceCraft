@@ -1,8 +1,13 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.2.1-ui-updates
-Release Date: January 29, 2026
+Version: v1.2.2
+Release Date: January 30, 2026
 
+Major Changes in v1.2.2:
+- Add drop bag plan to each of the tooltip hovers in the elevation profile plot #26
+- Fix incorrect gel count in drop bag plan when carbs per gel is specified 
+- Fix incorrect hover info tooltip for skill level in index.html
+- Update export_csv function to improve checkpoint naming format in CSV output
 
 Major Changes in v1.2.1:
 - Update skill level descriptions in index.html for clarity and improved user guidance
@@ -726,7 +731,7 @@ def calculate():
             # Calculate terrain penalty percentage for display
             terrain_penalty_pct = (terrain_factor - 1.0) * 100.0
             
-            segments.append({
+            segment_data = {
                 'from': segment_labels[i],
                 'to': segment_labels[i + 1],
                 'distance': round(segment_dist, 2),
@@ -752,7 +757,12 @@ def calculate():
                 'target_carbs': target_carbs,
                 'target_water': target_water_L,
                 'time_of_day': time_of_day
-            })
+            }
+            
+            if carbs_per_gel and carbs_per_gel > 0:
+                segment_data['num_gels'] = round(target_carbs / carbs_per_gel)
+            
+            segments.append(segment_data)
         
         # Calculate totals
         total_elev_gain = sum(s['elev_gain'] for s in segments)
@@ -934,7 +944,7 @@ def export_csv():
                 # Extract checkpoint name from segment 'to' field for dynamic column naming
                 checkpoint_name = seg['to']
                 row = [
-                    f"{seg['from']} → {seg['to']}",
+                    f"{seg['from']} to {seg['to']}",
                     seg['distance'],
                     seg['elev_gain'],
                     seg['elev_loss'],
