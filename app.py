@@ -20,21 +20,26 @@ Major Changes in v1.2.1:
 
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, after_this_request
 import xml.etree.ElementTree as ET
 import math
-import os
-import json
-import csv
-from pathlib import Path
+import io
 from datetime import datetime
 from werkzeug.utils import secure_filename
-
-
+import json
 import os
+import platform
 
 # Configurable data folder paths via environment variables
-DEFAULT_DATA_ROOT = os.environ.get('DATA_ROOT', '/app/data')
+if 'DATA_ROOT' in os.environ:
+    DEFAULT_DATA_ROOT = os.environ['DATA_ROOT']
+else:
+    if os.name == 'nt' or platform.system() == 'Windows':
+        # Store FuelPlanData inside the project directory if running locally on Windows
+        DEFAULT_DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), 'FuelPlanData'))
+    else:
+        # Default for Docker/Linux
+        DEFAULT_DATA_ROOT = '/app/data'
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'uploads'))
 app.config['SAVED_PLANS_FOLDER'] = os.environ.get('SAVED_PLANS_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'saved_plans'))
@@ -583,6 +588,7 @@ def robots():
 @app.route('/api/upload-gpx', methods=['POST'])
 def upload_gpx():
     """Handle GPX file upload."""
+    from werkzeug.utils import secure_filename
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
@@ -890,6 +896,8 @@ def list_plans():
 @app.route('/api/load-plan/<filename>', methods=['GET'])
 def load_plan(filename):
     """Load a saved race plan."""
+    from datetime import datetime
+    from werkzeug.utils import secure_filename
     try:
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], secure_filename(filename))
         
@@ -929,80 +937,85 @@ def export_csv():
         race_start_time = data.get('race_start_time')
         dropbag_contents = data.get('dropbag_contents', [])
         
-        # Generate CSV
+        # Generate CSV in memory
         csv_filename = f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        csv_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_filename)
         
-        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            
-            # Header
-            header = ['Segment', 'Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
-                     'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Terrain Type', 'Terrain Factor', 'Final Pace (min/km)', 
-                     'Segment Time', 'Carbs (g)', 'Water (L)', 'Cumulative Time']
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        header = ['Segment', 'Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
+                 'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Terrain Type', 'Terrain Factor', 'Final Pace (min/km)', 
+                 'Segment Time', 'Carbs (g)', 'Water (L)', 'Cumulative Time']
+        if race_start_time:
+            header.append('Time of Arrival at CP')
+        writer.writerow(header)
+        
+        # Data rows
+        for seg in segments:
+            # Extract checkpoint name from segment 'to' field for dynamic column naming
+            checkpoint_name = seg['to']
+            row = [
+                f"{seg['from']} to {seg['to']}",
+                seg['distance'],
+                seg['elev_gain'],
+                seg['elev_loss'],
+                seg['net_elev'],
+                seg['elev_pace_str'],
+                seg['fatigue_str'],
+                seg.get('terrain_type', 'smooth_trail'),
+                seg.get('terrain_factor', 1.0),
+                seg['pace_str'],
+                seg['segment_time_str'],
+                seg['target_carbs'],
+                seg['target_water'],
+                seg['cumulative_time_str']
+            ]
             if race_start_time:
-                header.append('Time of Arrival at CP')
-            writer.writerow(header)
-            
-            # Data rows
-            for seg in segments:
-                # Extract checkpoint name from segment 'to' field for dynamic column naming
-                checkpoint_name = seg['to']
-                row = [
-                    f"{seg['from']} to {seg['to']}",
-                    seg['distance'],
-                    seg['elev_gain'],
-                    seg['elev_loss'],
-                    seg['net_elev'],
-                    seg['elev_pace_str'],
-                    seg['fatigue_str'],
-                    seg.get('terrain_type', 'smooth_trail'),
-                    seg.get('terrain_factor', 1.0),
-                    seg['pace_str'],
-                    seg['segment_time_str'],
-                    seg['target_carbs'],
-                    seg['target_water'],
-                    seg['cumulative_time_str']
-                ]
-                if race_start_time:
-                    row.append(seg.get('time_of_day', ''))
-                writer.writerow(row)
-            
-            # Summary
-            writer.writerow([])
-            writer.writerow(['SUMMARY'])
-            writer.writerow(['Total Moving Time', summary.get('total_moving_time_str')])
-            writer.writerow(['Total CP Time', summary.get('total_cp_time_str')])
-            writer.writerow(['Total Race Time', summary.get('total_race_time_str')])
-            writer.writerow(['Total Distance (km)', summary.get('total_distance')])
-            writer.writerow(['Total Elev Gain (m)', summary.get('total_elev_gain')])
-            writer.writerow(['Total Carbs (g)', summary.get('total_carbs')])
-            writer.writerow(['Total Water (L)', summary.get('total_water')])
-            
-            # Dropbag contents
-            if dropbag_contents and len(dropbag_contents) > 0:
-                writer.writerow([])
-                writer.writerow(['DROP BAG CONTENTS'])
-                
-                # Check if gel data is present
-                has_gel_data = any('num_gels' in dropbag for dropbag in dropbag_contents)
-                
-                if has_gel_data:
-                    writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Gels', 'Actual Carbs (g)', 'Hydration Target (L)'])
-                    for dropbag in dropbag_contents:
-                        writer.writerow([
-                            dropbag['checkpoint'], 
-                            dropbag['carbs'], 
-                            dropbag.get('num_gels', ''),
-                            dropbag.get('actual_carbs', ''),
-                            dropbag['hydration']
-                        ])
-                else:
-                    writer.writerow(['Checkpoint', 'Carb Target (g)', 'Hydration Target (L)'])
-                    for dropbag in dropbag_contents:
-                        writer.writerow([dropbag['checkpoint'], dropbag['carbs'], dropbag['hydration']])
+                row.append(seg.get('time_of_day', ''))
+            writer.writerow(row)
         
-        return send_file(csv_path, as_attachment=True, download_name=csv_filename)
+        # Summary
+        writer.writerow([])
+        writer.writerow(['SUMMARY'])
+        writer.writerow(['Total Moving Time', summary.get('total_moving_time_str')])
+        writer.writerow(['Total CP Time', summary.get('total_cp_time_str')])
+        writer.writerow(['Total Race Time', summary.get('total_race_time_str')])
+        writer.writerow(['Total Distance (km)', summary.get('total_distance')])
+        writer.writerow(['Total Elev Gain (m)', summary.get('total_elev_gain')])
+        writer.writerow(['Total Carbs (g)', summary.get('total_carbs')])
+        writer.writerow(['Total Water (L)', summary.get('total_water')])
+        
+        # Dropbag contents
+        if dropbag_contents and len(dropbag_contents) > 0:
+            writer.writerow([])
+            writer.writerow(['DROP BAG CONTENTS'])
+            
+            # Check if gel data is present
+            has_gel_data = any('num_gels' in dropbag for dropbag in dropbag_contents)
+            
+            if has_gel_data:
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Gels', 'Actual Carbs (g)', 'Hydration Target (L)'])
+                for dropbag in dropbag_contents:
+                    writer.writerow([
+                        dropbag['checkpoint'], 
+                        dropbag['carbs'], 
+                        dropbag.get('num_gels', ''),
+                        dropbag.get('actual_carbs', ''),
+                        dropbag['hydration']
+                    ])
+            else:
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Hydration Target (L)'])
+                for dropbag in dropbag_contents:
+                    writer.writerow([dropbag['checkpoint'], dropbag['carbs'], dropbag['hydration']])
+        
+        csv_content = output.getvalue()
+        output.close()
+        
+        return send_file(io.BytesIO(csv_content.encode('utf-8')), 
+                        as_attachment=True, 
+                        download_name=csv_filename, 
+                        mimetype='text/csv')
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
