@@ -148,7 +148,8 @@ function renderElevationChart(elevationProfile, segments) {
                 label: seg.to,
                 distanceToNext: distanceToNext,
                 carbsToNext: carbsToNext,
-                waterToNext: waterToNext
+                waterToNext: waterToNext,
+                timeToNext: segments[idx + 1].segment_time_str
             });
         }
     });
@@ -256,7 +257,10 @@ function renderElevationChart(elevationProfile, segments) {
                                 Math.abs(cp.distance - distance) < 0.5
                             );
                             if (nearCheckpoint) {
-                                labels.push(`Next CP: ${nearCheckpoint.distanceToNext.toFixed(1)} km`);
+                                const timeParts = nearCheckpoint.timeToNext.split(':');
+                                const hours = parseInt(timeParts[0]);
+                                const mins = parseInt(timeParts[1]);
+                                labels.push(`Next CP: ${nearCheckpoint.distanceToNext.toFixed(1)} km / ${hours} hrs, ${mins} mins`);
                                 labels.push('');
                                 // Find previous and next checkpoint labels for the section
                                 let prevLabel = '';
