@@ -34,19 +34,9 @@ import json
 import os
 import platform
 
-# Configurable data folder paths via environment variables
-if 'DATA_ROOT' in os.environ:
-    DEFAULT_DATA_ROOT = os.environ['DATA_ROOT']
-else:
-    if os.name == 'nt' or platform.system() == 'Windows':
-        # Store FuelPlanData inside the project directory if running locally on Windows
-        DEFAULT_DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), 'FuelPlanData'))
-    else:
-        # Default for Docker/Linux
-        DEFAULT_DATA_ROOT = '/app/data'
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'uploads'))
-app.config['SAVED_PLANS_FOLDER'] = os.environ.get('SAVED_PLANS_FOLDER', os.path.join(DEFAULT_DATA_ROOT, 'saved_plans'))
+app.config['UPLOAD_FOLDER'] = '/app/data/uploads'
+app.config['SAVED_PLANS_FOLDER'] = '/app/data/saved_plans'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure directories exist

@@ -8,11 +8,6 @@ services:
       - "5000:5000"
     volumes:
       - racecraft-data:/app/data
-    environment:
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      - UPLOAD_FOLDER=/app/data/uploads
-      - SAVED_PLANS_FOLDER=/app/data/saved_plans
     restart: unless-stopped
     networks:
       - racecraft
