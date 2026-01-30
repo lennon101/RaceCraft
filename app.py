@@ -1,7 +1,17 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.1
+Version: v1.3.2
 Release Date: January 30, 2026
+
+Major changes in v1.3.2:
+- Validation Rules Implemented:
+    - Real Numbers: Inputs must be valid positive numbers
+    - Integers Only: No decimal points, letters, or symbols allowed
+    - Distance Limits: Cannot exceed total route distance
+    - No Duplicates: All checkpoint distances must be unique
+    - Ascending Order: CP2 > CP1, CP3 > CP2, etc.
+    - Immediate Feedback: Errors show instantly with visual indicators
+- Keep user informed and prevent invalid submissions to input fields 
 
 Major Changes in v1.3.1:
 - quick fix to resolve port issues with docker file 
@@ -38,8 +48,17 @@ import os
 import platform
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = '/app/data/uploads'
-app.config['SAVED_PLANS_FOLDER'] = '/app/data/saved_plans'
+
+# Configure paths - use local paths for development, Docker paths for production
+if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
+    # Docker/production environment
+    app.config['UPLOAD_FOLDER'] = '/app/data/uploads'
+    app.config['SAVED_PLANS_FOLDER'] = '/app/data/saved_plans'
+else:
+    # Local development environment
+    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'uploads')
+    app.config['SAVED_PLANS_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'saved_plans')
+
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure directories exist
@@ -1018,4 +1037,4 @@ def export_csv():
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true')
-    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
+    app.run(host='0.0.0.0', port=5001, debug=debug_mode)
