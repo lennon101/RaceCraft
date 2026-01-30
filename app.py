@@ -943,7 +943,7 @@ def export_csv():
                 # Extract checkpoint name from segment 'to' field for dynamic column naming
                 checkpoint_name = seg['to']
                 row = [
-                    f"{seg['from']} → {seg['to']}",
+                    f"{seg['from']} to {seg['to']}",
                     seg['distance'],
                     seg['elev_gain'],
                     seg['elev_loss'],
