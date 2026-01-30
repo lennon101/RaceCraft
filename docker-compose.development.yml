@@ -8,9 +8,6 @@ services:
       - "5000:5000"
     volumes:
       - racecraft-data:/app/data
-    environment:
-      - FLASK_ENV=production
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:app"]
     restart: unless-stopped
     networks:
       - racecraft
