@@ -6,6 +6,7 @@ Release Date: January 30, 2026
 Major changes and updates:
 - Validation Rules Implemented:
     - Real Numbers: Inputs must be valid positive numbers
+    - Integers Only: No decimal points, letters, or symbols allowed
     - Distance Limits: Cannot exceed total route distance
     - No Duplicates: All checkpoint distances must be unique
     - Ascending Order: CP2 > CP1, CP3 > CP2, etc.

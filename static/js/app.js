@@ -550,9 +550,9 @@ function validateCheckpointDistances() {
         const errorMsg = document.getElementById(`checkpoint-error-${index}`);
         
         // Check if it's a valid number
-        if (input.value.trim() !== '' && (isNaN(value) || value < 0)) {
+        if (input.value.trim() !== '' && (isNaN(value) || value < 0 || !Number.isInteger(value))) {
             input.classList.add('error');
-            errorMsg.textContent = 'Must be a positive number';
+            errorMsg.textContent = 'Must be a positive integer';
             errorMsg.classList.add('visible');
             hasErrors = true;
             return;
@@ -629,10 +629,12 @@ function generateCheckpointInputs() {
                 <input type="number" 
                        class="checkpoint-distance" 
                        data-index="${i}" 
-                       step="0.1" 
+                       step="1" 
                        min="0"
+                       pattern="[0-9]*"
+                       inputmode="numeric"
                        value="${currentPlan.checkpoint_distances[i] || ''}"
-                       placeholder="e.g., 25.0" />
+                       placeholder="e.g., 25" />
                 <label class="dropbag-label">
                     <input type="checkbox" 
                            class="checkpoint-dropbag" 
@@ -648,7 +650,27 @@ function generateCheckpointInputs() {
 
 // Add event listeners for real-time updates
     document.querySelectorAll('.checkpoint-distance').forEach(input => {
-        input.addEventListener('input', () => {
+        // Prevent non-numeric key presses
+        input.addEventListener('keydown', (e) => {
+            // Allow: backspace, delete, tab, escape, enter
+            if ([46, 8, 9, 27, 13].indexOf(e.keyCode) !== -1 ||
+                // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                (e.ctrlKey === true && [65, 67, 86, 88, 90].indexOf(e.keyCode) !== -1) ||
+                // Allow: home, end, left, right
+                (e.keyCode >= 35 && e.keyCode <= 39)) {
+                // Let it happen
+                return;
+            }
+            // Ensure that it is a number and stop the keypress if not
+            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                e.preventDefault();
+            }
+        });
+        
+        input.addEventListener('input', (e) => {
+            // Remove any non-digit characters
+            const value = e.target.value.replace(/[^0-9]/g, '');
+            e.target.value = value;
             validateCheckpointDistances();
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
