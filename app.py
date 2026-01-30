@@ -3,10 +3,11 @@ RaceCraft - Fuel & Pacing Planner
 Version: v1.2.1-ui-updates
 Release Date: January 29, 2026
 
-Major Changes Since v1.2.0:
+Major Changes Since v1.2.1:
 - Add drop bag plan to each of the tooltip hovers in the elevation profile plot #26
 - Fix incorrect gel count in drop bag plan when carbs per gel is specified 
 - Fix incorrect hover info tooltip for skill level in index.html
+- Update export_csv function to improve checkpoint naming format in CSV output
 
 Major Changes in v1.2.1:
 - Update skill level descriptions in index.html for clarity and improved user guidance
