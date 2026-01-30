@@ -1,9 +1,9 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.1
+Version: v1.3.2
 Release Date: January 30, 2026
 
-Major changes and updates:
+Major changes in v1.3.2:
 - Validation Rules Implemented:
     - Real Numbers: Inputs must be valid positive numbers
     - Integers Only: No decimal points, letters, or symbols allowed
