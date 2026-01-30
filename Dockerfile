@@ -12,8 +12,8 @@ COPY app.py .
 COPY templates/ templates/
 COPY static/ static/
 
-# Create directories for uploads and saved plans
-RUN mkdir -p static/uploads saved_plans
+# Create default data directories (can be overridden by env)
+RUN mkdir -p /app/data/uploads /app/data/saved_plans
 
 # Expose port
 EXPOSE 5000

@@ -33,20 +33,18 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
        ports:
          - "5000:5000"
        volumes:
-         - racecraft-uploads:/app/static/uploads
-         - racecraft-plans:/app/saved_plans
-         - racecraft-static:/app/static
+         - racecraft-data:/app/data
        environment:
          - FLASK_ENV=development
          - FLASK_DEBUG=1
+         - UPLOAD_FOLDER=/app/data/uploads
+         - SAVED_PLANS_FOLDER=/app/data/saved_plans
        restart: unless-stopped
        networks:
          - racecraft
 
    volumes:
-     racecraft-uploads:
-     racecraft-plans:
-     racecraft-static:
+     racecraft-data:
 
    networks:
      racecraft:
@@ -67,11 +65,9 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
    docker pull lennon101/racecraft:latest
    ```
 
-2. **Create volumes for persistent data:**
+2. **Create a volume for persistent data:**
    ```bash
-   docker volume create racecraft-uploads
-   docker volume create racecraft-plans
-   docker volume create racecraft-static
+   docker volume create racecraft-data
    ```
 
 3. **Run the container:**
@@ -79,9 +75,9 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
    docker run -d \
      --name racecraft \
      -p 5000:5000 \
-     -v racecraft-uploads:/app/static/uploads \
-     -v racecraft-plans:/app/saved_plans \
-     -v racecraft-static:/app/static \
+     -v racecraft-data:/app/data \
+     -e UPLOAD_FOLDER=/app/data/uploads \
+     -e SAVED_PLANS_FOLDER=/app/data/saved_plans \
      --restart unless-stopped \
      lennon101/racecraft:latest
    ```
