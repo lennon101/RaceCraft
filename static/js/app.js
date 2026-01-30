@@ -59,7 +59,7 @@ const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
-numCheckpointsInput.addEventListener('change', () => {
+numCheckpointsInput.addEventListener('input', () => {
     generateCheckpointInputs();
     validateCheckpointDistances();
 });
@@ -119,8 +119,83 @@ document.querySelectorAll('input, select').forEach(input => {
     }
 });
 
-// Initialize
-generateCheckpointInputs();
+// Set up input filtering for numeric fields
+setupNumericInputFiltering();
+
+// Functions
+function setupNumericInputFiltering() {
+    // Integer-only fields
+    const integerFields = ['num-checkpoints', 'z2-pace-min', 'z2-pace-sec'];
+    integerFields.forEach(fieldId => {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            setupIntegerInput(input);
+        }
+    });
+    
+    // Decimal-allowed fields
+    const decimalFields = ['avg-cp-time', 'carbs-per-hour', 'water-per-hour', 'carbs-per-gel'];
+    decimalFields.forEach(fieldId => {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            setupDecimalInput(input);
+        }
+    });
+}
+
+function setupIntegerInput(input) {
+    // Prevent non-numeric key presses
+    input.addEventListener('keydown', (e) => {
+        // Allow: backspace, delete, tab, escape, enter
+        if ([46, 8, 9, 27, 13].indexOf(e.keyCode) !== -1 ||
+            // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+            (e.ctrlKey === true && [65, 67, 86, 88, 90].indexOf(e.keyCode) !== -1) ||
+            // Allow: home, end, left, right
+            (e.keyCode >= 35 && e.keyCode <= 39)) {
+            return;
+        }
+        // Ensure that it is a number and stop the keypress if not
+        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+            e.preventDefault();
+        }
+    });
+    
+    // Filter input to integers only
+    input.addEventListener('input', (e) => {
+        const value = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = value;
+    });
+}
+
+function setupDecimalInput(input) {
+    // Prevent non-numeric key presses (allow decimal point)
+    input.addEventListener('keydown', (e) => {
+        // Allow: backspace, delete, tab, escape, enter, decimal point
+        if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
+            // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+            (e.ctrlKey === true && [65, 67, 86, 88, 90].indexOf(e.keyCode) !== -1) ||
+            // Allow: home, end, left, right
+            (e.keyCode >= 35 && e.keyCode <= 39)) {
+            return;
+        }
+        // Ensure that it is a number and stop the keypress if not
+        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+            e.preventDefault();
+        }
+    });
+    
+    // Filter input to allow decimals
+    input.addEventListener('input', (e) => {
+        const value = e.target.value.replace(/[^0-9.]/g, '');
+        // Ensure only one decimal point
+        const parts = value.split('.');
+        if (parts.length > 2) {
+            e.target.value = parts[0] + '.' + parts.slice(1).join('');
+        } else {
+            e.target.value = value;
+        }
+    });
+}
 
 // Functions
 function renderElevationChart(elevationProfile, segments) {
@@ -633,13 +708,13 @@ function generateCheckpointInputs() {
                        min="0"
                        pattern="[0-9]*"
                        inputmode="numeric"
-                       value="${currentPlan.checkpoint_distances[i] || ''}"
+                       value="${currentPlan.checkpoint_distances ? currentPlan.checkpoint_distances[i] || '' : ''}"
                        placeholder="e.g., 25" />
                 <label class="dropbag-label">
                     <input type="checkbox" 
                            class="checkpoint-dropbag" 
                            data-index="${i}"
-                           ${hasDropbag ? 'checked' : ''} />
+                           ${currentPlan.checkpoint_dropbags ? currentPlan.checkpoint_dropbags[i] ? 'checked' : '' : ''} />
                     Dropbag
                 </label>
             </div>
@@ -1293,3 +1368,101 @@ async function exportToCSV() {
         alert('Error exporting CSV: ' + error.message);
     }
 }
+
+// Input filtering functions
+function setupIntegerInput(inputElement) {
+    inputElement.addEventListener('keydown', function(e) {
+        // Allow: backspace, delete, tab, escape, enter, and .
+        if ([46, 8, 9, 27, 13, 110].indexOf(e.keyCode) !== -1 ||
+            // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+            (e.keyCode === 65 && e.ctrlKey === true) ||
+            (e.keyCode === 67 && e.ctrlKey === true) ||
+            (e.keyCode === 86 && e.ctrlKey === true) ||
+            (e.keyCode === 88 && e.ctrlKey === true) ||
+            (e.keyCode === 90 && e.ctrlKey === true) ||
+            // Allow: home, end, left, right
+            (e.keyCode >= 35 && e.keyCode <= 39)) {
+            return;
+        }
+        // Ensure that it is a number and stop the keypress
+        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+            e.preventDefault();
+        }
+    });
+
+    inputElement.addEventListener('input', function(e) {
+        // Remove any non-numeric characters
+        this.value = this.value.replace(/[^0-9]/g, '');
+    });
+}
+
+function setupDecimalInput(inputElement) {
+    inputElement.addEventListener('keydown', function(e) {
+        // Allow: backspace, delete, tab, escape, enter, and .
+        if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
+            // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+            (e.keyCode === 65 && e.ctrlKey === true) ||
+            (e.keyCode === 67 && e.ctrlKey === true) ||
+            (e.keyCode === 86 && e.ctrlKey === true) ||
+            (e.keyCode === 88 && e.ctrlKey === true) ||
+            (e.keyCode === 90 && e.ctrlKey === true) ||
+            // Allow: home, end, left, right
+            (e.keyCode >= 35 && e.keyCode <= 39)) {
+            return;
+        }
+        // Ensure that it is a number and stop the keypress
+        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+            e.preventDefault();
+        }
+    });
+
+    inputElement.addEventListener('input', function(e) {
+        // Remove any non-numeric characters except decimal point
+        let value = this.value.replace(/[^0-9.]/g, '');
+        // Ensure only one decimal point
+        let parts = value.split('.');
+        if (parts.length > 2) {
+            value = parts[0] + '.' + parts.slice(1).join('');
+        }
+        this.value = value;
+    });
+}
+
+function setupNumericInputFiltering() {
+    // Integer inputs
+    const integerInputs = [
+        'z2-pace-min',
+        'z2-pace-sec'
+    ];
+
+    // Decimal inputs
+    const decimalInputs = [
+        'avg-cp-time',
+        'carbs-per-hour',
+        'water-per-hour',
+        'carbs-per-gel'
+    ];
+
+    // Setup integer inputs
+    integerInputs.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            setupIntegerInput(element);
+        }
+    });
+
+    // Setup decimal inputs
+    decimalInputs.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            setupDecimalInput(element);
+        }
+    });
+}
+
+// Initialize input filtering when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    setupNumericInputFiltering();
+    generateCheckpointInputs();
+    validateCheckpointDistances();
+});
