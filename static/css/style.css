@@ -300,6 +300,22 @@ header h2.subtitle {
     border-radius: 6px;
 }
 
+.checkpoint-input input.error {
+    border-color: var(--danger-color);
+    background-color: #fef2f2;
+}
+
+.checkpoint-input .error-message {
+    color: var(--danger-color);
+    font-size: 0.8rem;
+    margin-top: 3px;
+    display: none;
+}
+
+.checkpoint-input .error-message.visible {
+    display: block;
+}
+
 .checkpoint-input-row input[type="number"] {
     flex: 1;
 }

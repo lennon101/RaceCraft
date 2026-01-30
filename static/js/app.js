@@ -59,7 +59,10 @@ const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
-numCheckpointsInput.addEventListener('change', generateCheckpointInputs);
+numCheckpointsInput.addEventListener('change', () => {
+    generateCheckpointInputs();
+    validateCheckpointDistances();
+});
 calculateBtn.addEventListener('click', calculateRacePlan);
 saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
@@ -459,6 +462,7 @@ async function handleGPXUpload(event) {
 
         if (response.ok) {
             currentPlan.gpx_filename = data.filename;
+            currentPlan.total_distance = data.total_distance;
             currentPlan.loadedFilename = null;  // Clear loaded filename when uploading new GPX
 
             gpxInfoBox.innerHTML = `
@@ -472,6 +476,9 @@ async function handleGPXUpload(event) {
             // Update summary cards for distance and elevation gain immediately
             document.getElementById('summary-distance').textContent = `${data.total_distance} km`;
             document.getElementById('summary-elev-gain').textContent = `+${data.total_elev_gain} m`;
+
+            // Validate checkpoint distances now that we have total distance
+            validateCheckpointDistances();
 
             // Fetch elevation profile for vertical plot (basic, no segments yet)
             // We'll call /api/calculate with only the GPX filename and no checkpoints to get the elevation_profile
@@ -520,6 +527,91 @@ async function handleGPXUpload(event) {
     }
 }
 
+function validateCheckpointDistances() {
+    const inputs = document.querySelectorAll('.checkpoint-distance');
+    const totalDistance = currentPlan.total_distance || 0;
+    
+    // Clear all previous errors
+    inputs.forEach(input => {
+        input.classList.remove('error');
+        const errorMsg = document.getElementById(`checkpoint-error-${input.dataset.index}`);
+        if (errorMsg) {
+            errorMsg.textContent = '';
+            errorMsg.classList.remove('visible');
+        }
+    });
+    
+    let hasErrors = false;
+    const values = [];
+    
+    // First pass: collect values and check basic validation
+    inputs.forEach((input, index) => {
+        const value = parseFloat(input.value);
+        const errorMsg = document.getElementById(`checkpoint-error-${index}`);
+        
+        // Check if it's a valid number
+        if (input.value.trim() !== '' && (isNaN(value) || value < 0)) {
+            input.classList.add('error');
+            errorMsg.textContent = 'Must be a positive number';
+            errorMsg.classList.add('visible');
+            hasErrors = true;
+            return;
+        }
+        
+        // Check if greater than total distance
+        if (!isNaN(value) && totalDistance > 0 && value > totalDistance) {
+            input.classList.add('error');
+            errorMsg.textContent = `Cannot exceed total distance (${totalDistance} km)`;
+            errorMsg.classList.add('visible');
+            hasErrors = true;
+            return;
+        }
+        
+        values.push(value);
+    });
+    
+    // Second pass: check ordering and duplicates
+    if (!hasErrors) {
+        const validValues = values.filter(v => !isNaN(v));
+        const sortedValues = [...validValues].sort((a, b) => a - b);
+        
+        // Check for duplicates
+        for (let i = 0; i < sortedValues.length - 1; i++) {
+            if (sortedValues[i] === sortedValues[i + 1]) {
+                // Find which inputs have this duplicate value
+                inputs.forEach((input, index) => {
+                    const inputValue = parseFloat(input.value);
+                    if (!isNaN(inputValue) && inputValue === sortedValues[i]) {
+                        input.classList.add('error');
+                        const errorMsg = document.getElementById(`checkpoint-error-${index}`);
+                        errorMsg.textContent = 'Checkpoint distances cannot be equal';
+                        errorMsg.classList.add('visible');
+                        hasErrors = true;
+                    }
+                });
+                break;
+            }
+        }
+        
+        // Check ordering (must be in ascending order)
+        if (!hasErrors) {
+            for (let i = 1; i < values.length; i++) {
+                const currentVal = values[i];
+                const prevVal = values[i-1];
+                if (!isNaN(currentVal) && !isNaN(prevVal) && currentVal <= prevVal) {
+                    inputs[i].classList.add('error');
+                    const errorMsg = document.getElementById(`checkpoint-error-${i}`);
+                    errorMsg.textContent = `Must be greater than CP${i} (${prevVal} km)`;
+                    errorMsg.classList.add('visible');
+                    hasErrors = true;
+                }
+            }
+        }
+    }
+    
+    return !hasErrors;
+}
+
 function generateCheckpointInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
@@ -549,13 +641,21 @@ function generateCheckpointInputs() {
                     Dropbag
                 </label>
             </div>
+            <div class="error-message" id="checkpoint-error-${i}"></div>
         `;
         checkpointDistancesContainer.appendChild(div);
     }
 
-    // Add event listeners for real-time updates
+// Add event listeners for real-time updates
     document.querySelectorAll('.checkpoint-distance').forEach(input => {
+        input.addEventListener('input', () => {
+            validateCheckpointDistances();
+            if (currentPlan.gpx_filename) {
+                calculateRacePlan();
+            }
+        });
         input.addEventListener('change', () => {
+            validateCheckpointDistances();
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
             }
@@ -645,6 +745,11 @@ async function calculateRacePlan() {
     if (!currentPlan.gpx_filename) {
         alert('Please upload a GPX file first');
         return;
+    }
+
+    // Validate checkpoint distances before proceeding
+    if (!validateCheckpointDistances()) {
+        return; // Don't calculate if there are validation errors
     }
 
     // Gather checkpoint distances
@@ -1071,10 +1176,14 @@ async function loadPlan(filename) {
             // Generate checkpoint inputs and populate (this will restore dropbag checkboxes)
             generateCheckpointInputs();
 
+            // Validate checkpoint distances
+            validateCheckpointDistances();
+
             // Load results if available
             if (data.segments && data.summary) {
                 currentPlan.segments = data.segments;
                 currentPlan.summary = data.summary;
+                currentPlan.total_distance = data.summary.total_distance;
                 currentPlan.race_start_time = data.race_start_time;
                 currentPlan.elevation_profile = data.elevation_profile || null;
                 currentPlan.dropbag_contents = data.dropbag_contents || null;
