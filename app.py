@@ -1,9 +1,9 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.2
+Version: v1.3.3
 Release Date: January 30, 2026
 
-Major Changes Summary:
+Major Changes in v1.3.3:
 - fix decimal input for checkpoint distances
     - Change input type from 'number' to 'text' to allow JavaScript full control
     - Maintain pattern and inputmode for mobile keyboard support
