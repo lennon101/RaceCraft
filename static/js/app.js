@@ -625,9 +625,9 @@ function validateCheckpointDistances() {
         const errorMsg = document.getElementById(`checkpoint-error-${index}`);
         
         // Check if it's a valid number
-        if (input.value.trim() !== '' && (isNaN(value) || value < 0 || !Number.isInteger(value))) {
+        if (input.value.trim() !== '' && (isNaN(value) || value < 0)) {
             input.classList.add('error');
-            errorMsg.textContent = 'Must be a positive integer';
+            errorMsg.textContent = 'Must be a positive number';
             errorMsg.classList.add('visible');
             hasErrors = true;
             return;
@@ -701,15 +701,15 @@ function generateCheckpointInputs() {
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
             <div class="checkpoint-input-row">
-                <input type="number" 
+                <input type="text" 
                        class="checkpoint-distance" 
                        data-index="${i}" 
-                       step="1" 
+                       step="0.1" 
                        min="0"
-                       pattern="[0-9]*"
-                       inputmode="numeric"
+                       pattern="[0-9]*\.?[0-9]*"
+                       inputmode="decimal"
                        value="${currentPlan.checkpoint_distances ? currentPlan.checkpoint_distances[i] || '' : ''}"
-                       placeholder="e.g., 25" />
+                       placeholder="e.g., 25.5" />
                 <label class="dropbag-label">
                     <input type="checkbox" 
                            class="checkpoint-dropbag" 
@@ -727,8 +727,8 @@ function generateCheckpointInputs() {
     document.querySelectorAll('.checkpoint-distance').forEach(input => {
         // Prevent non-numeric key presses
         input.addEventListener('keydown', (e) => {
-            // Allow: backspace, delete, tab, escape, enter
-            if ([46, 8, 9, 27, 13].indexOf(e.keyCode) !== -1 ||
+            // Allow: backspace, delete, tab, escape, enter, and .
+            if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
                 // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
                 (e.ctrlKey === true && [65, 67, 86, 88, 90].indexOf(e.keyCode) !== -1) ||
                 // Allow: home, end, left, right
@@ -737,14 +737,19 @@ function generateCheckpointInputs() {
                 return;
             }
             // Ensure that it is a number and stop the keypress if not
-            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105) && e.keyCode !== 190 && e.keyCode !== 110) {
                 e.preventDefault();
             }
         });
         
         input.addEventListener('input', (e) => {
-            // Remove any non-digit characters
-            const value = e.target.value.replace(/[^0-9]/g, '');
+            // Remove any non-numeric characters except decimal point
+            let value = e.target.value.replace(/[^0-9.]/g, '');
+            // Ensure only one decimal point
+            let parts = value.split('.');
+            if (parts.length > 2) {
+                value = parts[0] + '.' + parts.slice(1).join('');
+            }
             e.target.value = value;
             validateCheckpointDistances();
             if (currentPlan.gpx_filename) {

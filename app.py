@@ -1,12 +1,16 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.2
+Version: v1.3.3
 Release Date: January 30, 2026
+
+Major Changes in v1.3.3:
+- fix decimal input for checkpoint distances
+    - Change input type from 'number' to 'text' to allow JavaScript full control
+    - Maintain pattern and inputmode for mobile keyboard support
 
 Major changes in v1.3.2:
 - Validation Rules Implemented:
     - Real Numbers: Inputs must be valid positive numbers
-    - Integers Only: No decimal points, letters, or symbols allowed
     - Distance Limits: Cannot exceed total route distance
     - No Duplicates: All checkpoint distances must be unique
     - Ascending Order: CP2 > CP1, CP3 > CP2, etc.
