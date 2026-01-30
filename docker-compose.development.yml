@@ -8,6 +8,7 @@ services:
       - "5000:5000"
     volumes:
       - racecraft-data:/app/data
+    command: ["python", "app.py"]
     restart: unless-stopped
     networks:
       - racecraft
