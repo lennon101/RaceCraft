@@ -841,22 +841,28 @@ def calculate():
         total_cp_time = avg_cp_time * num_checkpoints
         
         # Build elevation profile data
-        elevation_profile = []
-        cumulative_dist = 0.0
-        for i in range(len(trackpoints)):
-            if i > 0:
-                lat1, lon1, _ = trackpoints[i - 1]
-                lat2, lon2, _ = trackpoints[i]
-                cumulative_dist += haversine_distance(lat1, lon1, lat2, lon2)
-            elevation_profile.append({
-                'distance': round(cumulative_dist, 3),
-                'elevation': round(trackpoints[i][2], 1)
-            })
-        
-        # Sample elevation data for performance (max 500 points)
-        if len(elevation_profile) > 500:
-            step = len(elevation_profile) // 500
-            elevation_profile = elevation_profile[::step]
+        # If elevation profile was provided, keep it; otherwise generate from trackpoints
+        if elevation_profile_data:
+            # Use the provided elevation profile (already has correct distance values)
+            elevation_profile = elevation_profile_data
+        else:
+            # Generate elevation profile from parsed GPX trackpoints
+            elevation_profile = []
+            cumulative_dist = 0.0
+            for i in range(len(trackpoints)):
+                if i > 0:
+                    lat1, lon1, _ = trackpoints[i - 1]
+                    lat2, lon2, _ = trackpoints[i]
+                    cumulative_dist += haversine_distance(lat1, lon1, lat2, lon2)
+                elevation_profile.append({
+                    'distance': round(cumulative_dist, 3),
+                    'elevation': round(trackpoints[i][2], 1)
+                })
+            
+            # Sample elevation data for performance (max 500 points)
+            if len(elevation_profile) > 500:
+                step = len(elevation_profile) // 500
+                elevation_profile = elevation_profile[::step]
         
         # Calculate dropbag contents
         dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
