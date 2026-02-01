@@ -710,10 +710,11 @@ def calculate():
             trackpoints = []
             for point in elevation_profile_data:
                 # Create trackpoints with elevation data
+                # Note: lat/lon are dummy values (0.0, 0.0) - only elevation is used
                 trackpoints.append((0.0, 0.0, point['elevation']))
             
             # Calculate total distance from the elevation profile
-            total_distance = elevation_profile_data[-1]['distance'] if elevation_profile_data else 0.0
+            total_distance = elevation_profile_data[-1]['distance']
             
             # Find checkpoint indices using elevation profile distances
             checkpoint_indices, distances = find_checkpoint_indices_from_profile(elevation_profile_data, checkpoint_distances)
