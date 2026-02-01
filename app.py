@@ -216,6 +216,21 @@ def find_checkpoint_indices(trackpoints, checkpoint_distances):
     
     return checkpoint_indices, distances
 
+def find_checkpoint_indices_from_profile(elevation_profile, checkpoint_distances):
+    """Find checkpoint indices when using elevation profile data."""
+    distances = [point['distance'] for point in elevation_profile]
+    
+    checkpoint_indices = [0]
+    
+    for cp_dist in checkpoint_distances:
+        closest_idx = min(range(len(distances)), 
+                         key=lambda i: abs(distances[i] - cp_dist))
+        checkpoint_indices.append(closest_idx)
+    
+    checkpoint_indices.append(len(elevation_profile) - 1)
+    
+    return checkpoint_indices, distances
+
 def calculate_elevation_change(trackpoints, start_idx, end_idx):
     """Calculate elevation gain and loss between indices."""
     gain = 0.0
@@ -663,15 +678,6 @@ def calculate():
         if data is None:
             return jsonify({'error': 'Invalid JSON data'}), 400
         
-        # Get uploaded GPX file
-        filename = data.get('gpx_filename')
-        if not filename:
-            return jsonify({'error': 'No GPX file specified'}), 400
-        
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'GPX file not found'}), 400
-        
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
         checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
@@ -695,12 +701,38 @@ def calculate():
         # Terrain settings
         skill_level = float(data.get('skill_level', 0.5))  # 0.0 = novice, 1.0 = expert
         
-        # Parse GPX
-        trackpoints = parse_gpx_file(filepath)
-        total_distance = calculate_total_distance(trackpoints)
+        # Check if elevation profile is provided (from loaded plan)
+        elevation_profile_data = data.get('elevation_profile')
         
-        # Find checkpoint indices
-        checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
+        if elevation_profile_data:
+            # Use provided elevation profile instead of parsing GPX
+            # Reconstruct trackpoints from elevation profile for elevation calculations
+            trackpoints = []
+            for point in elevation_profile_data:
+                # Create trackpoints with elevation data
+                trackpoints.append((0.0, 0.0, point['elevation']))
+            
+            # Calculate total distance from the elevation profile
+            total_distance = elevation_profile_data[-1]['distance'] if elevation_profile_data else 0.0
+            
+            # Find checkpoint indices using elevation profile distances
+            checkpoint_indices, distances = find_checkpoint_indices_from_profile(elevation_profile_data, checkpoint_distances)
+        else:
+            # Get uploaded GPX file and parse it
+            filename = data.get('gpx_filename')
+            if not filename:
+                return jsonify({'error': 'No GPX file specified'}), 400
+            
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': 'GPX file not found'}), 400
+            
+            # Parse GPX
+            trackpoints = parse_gpx_file(filepath)
+            total_distance = calculate_total_distance(trackpoints)
+            
+            # Find checkpoint indices using trackpoints
+            checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
         
         # Calculate segments with cumulative effort tracking
         segments = []

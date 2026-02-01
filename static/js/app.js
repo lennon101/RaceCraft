@@ -938,6 +938,11 @@ async function calculateRacePlan() {
         skill_level: skillLevel
     };
 
+    // Include elevation profile if available (from loaded plan)
+    if (currentPlan.elevation_profile) {
+        requestData.elevation_profile = currentPlan.elevation_profile;
+    }
+
     try {
         const response = await fetch('/api/calculate', {
             method: 'POST',
@@ -953,6 +958,10 @@ async function calculateRacePlan() {
             currentPlan.segments = data.segments;
             currentPlan.summary = data.summary;
             currentPlan.race_start_time = raceStartTime;
+            // Update elevation profile if returned (in case it was recalculated)
+            if (data.elevation_profile) {
+                currentPlan.elevation_profile = data.elevation_profile;
+            }
             displayResults(data);
             saveBtn.disabled = false;
             exportBtn.disabled = false;
