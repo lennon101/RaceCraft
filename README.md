@@ -124,7 +124,7 @@ For detailed Railway deployment instructions, see [RAILWAY_DEPLOYMENT.md](RAILWA
    ```
 
 4. **Open your browser:**
-   Navigate to `http://localhost:5001`
+   Navigate to `http://localhost:5001` (dev server uses port 5001, Docker uses 5000)
 
 ## Project Structure
 
