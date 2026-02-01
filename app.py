@@ -57,8 +57,12 @@ from werkzeug.utils import secure_filename
 import json
 import os
 import platform
+from whitenoise import WhiteNoise
 
 app = Flask(__name__)
+
+# Configure WhiteNoise for static file serving in production
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
 
 # Configure paths - use local paths for development, Docker paths for production
 if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
