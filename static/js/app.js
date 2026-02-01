@@ -56,6 +56,9 @@ const terrainSkillContainer = document.getElementById('terrain-skill-container')
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
 const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
+const exportAllBtn = document.getElementById('export-all-btn');
+const importPlansBtn = document.getElementById('import-plans-btn');
+const importFileInput = document.getElementById('import-file-input');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -72,6 +75,9 @@ saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
+exportAllBtn.addEventListener('click', exportAllPlans);
+importPlansBtn.addEventListener('click', () => importFileInput.click());
+importFileInput.addEventListener('change', handleImportPlans);
 
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
@@ -1330,6 +1336,112 @@ async function deletePlan(filename) {
         }
     } catch (error) {
         alert('Error deleting plan: ' + error.message);
+    }
+}
+
+async function exportAllPlans() {
+    try {
+        const response = await fetch('/api/export-all-plans');
+        const data = await response.json();
+
+        if (response.ok) {
+            // Create a Blob with the JSON data
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `racecraft_plans_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert(`Successfully exported ${Object.keys(data.plans).length} plan(s)`);
+        } else {
+            alert('Error exporting plans: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error exporting plans: ' + error.message);
+    }
+}
+
+async function handleImportPlans(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+
+    // Reset the file input so the same file can be selected again
+    event.target.value = '';
+
+    try {
+        // Read the file
+        const text = await file.text();
+        let importData;
+        
+        try {
+            importData = JSON.parse(text);
+        } catch (e) {
+            alert('Error: Invalid JSON file. Please select a valid JSON file exported from RaceCraft.');
+            return;
+        }
+
+        // Validate structure
+        if (!importData.plans || typeof importData.plans !== 'object') {
+            alert('Error: Invalid file format. The file must contain a "plans" object.');
+            return;
+        }
+
+        const planCount = Object.keys(importData.plans).length;
+        if (planCount === 0) {
+            alert('Error: The file contains no plans to import.');
+            return;
+        }
+
+        // Confirm import
+        const confirmed = confirm(
+            `You are about to import ${planCount} plan(s).\n\n` +
+            'Existing plans with the same name will be overwritten.\n\n' +
+            'Do you want to continue?'
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        // Send to backend
+        const response = await fetch('/api/import-plans', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(importData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            let message = 'Import completed:\n';
+            message += `• ${result.imported} new plan(s) imported\n`;
+            message += `• ${result.overwritten} existing plan(s) overwritten\n`;
+            message += `• ${result.skipped} plan(s) skipped due to errors`;
+            
+            if (result.errors && result.errors.length > 0) {
+                message += '\n\nErrors:\n' + result.errors.join('\n');
+            }
+            
+            alert(message);
+            
+            // Refresh the plans list
+            await loadSavedPlans();
+        } else {
+            alert('Error importing plans: ' + result.error);
+        }
+    } catch (error) {
+        alert('Error importing plans: ' + error.message);
     }
 }
 

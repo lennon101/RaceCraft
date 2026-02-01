@@ -952,6 +952,96 @@ def delete_plan(filename):
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
+@app.route('/api/export-all-plans', methods=['GET'])
+def export_all_plans():
+    """Export all saved plans as a single JSON file."""
+    try:
+        plans = {}
+        for filename in os.listdir(app.config['SAVED_PLANS_FOLDER']):
+            if filename.endswith('.json'):
+                filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        plan_data = json.load(f)
+                        plans[filename] = plan_data
+                except Exception as e:
+                    # Skip corrupted files but continue with others
+                    print(f"Error reading {filename}: {str(e)}")
+                    continue
+        
+        return jsonify({
+            'version': '1.0',
+            'export_date': datetime.now().isoformat(),
+            'plans': plans
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/import-plans', methods=['POST'])
+def import_plans():
+    """Import plans from JSON file and merge with existing plans."""
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Validate structure
+        if 'plans' not in data:
+            return jsonify({'error': 'Invalid format: missing "plans" key'}), 400
+        
+        if not isinstance(data['plans'], dict):
+            return jsonify({'error': 'Invalid format: "plans" must be an object'}), 400
+        
+        imported_count = 0
+        skipped_count = 0
+        overwritten_count = 0
+        errors = []
+        
+        for filename, plan_data in data['plans'].items():
+            # Sanitize filename
+            safe_filename = secure_filename(filename)
+            if not safe_filename.endswith('.json'):
+                safe_filename += '.json'
+            
+            filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], safe_filename)
+            
+            try:
+                # Validate plan data structure (basic validation)
+                if not isinstance(plan_data, dict):
+                    errors.append(f"{filename}: Invalid plan data structure")
+                    skipped_count += 1
+                    continue
+                
+                # Check if file exists
+                file_exists = os.path.exists(filepath)
+                
+                # Write the plan
+                with open(filepath, 'w') as f:
+                    json.dump(plan_data, f, indent=2)
+                
+                if file_exists:
+                    overwritten_count += 1
+                else:
+                    imported_count += 1
+                    
+            except Exception as e:
+                errors.append(f"{filename}: {str(e)}")
+                skipped_count += 1
+        
+        result = {
+            'message': 'Import completed',
+            'imported': imported_count,
+            'overwritten': overwritten_count,
+            'skipped': skipped_count
+        }
+        
+        if errors:
+            result['errors'] = errors
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
 @app.route('/api/export-csv', methods=['POST'])
 def export_csv():
     """Export race plan to CSV."""
