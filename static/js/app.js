@@ -1348,7 +1348,7 @@ async function deletePlan(filename) {
 }
 
 function showExportImportModal() {
-    showModal(exportImportModal);
+    exportImportModal.classList.add('active');
 }
 
 async function exportCurrentPlan() {
