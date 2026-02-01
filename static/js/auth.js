@@ -18,12 +18,11 @@ class AuthManager {
             const response = await fetch('/api/auth/check');
             const data = await response.json();
             
-            if (data.supabase_enabled && data.supabase_url) {
+            if (data.supabase_enabled && data.supabase_url && data.supabase_anon_key) {
                 // Initialize Supabase client
                 this.supabase = window.supabase.createClient(
                     data.supabase_url,
-                    // The anon key will be embedded in the page or fetched securely
-                    await this.getSupabaseAnonKey()
+                    data.supabase_anon_key
                 );
                 this.supabaseEnabled = true;
                 
@@ -53,15 +52,9 @@ class AuthManager {
     }
 
     async getSupabaseAnonKey() {
-        // In production, this should come from a secure source
-        // For now, we'll need to embed it or fetch it from the backend
-        const response = await fetch('/api/auth/check');
-        const data = await response.json();
-        
-        // The anon key should be public-safe and returned by the backend
-        // For now, we'll extract it from the URL check
-        // In a real implementation, add an endpoint that returns the anon key
-        return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDYwNjQwMDAsImV4cCI6MTk2MTY0MDAwMH0.placeholder';
+        // This method is no longer needed as we get the key from the /api/auth/check endpoint
+        // Kept for backward compatibility
+        return null;
     }
 
     getOrCreateAnonymousId() {

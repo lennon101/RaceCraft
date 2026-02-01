@@ -1366,7 +1366,8 @@ def check_auth():
     """Check if Supabase authentication is enabled and get current user status."""
     return jsonify({
         'supabase_enabled': is_supabase_enabled(),
-        'supabase_url': SUPABASE_URL if is_supabase_enabled() else None
+        'supabase_url': SUPABASE_URL if is_supabase_enabled() else None,
+        'supabase_anon_key': SUPABASE_ANON_KEY if is_supabase_enabled() else None
     })
 
 
