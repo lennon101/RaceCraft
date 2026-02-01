@@ -68,16 +68,113 @@ class AuthManager {
 
     async handleAuthStateChange() {
         if (this.currentUser) {
-            // User logged in - migrate anonymous data if exists
+            // User logged in - check for anonymous data
             const anonymousId = localStorage.getItem('racecraft_anonymous_id');
             if (anonymousId) {
-                await this.migrateAnonymousData(anonymousId);
+                await this.showMigrationModal(anonymousId);
             }
         }
         this.renderAuthUI();
     }
 
+    async showMigrationModal(anonymousId) {
+        try {
+            // Fetch anonymous plans
+            const response = await fetch('/api/auth/list-anonymous-plans', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ anonymous_id: anonymousId })
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch anonymous plans');
+                return;
+            }
+
+            const data = await response.json();
+            
+            if (!data.plans || data.plans.length === 0) {
+                // No plans to migrate, just clear the anonymous ID
+                localStorage.removeItem('racecraft_anonymous_id');
+                this.anonymousId = null;
+                return;
+            }
+
+            // Store anonymous plans for migration
+            this.anonymousPlans = data.plans;
+            this.pendingAnonymousId = anonymousId;
+            
+            // Show migration modal
+            this.renderMigrationModal();
+        } catch (error) {
+            console.error('Error showing migration modal:', error);
+        }
+    }
+
+    renderMigrationModal() {
+        const modal = document.getElementById('migration-modal');
+        const plansList = document.getElementById('migration-plans-list');
+        
+        if (!modal || !plansList || !this.anonymousPlans) return;
+
+        // Clear previous content
+        plansList.innerHTML = '';
+
+        // Add select all checkbox
+        const selectAllDiv = document.createElement('div');
+        selectAllDiv.className = 'migration-select-all';
+        selectAllDiv.innerHTML = `
+            <input type="checkbox" id="migration-select-all" checked />
+            <label for="migration-select-all">Select All</label>
+        `;
+        plansList.appendChild(selectAllDiv);
+
+        // Add plan items
+        this.anonymousPlans.forEach(plan => {
+            const planDiv = document.createElement('div');
+            planDiv.className = 'migration-plan-item';
+            planDiv.innerHTML = `
+                <input type="checkbox" class="migration-plan-checkbox" data-plan-id="${plan.id}" checked />
+                <div class="migration-plan-info">
+                    <div class="migration-plan-name">${plan.name}</div>
+                    <div class="migration-plan-date">Last updated: ${plan.updated_at}</div>
+                </div>
+            `;
+            plansList.appendChild(planDiv);
+        });
+
+        // Set up select all functionality
+        const selectAllCheckbox = document.getElementById('migration-select-all');
+        const planCheckboxes = document.querySelectorAll('.migration-plan-checkbox');
+        
+        selectAllCheckbox.addEventListener('change', (e) => {
+            planCheckboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+
+        // Update select all when individual checkboxes change
+        planCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const allChecked = Array.from(planCheckboxes).every(checkbox => checkbox.checked);
+                selectAllCheckbox.checked = allChecked;
+            });
+        });
+
+        // Show modal
+        modal.style.display = 'flex';
+    }
+
     async migrateAnonymousData(anonymousId) {
+        // This method is no longer used for automatic migration
+        // Kept for backward compatibility
+        console.log('Automatic migration disabled - use showMigrationModal instead');
+    }
+
+    async performMigration() {
+        const selectedCheckboxes = document.querySelectorAll('.migration-plan-checkbox:checked');
+        const selectedPlanIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.planId);
+
         try {
             const session = await this.supabase.auth.getSession();
             if (!session?.data?.session?.access_token) return;
@@ -88,23 +185,51 @@ class AuthManager {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.data.session.access_token}`
                 },
-                body: JSON.stringify({ anonymous_id: anonymousId })
+                body: JSON.stringify({ 
+                    anonymous_id: this.pendingAnonymousId,
+                    plan_ids: selectedPlanIds 
+                })
             });
 
             if (response.ok) {
                 const data = await response.json();
                 console.log(`✓ Migrated ${data.migrated_plans} plans to your account`);
                 
-                // Clear anonymous ID after migration
+                // Clear anonymous ID after migration (or skip)
                 localStorage.removeItem('racecraft_anonymous_id');
                 this.anonymousId = null;
+                this.pendingAnonymousId = null;
+                this.anonymousPlans = null;
+                
+                // Hide modal
+                const modal = document.getElementById('migration-modal');
+                if (modal) modal.style.display = 'none';
                 
                 // Show success message
-                this.showNotification(`Welcome! ${data.migrated_plans} plan(s) have been saved to your account.`, 'success');
+                if (data.migrated_plans > 0) {
+                    this.showNotification(`Welcome! ${data.migrated_plans} plan(s) have been imported to your account.`, 'success');
+                } else {
+                    this.showNotification('Welcome to RaceCraft!', 'success');
+                }
             }
         } catch (error) {
             console.error('Migration error:', error);
+            this.showNotification('Failed to import plans. Please try again.', 'error');
         }
+    }
+
+    skipMigration() {
+        // Clear anonymous ID without migrating
+        localStorage.removeItem('racecraft_anonymous_id');
+        this.anonymousId = null;
+        this.pendingAnonymousId = null;
+        this.anonymousPlans = null;
+        
+        // Hide modal
+        const modal = document.getElementById('migration-modal');
+        if (modal) modal.style.display = 'none';
+        
+        this.showNotification('Welcome to RaceCraft!', 'success');
     }
 
     renderAuthUI() {
@@ -390,6 +515,22 @@ function setupAuthModalListeners() {
                 document.getElementById(`${formType}-btn`)?.click();
             }
         });
+    });
+
+    // Migration modal buttons
+    document.getElementById('migration-import-btn')?.addEventListener('click', async () => {
+        await authManager.performMigration();
+    });
+
+    document.getElementById('migration-skip-btn')?.addEventListener('click', () => {
+        authManager.skipMigration();
+    });
+
+    // Close migration modal on outside click
+    document.getElementById('migration-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'migration-modal') {
+            authManager.skipMigration();
+        }
     });
 }
 

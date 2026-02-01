@@ -1371,9 +1371,40 @@ def check_auth():
     })
 
 
+@app.route('/api/auth/list-anonymous-plans', methods=['POST'])
+def list_anonymous_plans():
+    """List all plans for a given anonymous ID."""
+    if not is_supabase_enabled():
+        return jsonify({'error': 'Supabase is not configured'}), 400
+    
+    try:
+        data = request.json
+        anonymous_id = data.get('anonymous_id')
+        
+        if not anonymous_id:
+            return jsonify({'error': 'Anonymous ID required'}), 400
+        
+        # Query plans for this anonymous ID
+        result = supabase_client.table('user_plans').select('id, plan_name, created_at, updated_at').eq('anonymous_id', anonymous_id).order('updated_at', desc=True).execute()
+        
+        plans = []
+        for plan in result.data:
+            plans.append({
+                'id': plan['id'],
+                'name': plan['plan_name'],
+                'created_at': plan['created_at'][:19].replace('T', ' '),
+                'updated_at': plan['updated_at'][:19].replace('T', ' ')
+            })
+        
+        return jsonify({'plans': plans})
+    except Exception as e:
+        print(f"List anonymous plans error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/api/auth/migrate', methods=['POST'])
 def migrate_anonymous_data():
-    """Migrate anonymous user data to authenticated user account."""
+    """Migrate selected anonymous plans to authenticated user account."""
     if not is_supabase_enabled():
         return jsonify({'error': 'Supabase is not configured'}), 400
     
@@ -1381,6 +1412,7 @@ def migrate_anonymous_data():
         data = request.json
         auth_header = request.headers.get('Authorization')
         anonymous_id = data.get('anonymous_id')
+        plan_ids = data.get('plan_ids', [])  # List of plan IDs to migrate
         
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization header required'}), 401
@@ -1397,11 +1429,18 @@ def migrate_anonymous_data():
         
         user_id = user.user.id
         
-        # Call the migration function in Supabase
+        # If no plan_ids provided, don't migrate anything (user chose to skip)
+        if not plan_ids:
+            return jsonify({
+                'message': 'No plans migrated',
+                'migrated_plans': 0
+            })
+        
+        # Call the migration function in Supabase with selected plan IDs
         if supabase_admin_client:
             result = supabase_admin_client.rpc(
-                'migrate_anonymous_plans',
-                {'p_anonymous_id': anonymous_id, 'p_user_id': user_id}
+                'migrate_selected_anonymous_plans',
+                {'p_anonymous_id': anonymous_id, 'p_user_id': user_id, 'p_plan_ids': plan_ids}
             ).execute()
             
             migrated_count = result.data if result.data else 0

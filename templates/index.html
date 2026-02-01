@@ -428,6 +428,23 @@
         </div>
     </div>
 
+    <!-- Migration Selection Modal -->
+    <div id="migration-modal" class="modal">
+        <div class="modal-content">
+            <h2>Import Your Saved Plans?</h2>
+            <p class="info-text">You have some race plans saved from before. Would you like to import them into your new account?</p>
+            
+            <div id="migration-plans-list" class="migration-plans-list">
+                <!-- Plans will be populated here -->
+            </div>
+            
+            <div class="modal-actions">
+                <button id="migration-import-btn" class="btn btn-primary">Import Selected</button>
+                <button id="migration-skip-btn" class="btn btn-secondary">Skip</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

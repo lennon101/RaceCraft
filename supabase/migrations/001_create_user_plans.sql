@@ -134,6 +134,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Grant execute permission on migration function
+-- Function to migrate selected anonymous plans to authenticated user
+CREATE OR REPLACE FUNCTION public.migrate_selected_anonymous_plans(
+    p_anonymous_id TEXT,
+    p_user_id UUID,
+    p_plan_ids UUID[]
+)
+RETURNS INTEGER AS $$
+DECLARE
+    affected_rows INTEGER;
+BEGIN
+    -- Update only selected plans from anonymous_id to owner_id
+    UPDATE public.user_plans
+    SET 
+        owner_id = p_user_id,
+        anonymous_id = NULL,
+        updated_at = NOW()
+    WHERE anonymous_id = p_anonymous_id
+    AND id = ANY(p_plan_ids);
+    
+    GET DIAGNOSTICS affected_rows = ROW_COUNT;
+    RETURN affected_rows;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission on migration functions
 GRANT EXECUTE ON FUNCTION public.migrate_anonymous_plans(TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.migrate_anonymous_plans(TEXT, UUID) TO anon;
+GRANT EXECUTE ON FUNCTION public.migrate_selected_anonymous_plans(TEXT, UUID, UUID[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.migrate_selected_anonymous_plans(TEXT, UUID, UUID[]) TO anon;
