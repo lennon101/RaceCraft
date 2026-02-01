@@ -14,17 +14,23 @@ CREATE TABLE IF NOT EXISTS public.user_plans (
     CONSTRAINT check_ownership CHECK (
         (owner_id IS NOT NULL AND anonymous_id IS NULL) OR
         (owner_id IS NULL AND anonymous_id IS NOT NULL)
-    ),
-    
-    -- Unique constraint on plan names per user
-    CONSTRAINT unique_plan_per_user UNIQUE (owner_id, plan_name),
-    CONSTRAINT unique_plan_per_anon UNIQUE (anonymous_id, plan_name)
+    )
 );
 
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_user_plans_owner ON public.user_plans(owner_id);
 CREATE INDEX IF NOT EXISTS idx_user_plans_anonymous ON public.user_plans(anonymous_id);
 CREATE INDEX IF NOT EXISTS idx_user_plans_created ON public.user_plans(created_at DESC);
+
+-- Create partial unique indexes to enforce unique plan names per user/anonymous session
+-- Using partial indexes because NULL values in unique constraints behave differently
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_plan_per_user 
+    ON public.user_plans(owner_id, plan_name) 
+    WHERE owner_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_plan_per_anon 
+    ON public.user_plans(anonymous_id, plan_name) 
+    WHERE anonymous_id IS NOT NULL;
 
 -- Enable Row Level Security
 ALTER TABLE public.user_plans ENABLE ROW LEVEL SECURITY;

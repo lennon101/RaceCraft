@@ -60,7 +60,7 @@ class AuthManager {
     getOrCreateAnonymousId() {
         let id = localStorage.getItem('racecraft_anonymous_id');
         if (!id) {
-            id = 'anon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            id = 'anon_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
             localStorage.setItem('racecraft_anonymous_id', id);
         }
         return id;
