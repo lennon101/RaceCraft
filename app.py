@@ -216,6 +216,21 @@ def find_checkpoint_indices(trackpoints, checkpoint_distances):
     
     return checkpoint_indices, distances
 
+def find_checkpoint_indices_from_profile(elevation_profile, checkpoint_distances):
+    """Find checkpoint indices when using elevation profile data."""
+    distances = [point['distance'] for point in elevation_profile]
+    
+    checkpoint_indices = [0]
+    
+    for cp_dist in checkpoint_distances:
+        closest_idx = min(range(len(distances)), 
+                         key=lambda i: abs(distances[i] - cp_dist))
+        checkpoint_indices.append(closest_idx)
+    
+    checkpoint_indices.append(len(elevation_profile) - 1)
+    
+    return checkpoint_indices, distances
+
 def calculate_elevation_change(trackpoints, start_idx, end_idx):
     """Calculate elevation gain and loss between indices."""
     gain = 0.0
@@ -663,15 +678,6 @@ def calculate():
         if data is None:
             return jsonify({'error': 'Invalid JSON data'}), 400
         
-        # Get uploaded GPX file
-        filename = data.get('gpx_filename')
-        if not filename:
-            return jsonify({'error': 'No GPX file specified'}), 400
-        
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'GPX file not found'}), 400
-        
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
         checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
@@ -695,12 +701,39 @@ def calculate():
         # Terrain settings
         skill_level = float(data.get('skill_level', 0.5))  # 0.0 = novice, 1.0 = expert
         
-        # Parse GPX
-        trackpoints = parse_gpx_file(filepath)
-        total_distance = calculate_total_distance(trackpoints)
+        # Check if elevation profile is provided (from loaded plan)
+        elevation_profile_data = data.get('elevation_profile')
         
-        # Find checkpoint indices
-        checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
+        if elevation_profile_data:
+            # Use provided elevation profile instead of parsing GPX
+            # Reconstruct trackpoints from elevation profile for elevation calculations
+            trackpoints = []
+            for point in elevation_profile_data:
+                # Create trackpoints with elevation data
+                # Note: lat/lon are dummy values (0.0, 0.0) - only elevation is used
+                trackpoints.append((0.0, 0.0, point['elevation']))
+            
+            # Calculate total distance from the elevation profile
+            total_distance = elevation_profile_data[-1]['distance']
+            
+            # Find checkpoint indices using elevation profile distances
+            checkpoint_indices, distances = find_checkpoint_indices_from_profile(elevation_profile_data, checkpoint_distances)
+        else:
+            # Get uploaded GPX file and parse it
+            filename = data.get('gpx_filename')
+            if not filename:
+                return jsonify({'error': 'No GPX file specified'}), 400
+            
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': 'GPX file not found'}), 400
+            
+            # Parse GPX
+            trackpoints = parse_gpx_file(filepath)
+            total_distance = calculate_total_distance(trackpoints)
+            
+            # Find checkpoint indices using trackpoints
+            checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
         
         # Calculate segments with cumulative effort tracking
         segments = []
@@ -809,22 +842,28 @@ def calculate():
         total_cp_time = avg_cp_time * num_checkpoints
         
         # Build elevation profile data
-        elevation_profile = []
-        cumulative_dist = 0.0
-        for i in range(len(trackpoints)):
-            if i > 0:
-                lat1, lon1, _ = trackpoints[i - 1]
-                lat2, lon2, _ = trackpoints[i]
-                cumulative_dist += haversine_distance(lat1, lon1, lat2, lon2)
-            elevation_profile.append({
-                'distance': round(cumulative_dist, 3),
-                'elevation': round(trackpoints[i][2], 1)
-            })
-        
-        # Sample elevation data for performance (max 500 points)
-        if len(elevation_profile) > 500:
-            step = len(elevation_profile) // 500
-            elevation_profile = elevation_profile[::step]
+        # If elevation profile was provided, keep it; otherwise generate from trackpoints
+        if elevation_profile_data:
+            # Use the provided elevation profile (already has correct distance values)
+            elevation_profile = elevation_profile_data
+        else:
+            # Generate elevation profile from parsed GPX trackpoints
+            elevation_profile = []
+            cumulative_dist = 0.0
+            for i in range(len(trackpoints)):
+                if i > 0:
+                    lat1, lon1, _ = trackpoints[i - 1]
+                    lat2, lon2, _ = trackpoints[i]
+                    cumulative_dist += haversine_distance(lat1, lon1, lat2, lon2)
+                elevation_profile.append({
+                    'distance': round(cumulative_dist, 3),
+                    'elevation': round(trackpoints[i][2], 1)
+                })
+            
+            # Sample elevation data for performance (max 500 points)
+            if len(elevation_profile) > 500:
+                step = len(elevation_profile) // 500
+                elevation_profile = elevation_profile[::step]
         
         # Calculate dropbag contents
         dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
@@ -949,6 +988,58 @@ def delete_plan(filename):
         
         os.remove(filepath)
         return jsonify({'message': 'Plan deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/export-plan', methods=['POST'])
+def export_plan():
+    """Export current race plan as a JSON file."""
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Return the plan data as-is, with export metadata
+        return jsonify({
+            'version': '1.0',
+            'export_date': datetime.now().isoformat(),
+            'plan': data
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/import-plan', methods=['POST'])
+def import_plan():
+    """Import a single plan from JSON file."""
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Validate structure - expecting either the old format with 'plans' key
+        # or new format with 'plan' key, or just the plan data directly
+        plan_data = None
+        
+        if 'plan' in data:
+            # New format
+            plan_data = data['plan']
+        elif 'plans' in data and isinstance(data['plans'], dict):
+            # Old format - take the first plan
+            plans = data['plans']
+            if len(plans) > 0:
+                plan_data = list(plans.values())[0]
+        else:
+            # Assume the entire data is the plan
+            plan_data = data
+        
+        if plan_data is None or not isinstance(plan_data, dict):
+            return jsonify({'error': 'Invalid format: unable to find valid plan data'}), 400
+        
+        # Return the plan data so the frontend can load it
+        return jsonify({
+            'message': 'Plan imported successfully',
+            'plan': plan_data
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 

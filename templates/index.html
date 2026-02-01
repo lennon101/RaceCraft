@@ -203,6 +203,7 @@
                     <button id="calculate-btn" class="btn btn-primary">Calculate Race Plan</button>
                     <button id="save-btn" class="btn btn-secondary" disabled>Save Plan</button>
                     <button id="load-btn" class="btn btn-secondary">Load Plan</button>
+                    <button id="export-import-btn" class="btn btn-secondary">Export/Import Plans</button>
                     <button id="export-btn" class="btn btn-secondary" disabled>Export CSV</button>
                     <button id="clear-btn" class="btn btn-danger">Clear & Start Again</button>
                 </section>
@@ -325,6 +326,29 @@
             <div id="plans-list"></div>
             <div class="modal-actions">
                 <button id="load-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export/Import Plan Modal -->
+    <div id="export-import-modal" class="modal">
+        <div class="modal-content">
+            <h2>Export/Import Plan</h2>
+            <div class="export-import-options">
+                <div class="option-section">
+                    <h3>Export Current Plan</h3>
+                    <p>Download the currently loaded plan as a JSON file.</p>
+                    <button id="export-plan-btn" class="btn btn-primary">Export Plan</button>
+                </div>
+                <div class="option-section">
+                    <h3>Import Plan</h3>
+                    <p>Load a plan from a JSON file. This will replace your current plan.</p>
+                    <button id="import-plan-btn" class="btn btn-primary">Import Plan</button>
+                    <input type="file" id="import-plan-file-input" accept=".json" style="display: none;" />
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="export-import-cancel-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
