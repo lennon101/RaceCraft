@@ -32,7 +32,7 @@ RaceCraft operates in two modes:
 
 #### Authenticated Users
 - **Account Creation**: Email/password or magic link authentication
-- **Data Migration**: Anonymous plans are automatically migrated upon signup
+- **Data Migration**: Users can selectively import their anonymous plans upon signup
 - **Multi-Device Access**: Access plans from any device
 - **Security**: Row Level Security (RLS) ensures data isolation
 
@@ -63,9 +63,14 @@ User Enters Email/Password
     ↓
 Supabase Creates Account
     ↓
-Migration Triggered
+Check for Anonymous Plans
     ↓
-Anonymous Plans Reassigned to User ID
+If Plans Exist:
+    Show Migration Selection Modal
+    User Selects Which Plans to Import
+    User Clicks "Import Selected" or "Skip"
+    ↓
+Selected Plans Migrated to User ID
     ↓
 Anonymous ID Cleared
     ↓
@@ -226,20 +231,38 @@ async function savePlan(planData) {
 
 ## Migration Process
 
-When an anonymous user creates an account, their existing plans are automatically migrated:
+When an anonymous user creates an account, they are prompted to selectively import their existing plans:
+
+### User Experience
+
+1. User creates an account or signs in
+2. System checks for anonymous plans associated with the session ID
+3. If plans exist, a migration modal is displayed showing all available plans
+4. User can:
+   - Select individual plans to import (checked by default)
+   - Use "Select All" checkbox to toggle all plans
+   - Click "Import Selected" to migrate chosen plans
+   - Click "Skip" to continue without importing any plans
 
 ### Backend Migration Function
+
+The backend now supports selective migration:
 
 ```python
 @app.route('/api/auth/migrate', methods=['POST'])
 def migrate_anonymous_data():
     user_id = get_authenticated_user_id()
     anonymous_id = request.json.get('anonymous_id')
+    plan_ids = request.json.get('plan_ids', [])  # List of plan IDs to migrate
     
-    # Call Supabase function to migrate plans
+    # If no plan_ids provided, don't migrate anything (user chose to skip)
+    if not plan_ids:
+        return jsonify({'message': 'No plans migrated', 'migrated_plans': 0})
+    
+    # Call Supabase function to migrate selected plans
     result = supabase_admin_client.rpc(
-        'migrate_anonymous_plans',
-        {'p_anonymous_id': anonymous_id, 'p_user_id': user_id}
+        'migrate_selected_anonymous_plans',
+        {'p_anonymous_id': anonymous_id, 'p_user_id': user_id, 'p_plan_ids': plan_ids}
     ).execute()
     
     return jsonify({'migrated_plans': result.data})
@@ -247,10 +270,14 @@ def migrate_anonymous_data():
 
 ### SQL Migration Function
 
+Two functions are provided - one for all plans (legacy) and one for selective migration:
+
 ```sql
-CREATE OR REPLACE FUNCTION migrate_anonymous_plans(
+-- Migrate selected plans only
+CREATE OR REPLACE FUNCTION migrate_selected_anonymous_plans(
     p_anonymous_id TEXT,
-    p_user_id UUID
+    p_user_id UUID,
+    p_plan_ids UUID[]
 ) RETURNS INTEGER AS $$
 BEGIN
     UPDATE user_plans
@@ -258,7 +285,8 @@ BEGIN
         owner_id = p_user_id,
         anonymous_id = NULL,
         updated_at = NOW()
-    WHERE anonymous_id = p_anonymous_id;
+    WHERE anonymous_id = p_anonymous_id
+    AND id = ANY(p_plan_ids);
     
     RETURN FOUND;
 END;
@@ -311,9 +339,14 @@ CREATE POLICY "Anonymous users can view own plans" ON user_plans
    - Sign Up (email/password)
    - Magic Link (passwordless)
 3. User fills in form and submits
-4. Success message shows: "X plans migrated to your account"
-5. Modal closes automatically
-6. User info appears in header with email and logout button
+4. If anonymous plans exist:
+   - Migration modal appears showing all saved plans
+   - Plans are checked by default
+   - User can select/deselect individual plans
+   - User clicks "Import Selected" or "Skip"
+5. Success message shows number of plans imported (if any)
+6. Modal closes automatically
+7. User info appears in header with email and logout button
 ```
 
 ### Authenticated User Experience
