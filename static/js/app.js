@@ -527,7 +527,6 @@ function clearAll() {
     // Disable buttons
     saveBtn.disabled = true;
     exportBtn.disabled = true;
-    exportImportBtn.disabled = true;
 }
 
 async function handleGPXUpload(event) {
@@ -957,7 +956,6 @@ async function calculateRacePlan() {
             displayResults(data);
             saveBtn.disabled = false;
             exportBtn.disabled = false;
-            exportImportBtn.disabled = false;
         } else {
             alert('Error: ' + data.error);
         }
@@ -1312,7 +1310,6 @@ async function loadPlan(filename) {
                 
                 saveBtn.disabled = false;
                 exportBtn.disabled = false;
-                exportImportBtn.disabled = false;
             }
 
             hideModal(loadModal);
@@ -1348,6 +1345,12 @@ async function deletePlan(filename) {
 }
 
 function showExportImportModal() {
+    // Enable/disable export button based on whether a plan is loaded
+    if (currentPlan.segments && currentPlan.segments.length > 0) {
+        exportPlanBtn.disabled = false;
+    } else {
+        exportPlanBtn.disabled = true;
+    }
     exportImportModal.classList.add('active');
 }
 
@@ -1512,7 +1515,6 @@ async function handleImportPlan(event) {
                 
                 saveBtn.disabled = false;
                 exportBtn.disabled = false;
-                exportImportBtn.disabled = false;
             }
 
             hideModal(exportImportModal);
