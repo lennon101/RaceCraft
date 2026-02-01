@@ -85,7 +85,27 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 4. **Access the application:**
    Open your browser to `http://localhost:5000`
 
-### Option 3: Run Locally (Development)
+### Option 3: Railway Deployment
+
+Deploy directly from GitHub to Railway.app with one click:
+
+1. **Connect to Railway:**
+   - Go to [Railway.app](https://railway.app)
+   - Create a new project from GitHub repo
+   - Select the `lennon101/RaceCraft` repository
+
+2. **Automatic Deployment:**
+   - Railway detects Python automatically
+   - Uses `Procfile` for gunicorn configuration
+   - Static files served via WhiteNoise middleware
+
+3. **Access your app:**
+   - Railway provides a public URL
+   - App deploys automatically on each commit
+
+For detailed Railway deployment instructions, see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md).
+
+### Option 4: Run Locally (Development)
 
 1. **Clone the repository:**
    ```bash
@@ -104,7 +124,7 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
    ```
 
 4. **Open your browser:**
-   Navigate to `http://localhost:5000`
+   Navigate to `http://localhost:5001`
 
 ## Project Structure
 
