@@ -40,6 +40,7 @@ header {
     color: white;
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
+    position: relative;
 }
 
 .header-content {
@@ -47,6 +48,7 @@ header {
     flex-direction: column;   /* stack logo above text */
     align-items: center;      /* center horizontally */
     justify-content: center;
+    position: relative;
     /* gap: 10px; */
 }
 
@@ -624,9 +626,30 @@ tbody tr:last-child td {
     }
 }
 
+@media (max-width: 992px) {
+    .auth-container {
+        top: 5px;
+        right: 5px;
+        gap: 8px;
+    }
+    
+    .auth-btn {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+    
+    .auth-user-email {
+        font-size: 0.85rem;
+    }
+}
+
 @media (max-width: 768px) {
     header h1 {
         font-size: 1.8rem;
+    }
+    
+    header {
+        padding: 20px 15px;
     }
     
     .summary-cards {
@@ -645,11 +668,12 @@ tbody tr:last-child td {
 /* Authentication Styles */
 .auth-container {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: 10px;
+    right: 10px;
     display: flex;
     align-items: center;
     gap: 10px;
+    z-index: 10;
 }
 
 .auth-user-info {
