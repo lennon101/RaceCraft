@@ -1358,7 +1358,6 @@ async function deletePlan(filename) {
             method: 'DELETE',
             headers: headers
         });
-        });
 
         const data = await response.json();
 
