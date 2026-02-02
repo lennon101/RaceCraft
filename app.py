@@ -73,22 +73,22 @@ SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
 # Initialize Supabase client if credentials are provided
 supabase_client = None
 supabase_admin_client = None
+supabase_import_available = False
 
 if SUPABASE_URL and SUPABASE_ANON_KEY:
     try:
         from supabase import create_client, Client
-        # Only initialize admin client at startup (for backend operations)
-        # The regular client will be validated when first used
-        if SUPABASE_SERVICE_KEY:
-            supabase_admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        # For the regular client, we'll create it lazily when needed
-        # This prevents startup failures due to invalid anon keys
+        supabase_import_available = True
+        # Don't create clients at startup - do it lazily
+        # This prevents failures from invalid credentials blocking the app
         print("✓ Supabase credentials loaded - authentication enabled")
         print(f"  URL: {SUPABASE_URL}")
-        print(f"  Anon key: {SUPABASE_ANON_KEY[:20]}..." if len(SUPABASE_ANON_KEY) > 20 else f"  Anon key: {SUPABASE_ANON_KEY}")
-    except Exception as e:
+        anon_key_preview = SUPABASE_ANON_KEY[:20] + "..." if len(SUPABASE_ANON_KEY) > 20 else SUPABASE_ANON_KEY
+        print(f"  Anon key: {anon_key_preview}")
+    except ImportError as e:
         print(f"⚠ Warning: Failed to import Supabase client library: {e}")
         print("  App will run in legacy file-based mode")
+        print("  Make sure 'supabase' is installed: pip install supabase")
         SUPABASE_URL = None
         SUPABASE_ANON_KEY = None
 else:
@@ -225,7 +225,7 @@ def is_supabase_enabled():
 def get_supabase_client():
     """Get or create the Supabase client."""
     global supabase_client
-    if supabase_client is None and is_supabase_enabled():
+    if supabase_client is None and is_supabase_enabled() and supabase_import_available:
         try:
             from supabase import create_client
             supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -233,6 +233,18 @@ def get_supabase_client():
             print(f"Failed to create Supabase client: {e}")
             return None
     return supabase_client
+
+def get_supabase_admin_client():
+    """Get or create the Supabase admin client."""
+    global supabase_admin_client
+    if supabase_admin_client is None and is_supabase_enabled() and supabase_import_available and SUPABASE_SERVICE_KEY:
+        try:
+            from supabase import create_client
+            supabase_admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        except Exception as e:
+            print(f"Failed to create Supabase admin client: {e}")
+            return None
+    return supabase_admin_client
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points on earth in kilometers."""
@@ -1462,8 +1474,9 @@ def migrate_anonymous_data():
             })
         
         # Call the migration function in Supabase with selected plan IDs
-        if supabase_admin_client:
-            result = supabase_admin_client.rpc(
+        admin_client = get_supabase_admin_client()
+        if admin_client:
+            result = admin_client.rpc(
                 'migrate_selected_anonymous_plans',
                 {'p_anonymous_id': anonymous_id, 'p_user_id': user_id, 'p_plan_ids': plan_ids}
             ).execute()
