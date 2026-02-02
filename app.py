@@ -193,10 +193,7 @@ def get_user_from_token(auth_header):
         log_message(f"   Invalid auth header format")
         return None
     
-    if not supabase_client:
-        log_message(f"   supabase_client not available for token validation")
-        return None
-    
+    # Get the client (creates it lazily if needed)
     client = get_supabase_client()
     if not client:
         log_message(f"   Failed to get supabase client")
@@ -228,20 +225,22 @@ def get_user_id_from_request():
     log_message(f"   Authorization header value: {auth_header[:50] if auth_header else 'None'}...")
     
     # Try to get authenticated user
-    if auth_header and supabase_client:
-        log_message(f"   Attempting to validate token...")
-        user = get_user_from_token(auth_header)
-        log_message(f"   Token validation result: {user}")
-        if user and hasattr(user, 'user') and user.user:
-            log_message(f"   ✓ Authenticated user found: {user.user.id}")
-            return {'type': 'authenticated', 'id': user.user.id}
+    if auth_header:
+        # Get the client (creates it lazily if needed)
+        client = get_supabase_client()
+        if client:
+            log_message(f"   Attempting to validate token...")
+            user = get_user_from_token(auth_header)
+            log_message(f"   Token validation result: {user}")
+            if user and hasattr(user, 'user') and user.user:
+                log_message(f"   ✓ Authenticated user found: {user.user.id}")
+                return {'type': 'authenticated', 'id': user.user.id}
+            else:
+                log_message(f"   ❌ Token validation failed or returned no user")
         else:
-            log_message(f"   ❌ Token validation failed or returned no user")
+            log_message(f"   ⚠️ supabase_client could not be created")
     else:
-        if not auth_header:
-            log_message(f"   ⚠️ No Authorization header in request")
-        if not supabase_client:
-            log_message(f"   ⚠️ supabase_client not available")
+        log_message(f"   ⚠️ No Authorization header in request")
     
     # Fall back to anonymous ID from request
     anonymous_id = request.headers.get('X-Anonymous-ID')
