@@ -1336,6 +1336,27 @@ def load_plan(filename):
                 print(f"Supabase load error: {e}")
                 return jsonify({'error': 'Failed to load plan from cloud'}), 500
         
+        # If source is 'unowned', load anonymous/unowned Supabase plan (requires admin access)
+        elif source == 'unowned':
+            if not is_supabase_enabled():
+                return jsonify({'error': 'Cloud storage not available'}), 400
+            
+            try:
+                admin_client = get_supabase_admin_client()
+                if not admin_client:
+                    return jsonify({'error': 'Cloud storage not available'}), 500
+                
+                # Load unowned plan by name (plan with anonymous_id but no owner_id)
+                result = admin_client.table('user_plans').select('plan_data').eq('plan_name', plan_name).is_('owner_id', 'null').not_.is_('anonymous_id', 'null').execute()
+                
+                if result.data:
+                    return jsonify(result.data[0]['plan_data'])
+                else:
+                    return jsonify({'error': 'Plan not found'}), 404
+            except Exception as e:
+                print(f"Supabase load unowned plan error: {e}")
+                return jsonify({'error': 'Failed to load plan from cloud'}), 500
+        
         else:
             return jsonify({'error': 'Invalid source parameter'}), 400
             
@@ -1690,6 +1711,54 @@ def list_local_plans():
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/list-unowned-plans', methods=['GET'])
+def list_unowned_plans():
+    """List all local plans and anonymous Supabase plans (unowned plans)."""
+    try:
+        plans = []
+        
+        # Get local disk plans
+        if os.path.exists(app.config['SAVED_PLANS_FOLDER']):
+            for filename in os.listdir(app.config['SAVED_PLANS_FOLDER']):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], filename)
+                    modified_time = os.path.getmtime(filepath)
+                    plans.append({
+                        'filename': filename,
+                        'name': filename.replace('.json', ''),
+                        'modified': datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S'),
+                        'source': 'local'  # Mark as local plan
+                    })
+        
+        # Get anonymous Supabase plans (plans with anonymous_id but no owner_id)
+        if is_supabase_enabled():
+            try:
+                admin_client = get_supabase_admin_client()
+                if admin_client:
+                    # Query plans that have anonymous_id but no owner_id (unowned plans)
+                    result = admin_client.table('user_plans').select('id, plan_name, created_at, updated_at, anonymous_id').is_('owner_id', 'null').not_.is_('anonymous_id', 'null').order('updated_at', desc=True).execute()
+                    
+                    for plan in result.data:
+                        plans.append({
+                            'filename': f"{plan['plan_name']}.json",
+                            'name': plan['plan_name'],
+                            'modified': plan['updated_at'][:19].replace('T', ' '),
+                            'source': 'unowned',  # Mark as unowned Supabase plan
+                            'anonymous_id': plan['anonymous_id'],  # Include for claiming
+                            'plan_id': plan['id']  # Include plan ID for claiming
+                        })
+            except Exception as e:
+                print(f"Error fetching unowned Supabase plans: {e}")
+                # Continue with local plans only
+        
+        # Sort all plans by modified date
+        plans.sort(key=lambda x: x['modified'], reverse=True)
+        return jsonify({'plans': plans})
+    except Exception as e:
+        print(f"List unowned plans error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/api/auth/migrate-local-plan', methods=['POST'])
 def migrate_local_plan():
     """Migrate a single local plan to authenticated user's Supabase account."""
@@ -1822,6 +1891,72 @@ def migrate_anonymous_data():
     except Exception as e:
         print(f"Migration error: {e}")
         return jsonify({'error': f'Migration failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/claim-unowned-plan', methods=['POST'])
+def claim_unowned_plan():
+    """Claim an unowned/anonymous plan by updating owner_id for authenticated user."""
+    if not is_supabase_enabled():
+        return jsonify({'error': 'Supabase is not configured'}), 400
+    
+    try:
+        data = request.json
+        auth_header = request.headers.get('Authorization')
+        plan_id = data.get('plan_id')
+        
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header required'}), 401
+        
+        if not plan_id:
+            return jsonify({'error': 'Plan ID required'}), 400
+        
+        # Get authenticated user
+        token = auth_header.replace('Bearer ', '')
+        user = get_supabase_client().auth.get_user(token)
+        
+        if not user or not hasattr(user, 'user') or not user.user:
+            return jsonify({'error': 'Invalid authentication token'}), 401
+        
+        user_id = user.user.id
+        
+        # Update the plan to set owner_id
+        admin_client = get_supabase_admin_client()
+        if not admin_client:
+            return jsonify({'error': 'Service not available'}), 500
+        
+        # First verify the plan exists and is unowned
+        check_result = admin_client.table('user_plans').select('id, plan_name').eq('id', plan_id).is_('owner_id', 'null').not_.is_('anonymous_id', 'null').execute()
+        
+        if not check_result.data:
+            return jsonify({'error': 'Plan not found or already owned'}), 404
+        
+        plan_name = check_result.data[0]['plan_name']
+        
+        # Check if user already has a plan with the same name
+        existing = admin_client.table('user_plans').select('id').eq('owner_id', user_id).eq('plan_name', plan_name).execute()
+        
+        if existing.data:
+            return jsonify({'error': f'You already have a plan named "{plan_name}". Please rename or delete it first.'}), 409
+        
+        # Update the plan to claim ownership
+        result = admin_client.table('user_plans').update({
+            'owner_id': user_id,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }).eq('id', plan_id).execute()
+        
+        if result.data:
+            return jsonify({
+                'message': 'Plan claimed successfully',
+                'plan_name': plan_name
+            })
+        else:
+            return jsonify({'error': 'Failed to claim plan'}), 500
+            
+    except Exception as e:
+        print(f"Claim plan error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to claim plan: {str(e)}'}), 500
 
 
 if __name__ == '__main__':

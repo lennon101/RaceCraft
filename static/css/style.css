@@ -591,6 +591,23 @@ tbody tr:last-child td {
     background: #dc2626;
 }
 
+.plan-claim,
+.plan-import {
+    padding: 6px 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    margin-left: 8px;
+}
+
+.plan-claim:hover,
+.plan-import:hover {
+    background: var(--primary-hover);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;
@@ -882,6 +899,11 @@ tbody tr:last-child td {
 .plan-source-cloud {
     background-color: #dcfce7;
     color: #15803d;
+}
+
+.plan-source-unowned {
+    background-color: #fef3c7;
+    color: #92400e;
 }
 
 /* Migration Prompt */
