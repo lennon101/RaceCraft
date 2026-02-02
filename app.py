@@ -56,7 +56,7 @@ import xml.etree.ElementTree as ET
 import math
 import io
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from werkzeug.utils import secure_filename
 import json
 import os
@@ -1721,7 +1721,7 @@ def migrate_local_plan():
             # Update existing plan
             result = admin_client.table('user_plans').update({
                 'plan_data': plan_data,
-                'updated_at': datetime.utcnow().isoformat()
+                'updated_at': datetime.now(timezone.utc).isoformat()
             }).eq('owner_id', user_id).eq('plan_name', plan_name).execute()
         else:
             # Insert new plan
@@ -1729,8 +1729,8 @@ def migrate_local_plan():
                 'owner_id': user_id,
                 'plan_name': plan_name,
                 'plan_data': plan_data,
-                'created_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'updated_at': datetime.now(timezone.utc).isoformat()
             }).execute()
         
         # Delete the local file after successful migration

@@ -1740,8 +1740,10 @@ async function showLocalMigrationModal() {
         if (!modal || !plansList) return;
         
         // Update modal title and description for local migration
-        modal.querySelector('h2').textContent = 'Import Local Plans to Your Account';
-        modal.querySelector('.info-text').textContent = 'Select which local plans to import into your cloud account. Selected plans will be moved from local storage to your account.';
+        const title = modal.querySelector('h2');
+        const infoText = modal.querySelector('.info-text');
+        if (title) title.textContent = 'Import Local Plans to Your Account';
+        if (infoText) infoText.textContent = 'Select which local plans to import into your cloud account. Selected plans will be moved from local storage to your account.';
         
         // Clear previous content
         plansList.innerHTML = '';
