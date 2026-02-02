@@ -1,7 +1,10 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.3.4
-Release Date: January 30, 2026
+Version: v1.4.0
+Release Date: Feb 02, 2026
+
+Major Changes in v1.4.0:
+- Supabase Integration for User Authentication and Data Storage
 
 Major Changes in v1.3.4:
 - fix decimal input validation for numeric fields
