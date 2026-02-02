@@ -472,12 +472,8 @@ function renderElevationChart(elevationProfile, segments) {
     });
 }
 
-function clearAll() {
-    if (!confirm('Are you sure you want to clear all data and start again?')) {
-        return;
-    }
-    
-    // Reset state
+function resetPlanState() {
+    // Reset currentPlan state completely
     currentPlan = {
         gpx_filename: null,
         checkpoint_distances: [],
@@ -487,19 +483,42 @@ function clearAll() {
         summary: null,
         elevation_profile: null,
         dropbag_contents: null,
-        loadedFilename: null  // Clear loaded filename
+        loadedFilename: null,
+        loadedSource: null
     };
     
-    // Destroy chart
+    // Destroy elevation chart
     if (elevationChart) {
         elevationChart.destroy();
         elevationChart = null;
     }
     
+    // Clear GPX info box
+    gpxInfoBox.style.display = 'none';
+    
+    // Reset checkpoint inputs to current form value
+    generateCheckpointInputs();
+    
+    // Hide results
+    resultsContainer.style.display = 'none';
+    noResults.style.display = 'block';
+    
+    // Disable save/export buttons
+    saveBtn.disabled = true;
+    exportBtn.disabled = true;
+}
+
+function clearAll() {
+    if (!confirm('Are you sure you want to clear all data and start again?')) {
+        return;
+    }
+    
+    // Reset state using resetPlanState
+    resetPlanState();
+    
     // Reset file input
     gpxFileInput.value = '';
     fileNameDisplay.textContent = 'Choose GPX file...';
-    gpxInfoBox.style.display = 'none';
     
     // Reset all inputs to defaults
     document.getElementById('num-checkpoints').value = 3;
@@ -519,21 +538,17 @@ function clearAll() {
     document.getElementById('default-terrain-type').value = '';
     terrainSkillContainer.style.display = 'none';
     
-    // Regenerate checkpoint inputs
+    // Regenerate checkpoint inputs with default value
     generateCheckpointInputs();
-    
-    // Hide results
-    resultsContainer.style.display = 'none';
-    noResults.style.display = 'block';
-    
-    // Disable buttons
-    saveBtn.disabled = true;
-    exportBtn.disabled = true;
 }
 
 async function handleGPXUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Reset all plan state when uploading a new GPX
+    // This ensures no stale data from previously loaded plans persists
+    resetPlanState();
 
     fileNameDisplay.textContent = file.name;
     
