@@ -59,11 +59,10 @@ import os
 import platform
 from functools import wraps
 from dotenv import load_dotenv
+from whitenoise import WhiteNoise
 
 # Load environment variables
 load_dotenv()
-
-app = Flask(__name__)
 
 # Supabase Configuration
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
@@ -95,6 +94,11 @@ else:
     print("⚠ Warning: Supabase credentials not found in environment variables")
     print("  App will run in legacy file-based mode")
     print("  Set SUPABASE_URL and SUPABASE_ANON_KEY to enable authentication")
+
+app = Flask(__name__)
+
+# Configure WhiteNoise for static file serving in production
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
 
 # Configure paths - use local paths for development, Docker paths for production
 if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
