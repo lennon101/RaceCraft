@@ -496,9 +496,6 @@ function resetPlanState() {
     // Clear GPX info box
     gpxInfoBox.style.display = 'none';
     
-    // Reset checkpoint inputs to current form value
-    generateCheckpointInputs();
-    
     // Hide results
     resultsContainer.style.display = 'none';
     noResults.style.display = 'block';
@@ -548,6 +545,9 @@ async function handleGPXUpload(event) {
 
     // Reset all plan state when uploading a new GPX
     // This ensures no stale data from previously loaded plans persists
+    // Note: This clears the UI (hides results, destroys chart) before processing
+    // the new GPX to prevent confusion with old data. The UI will be repopulated
+    // with new data once the GPX is processed.
     resetPlanState();
 
     fileNameDisplay.textContent = file.name;
