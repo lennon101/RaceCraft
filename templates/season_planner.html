@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Season Planner - RaceCraft</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon-circle.png') }}">
+    <!-- iOS Home Screen & PWA Meta -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='logo.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="RaceCraft">
+    <meta name="application-name" content="RaceCraft">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='logo.png') }}">
+    <meta name="msapplication-TileColor" content="#2563eb">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/season-planner.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <img src="{{ url_for('static', filename='logo-bg-removed.png') }}" alt="RaceCraft Logo" class="header-logo">
+                <div class="header-text">
+                    <h2 class="subtitle">Season Planner</h2>
+                </div>
+                <div class="auth-container" id="auth-container">
+                    <!-- Authentication UI will be dynamically populated -->
+                </div>
+            </div>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">Race Planner</a>
+                <a href="/season-planner" class="nav-tab active">Season Planner</a>
+            </nav>
+        </header>
+
+        <div class="main-grid season-grid">
+            <!-- Left Panel: Inputs -->
+            <div class="panel inputs-panel">
+                <h2>Plan Your Perfect Season</h2>
+
+                <!-- Race Input Section -->
+                <section class="input-section">
+                    <h3>1. Add Your Races</h3>
+                    <div id="races-container">
+                        <!-- Race entries will be added dynamically -->
+                    </div>
+                    <button id="add-race-btn" class="btn btn-secondary">
+                        <span class="mdi mdi-plus"></span> Add Race
+                    </button>
+                </section>
+
+                <!-- Training Settings -->
+                <section class="input-section">
+                    <h3>2. Training Settings</h3>
+                    <div class="input-group">
+                        <label for="training-unit">
+                            Training Unit:
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Choose whether to plan your training in kilometers or hours per week."></span>
+                        </label>
+                        <select id="training-unit">
+                            <option value="km" selected>Kilometers (km)</option>
+                            <option value="hours">Hours</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="block-length">
+                            Training Block Length (weeks):
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Number of weeks between recovery weeks. Common patterns: 3 weeks build + 1 recovery, or 4 weeks build + 1 recovery."></span>
+                        </label>
+                        <input type="number" id="block-length" min="2" max="6" value="3" />
+                    </div>
+                    <div class="input-group">
+                        <label for="base-load">
+                            Starting Weekly Load:
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Your current weekly training volume. The plan will gradually increase from this baseline."></span>
+                        </label>
+                        <input type="number" id="base-load" min="10" max="500" value="50" step="5" />
+                        <span class="unit" id="base-load-unit">km</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="recovery-percentage">
+                            Recovery Week Load (%):
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Percentage of normal training load during recovery weeks. Typically 40-60% of normal volume."></span>
+                        </label>
+                        <input type="number" id="recovery-percentage" min="30" max="70" value="50" step="5" />
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="taper-weeks">
+                            Taper Duration (weeks):
+                            <span class="info-icon mdi mdi-information-outline" 
+                                  tabindex="0"
+                                  data-tooltip="Number of weeks before race to reduce training load. Typically 1-2 weeks for shorter races, 2-3 for ultra distances."></span>
+                        </label>
+                        <input type="number" id="taper-weeks" min="1" max="4" value="2" />
+                    </div>
+                </section>
+
+                <!-- Calculate Button -->
+                <div class="action-buttons">
+                    <button id="calculate-season-btn" class="btn btn-primary">
+                        <span class="mdi mdi-calculator"></span> Calculate Training Plan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Results -->
+            <div class="panel results-panel">
+                <h2>Training Schedule</h2>
+                <div id="schedule-results" class="results-placeholder">
+                    <p>Enter your races and training settings, then click "Calculate Training Plan" to see your personalized schedule.</p>
+                </div>
+                
+                <!-- Chart Container -->
+                <div id="chart-container" style="display: none;">
+                    <canvas id="training-chart"></canvas>
+                </div>
+                
+                <!-- Schedule Table -->
+                <div id="schedule-table-container" style="display: none;">
+                    <table id="schedule-table" class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Week</th>
+                                <th>Start Date</th>
+                                <th>Load</th>
+                                <th>Type</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-tbody">
+                            <!-- Rows will be added dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/season-planner.js') }}"></script>
+</body>
+</html>

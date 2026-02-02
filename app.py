@@ -61,7 +61,7 @@ import xml.etree.ElementTree as ET
 import math
 import io
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 import json
 import os
@@ -803,6 +803,11 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
 def index():
     """Render main page."""
     return render_template('index.html')
+
+@app.route('/season-planner')
+def season_planner():
+    """Render season planner page."""
+    return render_template('season_planner.html')
 
 @app.route('/robots.txt')
 def robots():
@@ -1962,6 +1967,116 @@ def claim_unowned_plan():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to claim plan: {str(e)}'}), 500
+
+
+@app.route('/api/season-planner/calculate', methods=['POST'])
+def calculate_season_plan():
+    """Calculate training schedule for the season based on race goals."""
+    try:
+        data = request.json
+        races = data.get('races', [])
+        settings = data.get('settings', {})
+        
+        if not races:
+            return jsonify({'error': 'No races provided'}), 400
+        
+        # Extract settings
+        unit = settings.get('unit', 'km')
+        block_length = settings.get('blockLength', 3)
+        base_load = settings.get('baseLoad', 50)
+        recovery_percentage = settings.get('recoveryPercentage', 50) / 100
+        taper_weeks = settings.get('taperWeeks', 2)
+        
+        # Sort races by date
+        races.sort(key=lambda r: r['date'])
+        
+        # Calculate schedule
+        schedule = []
+        current_date = datetime.now()
+        week_number = 0
+        
+        for race in races:
+            race_date = datetime.strptime(race['date'], '%Y-%m-%d')
+            peak_load = race['peakLoad']
+            
+            # Calculate weeks until race
+            weeks_until_race = max(1, int((race_date - current_date).days / 7))
+            
+            # Account for taper weeks
+            build_weeks = max(1, weeks_until_race - taper_weeks)
+            
+            # Calculate load progression
+            load_increment = (peak_load - base_load) / max(1, build_weeks)
+            
+            # Build phase
+            for week in range(build_weeks):
+                week_number += 1
+                week_start = current_date + timedelta(weeks=week)
+                
+                # Determine if this is a recovery week
+                is_recovery = (week + 1) % (block_length + 1) == 0
+                
+                if is_recovery:
+                    load = base_load + (load_increment * week) * recovery_percentage
+                    week_type = 'recovery'
+                    notes = 'Recovery week - reduced volume'
+                else:
+                    load = base_load + (load_increment * week)
+                    week_type = 'build'
+                    notes = 'Build week'
+                
+                schedule.append({
+                    'weekNumber': week_number,
+                    'startDate': week_start.strftime('%Y-%m-%d'),
+                    'load': round(load, 1),
+                    'type': week_type,
+                    'notes': notes
+                })
+            
+            # Taper phase
+            for taper_week in range(taper_weeks):
+                week_number += 1
+                week_start = current_date + timedelta(weeks=build_weeks + taper_week)
+                
+                # Gradual taper reduction
+                taper_factor = 1 - ((taper_week + 1) / (taper_weeks + 1)) * 0.5
+                load = peak_load * taper_factor
+                
+                schedule.append({
+                    'weekNumber': week_number,
+                    'startDate': week_start.strftime('%Y-%m-%d'),
+                    'load': round(load, 1),
+                    'type': 'taper',
+                    'notes': f'Taper week {taper_week + 1} of {taper_weeks}'
+                })
+            
+            # Race week
+            week_number += 1
+            schedule.append({
+                'weekNumber': week_number,
+                'startDate': race_date.strftime('%Y-%m-%d'),
+                'load': round(peak_load * 0.3, 1),
+                'type': 'race',
+                'notes': f'Race: {race["name"]}'
+            })
+            
+            # Update current date and base load for next race
+            current_date = race_date + timedelta(weeks=2)
+            base_load = peak_load * 0.5
+        
+        return jsonify({
+            'schedule': schedule,
+            'settings': {
+                'unit': unit,
+                'totalWeeks': week_number
+            }
+        })
+        
+    except Exception as e:
+        print(f"Season planner calculation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
