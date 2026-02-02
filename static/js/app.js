@@ -472,12 +472,8 @@ function renderElevationChart(elevationProfile, segments) {
     });
 }
 
-function clearAll() {
-    if (!confirm('Are you sure you want to clear all data and start again?')) {
-        return;
-    }
-    
-    // Reset state
+function resetPlanState() {
+    // Reset currentPlan state completely
     currentPlan = {
         gpx_filename: null,
         checkpoint_distances: [],
@@ -487,19 +483,35 @@ function clearAll() {
         summary: null,
         elevation_profile: null,
         dropbag_contents: null,
-        loadedFilename: null  // Clear loaded filename
+        loadedFilename: null,
+        loadedSource: null
     };
     
-    // Destroy chart
+    // Destroy elevation chart
     if (elevationChart) {
         elevationChart.destroy();
         elevationChart = null;
     }
     
+    // Clear GPX info box
+    gpxInfoBox.style.display = 'none';
+    
+    // Hide results
+    resultsContainer.style.display = 'none';
+    noResults.style.display = 'block';
+    
+    // Disable save/export buttons
+    saveBtn.disabled = true;
+    exportBtn.disabled = true;
+}
+
+function clearAllInputs() {
+    // Reset state using resetPlanState
+    resetPlanState();
+    
     // Reset file input
     gpxFileInput.value = '';
     fileNameDisplay.textContent = 'Choose GPX file...';
-    gpxInfoBox.style.display = 'none';
     
     // Reset all inputs to defaults
     document.getElementById('num-checkpoints').value = 3;
@@ -519,22 +531,29 @@ function clearAll() {
     document.getElementById('default-terrain-type').value = '';
     terrainSkillContainer.style.display = 'none';
     
-    // Regenerate checkpoint inputs
+    // Regenerate checkpoint inputs with default value
     generateCheckpointInputs();
+}
+
+function clearAll() {
+    if (!confirm('Are you sure you want to clear all data and start again?')) {
+        return;
+    }
     
-    // Hide results
-    resultsContainer.style.display = 'none';
-    noResults.style.display = 'block';
-    
-    // Disable buttons
-    saveBtn.disabled = true;
-    exportBtn.disabled = true;
+    // Call the shared clear inputs function
+    clearAllInputs();
 }
 
 async function handleGPXUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Reset all inputs to defaults when uploading a new GPX
+    // This ensures a clean slate and prevents confusion when switching between plans
+    // Per requirement: Call "Clear and Start again" logic before loading GPX
+    clearAllInputs();
+
+    // Set the file name display (clearAllInputs resets it, so we set it again)
     fileNameDisplay.textContent = file.name;
     
     const formData = new FormData();
