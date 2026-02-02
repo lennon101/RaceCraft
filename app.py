@@ -84,6 +84,16 @@ if SUPABASE_URL and SUPABASE_ANON_KEY:
         print(f"  URL: {SUPABASE_URL}")
         anon_key_preview = SUPABASE_ANON_KEY[:20] + "..." if len(SUPABASE_ANON_KEY) > 20 else SUPABASE_ANON_KEY
         print(f"  Anon key: {anon_key_preview}")
+        
+        # Check service key for authenticated user support
+        if SUPABASE_SERVICE_KEY:
+            service_key_preview = SUPABASE_SERVICE_KEY[:20] + "..." if len(SUPABASE_SERVICE_KEY) > 20 else SUPABASE_SERVICE_KEY
+            print(f"  Service key: {service_key_preview}")
+            print("  ✓ Authenticated user database operations enabled")
+        else:
+            print("  ⚠ WARNING: SUPABASE_SERVICE_KEY not set!")
+            print("  ⚠ Authenticated users will NOT be able to save plans to database")
+            print("  ⚠ Set SUPABASE_SERVICE_KEY environment variable to fix this")
     except ImportError as e:
         print(f"⚠ Warning: Failed to import Supabase client library: {e}")
         print("  App will run in legacy file-based mode")
@@ -1063,7 +1073,13 @@ def save_plan():
                     # Use regular client for anonymous users (RLS allows anonymous_id based access)
                     client = get_supabase_admin_client() if owner_id else get_supabase_client()
                     if not client:
-                        raise Exception("Supabase client not available")
+                        # For authenticated users, this is a configuration error - don't fall back
+                        if owner_id:
+                            error_msg = "Supabase admin client not available. SUPABASE_SERVICE_KEY may not be set."
+                            print(f"ERROR: {error_msg}")
+                            return jsonify({'error': error_msg}), 500
+                        # For anonymous users, fall through to file-based storage
+                        raise Exception("Supabase client not available for anonymous user")
                     
                     # Check if plan exists for this user
                     query = client.table('user_plans').select('id')
@@ -1091,14 +1107,21 @@ def save_plan():
                             'plan_data': save_data,
                             'updated_at': datetime.now().isoformat()
                         }).eq('id', existing.data[0]['id']).execute()
+                        print(f"✓ Updated plan '{plan_name}' for user {owner_id or anonymous_id}")
                     else:
                         # Insert new plan
                         result = client.table('user_plans').insert(plan_record).execute()
+                        print(f"✓ Inserted new plan '{plan_name}' for user {owner_id or anonymous_id}")
                     
                     return jsonify({'message': 'Plan saved successfully', 'filename': f"{plan_name}.json"})
                 except Exception as e:
                     print(f"Supabase save error: {e}")
-                    # Fall through to file-based storage
+                    import traceback
+                    traceback.print_exc()
+                    # For authenticated users, return error instead of falling back
+                    if user_info.get('type') == 'authenticated':
+                        return jsonify({'error': f'Failed to save plan to database: {str(e)}'}), 500
+                    # Fall through to file-based storage for anonymous users
         
         # Fall back to file-based storage
         plan_filename = f"{plan_name}.json"
@@ -1431,6 +1454,40 @@ def check_auth():
         'supabase_url': SUPABASE_URL if is_supabase_enabled() else None,
         'supabase_anon_key': SUPABASE_ANON_KEY if is_supabase_enabled() else None
     })
+
+
+@app.route('/api/auth/diagnose', methods=['GET'])
+def diagnose_supabase():
+    """Diagnostic endpoint to check Supabase configuration."""
+    diagnostics = {
+        'supabase_enabled': is_supabase_enabled(),
+        'supabase_url_set': SUPABASE_URL is not None,
+        'supabase_anon_key_set': SUPABASE_ANON_KEY is not None,
+        'supabase_service_key_set': SUPABASE_SERVICE_KEY is not None,
+        'supabase_import_available': supabase_import_available,
+        'anon_client_initialized': supabase_client is not None,
+        'admin_client_initialized': supabase_admin_client is not None,
+    }
+    
+    # Try to initialize clients if not already done
+    if is_supabase_enabled():
+        anon_client = get_supabase_client()
+        admin_client = get_supabase_admin_client()
+        diagnostics['anon_client_available'] = anon_client is not None
+        diagnostics['admin_client_available'] = admin_client is not None
+        
+        # Test admin client connection
+        if admin_client:
+            try:
+                # Try a simple query to verify connection
+                result = admin_client.table('user_plans').select('id').limit(1).execute()
+                diagnostics['admin_client_connection'] = 'success'
+                diagnostics['user_plans_table_accessible'] = True
+            except Exception as e:
+                diagnostics['admin_client_connection'] = f'failed: {str(e)}'
+                diagnostics['user_plans_table_accessible'] = False
+    
+    return jsonify(diagnostics)
 
 
 @app.route('/api/auth/list-anonymous-plans', methods=['POST'])
