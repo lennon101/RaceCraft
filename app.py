@@ -1244,18 +1244,24 @@ def list_plans():
                         'source': 'local'  # Mark as local plan
                     })
         
-        # Additionally load Supabase plans if enabled and user is authenticated
+        # Additionally load Supabase plans if enabled and user is identified (authenticated or anonymous)
         if is_supabase_enabled():
             user_info = get_user_id_from_request()
             
-            # Only load cloud plans for authenticated users
-            if user_info and user_info['type'] == 'authenticated':
+            # Load cloud plans for both authenticated and anonymous users
+            if user_info:
                 try:
-                    client = get_supabase_admin_client()
+                    # Use admin client for authenticated users, regular client for anonymous
+                    client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
                     if client:
-                        # Query plans for authenticated user only
+                        # Query plans based on user type
                         query = client.table('user_plans').select('id, plan_name, created_at, updated_at')
-                        query = query.eq('owner_id', user_info['id'])
+                        
+                        if user_info['type'] == 'authenticated':
+                            query = query.eq('owner_id', user_info['id'])
+                        else:  # anonymous
+                            query = query.eq('anonymous_id', user_info['id'])
+                        
                         result = query.order('updated_at', desc=True).execute()
                         
                         for plan in result.data:
@@ -1303,16 +1309,22 @@ def load_plan(filename):
             
             user_info = get_user_id_from_request()
             
-            if not user_info or user_info['type'] != 'authenticated':
-                return jsonify({'error': 'Authentication required for cloud plans'}), 401
+            if not user_info:
+                return jsonify({'error': 'User identification required for cloud plans'}), 401
             
             try:
-                client = get_supabase_admin_client()
+                # Use admin client for authenticated users, regular client for anonymous
+                client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
                 if not client:
                     return jsonify({'error': 'Cloud storage not available'}), 500
                 
                 query = client.table('user_plans').select('plan_data')
-                query = query.eq('owner_id', user_info['id'])
+                
+                if user_info['type'] == 'authenticated':
+                    query = query.eq('owner_id', user_info['id'])
+                else:  # anonymous
+                    query = query.eq('anonymous_id', user_info['id'])
+                
                 query = query.eq('plan_name', plan_name)
                 result = query.execute()
                 
@@ -1356,16 +1368,22 @@ def delete_plan(filename):
             
             user_info = get_user_id_from_request()
             
-            if not user_info or user_info['type'] != 'authenticated':
-                return jsonify({'error': 'Authentication required for cloud plans'}), 401
+            if not user_info:
+                return jsonify({'error': 'User identification required for cloud plans'}), 401
             
             try:
-                client = get_supabase_admin_client()
+                # Use admin client for authenticated users, regular client for anonymous
+                client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
                 if not client:
                     return jsonify({'error': 'Cloud storage not available'}), 500
                 
                 query = client.table('user_plans').delete()
-                query = query.eq('owner_id', user_info['id'])
+                
+                if user_info['type'] == 'authenticated':
+                    query = query.eq('owner_id', user_info['id'])
+                else:  # anonymous
+                    query = query.eq('anonymous_id', user_info['id'])
+                
                 query = query.eq('plan_name', plan_name)
                 result = query.execute()
                 
