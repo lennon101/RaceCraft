@@ -1072,10 +1072,15 @@ def save_plan():
             user_info = get_user_id_from_request()
             
             if user_info:
+                print(f"📝 Save plan request - User type: {user_info.get('type')}, ID: {user_info.get('id')}")
                 try:
                     # Determine owner_id or anonymous_id
                     owner_id = user_info['id'] if user_info['type'] == 'authenticated' else None
                     anonymous_id = user_info['id'] if user_info['type'] == 'anonymous' else None
+                    
+                    print(f"  Plan name: '{plan_name}'")
+                    print(f"  Owner ID: {owner_id}")
+                    print(f"  Anonymous ID: {anonymous_id}")
                     
                     # Use admin client for authenticated users (bypasses RLS since we've already validated)
                     # Use regular client for anonymous users (RLS allows anonymous_id based access)
@@ -1115,11 +1120,38 @@ def save_plan():
                             'plan_data': save_data,
                             'updated_at': datetime.now().isoformat()
                         }).eq('id', existing.data[0]['id']).execute()
+                        
+                        # Verify the update succeeded
+                        if hasattr(result, 'error') and result.error:
+                            error_msg = f"Failed to update plan: {result.error}"
+                            print(f"❌ {error_msg}")
+                            return jsonify({'error': error_msg}), 500
+                        
+                        if not result.data:
+                            error_msg = f"Update returned no data - operation may have failed"
+                            print(f"❌ {error_msg}")
+                            return jsonify({'error': error_msg}), 500
+                            
                         print(f"✓ Updated plan '{plan_name}' for user {owner_id or anonymous_id}")
+                        print(f"  Result data: {result.data}")
                     else:
                         # Insert new plan
                         result = client.table('user_plans').insert(plan_record).execute()
+                        
+                        # Verify the insert succeeded
+                        if hasattr(result, 'error') and result.error:
+                            error_msg = f"Failed to insert plan: {result.error}"
+                            print(f"❌ {error_msg}")
+                            return jsonify({'error': error_msg}), 500
+                        
+                        if not result.data:
+                            error_msg = f"Insert returned no data - operation may have failed. Check RLS policies."
+                            print(f"❌ {error_msg}")
+                            print(f"  Attempted insert with owner_id={owner_id}, anonymous_id={anonymous_id}")
+                            return jsonify({'error': error_msg}), 500
+                            
                         print(f"✓ Inserted new plan '{plan_name}' for user {owner_id or anonymous_id}")
+                        print(f"  Result data: {result.data}")
                     
                     return jsonify({'message': 'Plan saved successfully', 'filename': f"{plan_name}.json"})
                 except Exception as e:
