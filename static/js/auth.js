@@ -19,8 +19,17 @@ class AuthManager {
             const data = await response.json();
             
             if (data.supabase_enabled && data.supabase_url && data.supabase_anon_key) {
-                // Initialize Supabase client
-                this.supabase = window.supabase.createClient(
+                // Wait for Supabase library to load
+                if (typeof window.supabase === 'undefined') {
+                    console.error('❌ Supabase library not loaded from CDN');
+                    console.log('ℹ Running in legacy mode - Supabase authentication disabled');
+                    this.renderAuthUI();
+                    return;
+                }
+                
+                // Initialize Supabase client - the CDN version exports createClient directly
+                const { createClient } = window.supabase;
+                this.supabase = createClient(
                     data.supabase_url,
                     data.supabase_anon_key
                 );
