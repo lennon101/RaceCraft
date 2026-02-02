@@ -1182,11 +1182,12 @@ async function savePlan(forceSaveAs = false) {
     };
 
     try {
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
         const response = await fetch('/api/save-plan', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify(saveData)
         });
 
@@ -1198,6 +1199,9 @@ async function savePlan(forceSaveAs = false) {
             
             // Always update to the filename returned by the server
             currentPlan.loadedFilename = data.filename;
+            
+            // Mark that user has saved plans (for anonymous notice)
+            localStorage.setItem('has_saved_plans', 'true');
             
             // Show appropriate message based on operation
             if (wasUpdate) {
@@ -1220,7 +1224,12 @@ async function savePlan(forceSaveAs = false) {
 
 async function loadSavedPlans() {
     try {
-        const response = await fetch('/api/list-plans');
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/list-plans', {
+            headers: headers
+        });
         const data = await response.json();
 
         if (response.ok) {
@@ -1260,7 +1269,12 @@ async function loadSavedPlans() {
 
 async function loadPlan(filename) {
     try {
-        const response = await fetch(`/api/load-plan/${filename}`);
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch(`/api/load-plan/${filename}`, {
+            headers: headers
+        });
         const data = await response.json();
 
         if (response.ok) {
@@ -1337,8 +1351,13 @@ async function deletePlan(filename) {
     }
 
     try {
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
         const response = await fetch(`/api/delete-plan/${filename}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: headers
+        });
         });
 
         const data = await response.json();

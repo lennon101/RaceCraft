@@ -57,7 +57,43 @@ from werkzeug.utils import secure_filename
 import json
 import os
 import platform
+from functools import wraps
+from dotenv import load_dotenv
 from whitenoise import WhiteNoise
+
+# Load environment variables
+load_dotenv()
+
+# Supabase Configuration
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
+
+# Initialize Supabase client if credentials are provided
+supabase_client = None
+supabase_admin_client = None
+supabase_import_available = False
+
+if SUPABASE_URL and SUPABASE_ANON_KEY:
+    try:
+        from supabase import create_client, Client
+        supabase_import_available = True
+        # Don't create clients at startup - do it lazily
+        # This prevents failures from invalid credentials blocking the app
+        print("✓ Supabase credentials loaded - authentication enabled")
+        print(f"  URL: {SUPABASE_URL}")
+        anon_key_preview = SUPABASE_ANON_KEY[:20] + "..." if len(SUPABASE_ANON_KEY) > 20 else SUPABASE_ANON_KEY
+        print(f"  Anon key: {anon_key_preview}")
+    except ImportError as e:
+        print(f"⚠ Warning: Failed to import Supabase client library: {e}")
+        print("  App will run in legacy file-based mode")
+        print("  Make sure 'supabase' is installed: pip install supabase")
+        SUPABASE_URL = None
+        SUPABASE_ANON_KEY = None
+else:
+    print("⚠ Warning: Supabase credentials not found in environment variables")
+    print("  App will run in legacy file-based mode")
+    print("  Set SUPABASE_URL and SUPABASE_ANON_KEY to enable authentication")
 
 app = Flask(__name__)
 
@@ -131,6 +167,88 @@ TERRAIN_GRADIENT_GAMMA = 1.25  # Between 1.0-1.5 as recommended
 # Terrain effect on climbs vs descents
 TERRAIN_CLIMB_FACTOR = 0.7     # 70% effect on climbs
 TERRAIN_DESCENT_FACTOR = 1.0   # 100% effect on descents
+
+
+# Authentication Helper Functions
+def get_user_from_token(auth_header):
+    """Extract and validate user from authorization header."""
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return None
+    
+    if not supabase_client:
+        return None
+    
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        token = auth_header.replace('Bearer ', '')
+        user = client.auth.get_user(token)
+        return user
+    except Exception as e:
+        print(f"Error validating token: {e}")
+        return None
+
+
+def get_user_id_from_request():
+    """Get user ID from request, supporting both authenticated and anonymous users."""
+    auth_header = request.headers.get('Authorization')
+    
+    # Try to get authenticated user
+    if auth_header and supabase_client:
+        user = get_user_from_token(auth_header)
+        if user and hasattr(user, 'user') and user.user:
+            return {'type': 'authenticated', 'id': user.user.id}
+    
+    # Fall back to anonymous ID from request
+    anonymous_id = request.headers.get('X-Anonymous-ID')
+    if anonymous_id:
+        return {'type': 'anonymous', 'id': anonymous_id}
+    
+    return None
+
+
+def require_user_or_anonymous(f):
+    """Decorator to require either authenticated user or anonymous ID."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_info = get_user_id_from_request()
+        if not user_info:
+            return jsonify({'error': 'Authentication or anonymous ID required'}), 401
+        return f(*args, user_info=user_info, **kwargs)
+    return decorated_function
+
+
+def is_supabase_enabled():
+    """Check if Supabase is properly configured."""
+    # Check if we have credentials, not if client is initialized
+    # This allows frontend to handle connection even if backend client failed
+    return SUPABASE_URL is not None and SUPABASE_ANON_KEY is not None
+
+def get_supabase_client():
+    """Get or create the Supabase client."""
+    global supabase_client
+    if supabase_client is None and is_supabase_enabled() and supabase_import_available:
+        try:
+            from supabase import create_client
+            supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        except Exception as e:
+            print(f"Failed to create Supabase client: {e}")
+            return None
+    return supabase_client
+
+def get_supabase_admin_client():
+    """Get or create the Supabase admin client."""
+    global supabase_admin_client
+    if supabase_admin_client is None and is_supabase_enabled() and supabase_import_available and SUPABASE_SERVICE_KEY:
+        try:
+            from supabase import create_client
+            supabase_admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        except Exception as e:
+            print(f"Failed to create Supabase admin client: {e}")
+            return None
+    return supabase_admin_client
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points on earth in kilometers."""
@@ -894,26 +1012,21 @@ def calculate():
 
 @app.route('/api/save-plan', methods=['POST'])
 def save_plan():
-    """Save race plan."""
+    """Save race plan - supports both Supabase and legacy file-based storage."""
     try:
         data = request.json
         if data is None:
             return jsonify({'error': 'Invalid JSON data'}), 400
+        
         plan_name = data.get('plan_name', f"race_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         force_save_as = data.get('force_save_as', False)
         
-        # Sanitize filename
+        # Sanitize plan name
         plan_name = secure_filename(plan_name)
-        if not plan_name.endswith('.json'):
-            plan_name += '.json'
+        if plan_name.endswith('.json'):
+            plan_name = plan_name[:-5]  # Remove .json extension for database storage
         
-        filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], plan_name)
-        
-        # Check if file exists when using Save As
-        if force_save_as and os.path.exists(filepath):
-            return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
-        
-        # Include elevation_profile and dropbag data in saved data
+        # Prepare plan data
         save_data = {
             'plan_name': data.get('plan_name'),
             'gpx_filename': data.get('gpx_filename'),
@@ -936,39 +1049,152 @@ def save_plan():
             'dropbag_contents': data.get('dropbag_contents')
         }
         
+        # Try Supabase first if enabled
+        if is_supabase_enabled():
+            user_info = get_user_id_from_request()
+            
+            if user_info:
+                try:
+                    # Determine owner_id or anonymous_id
+                    owner_id = user_info['id'] if user_info['type'] == 'authenticated' else None
+                    anonymous_id = user_info['id'] if user_info['type'] == 'anonymous' else None
+                    
+                    # Check if plan exists for this user
+                    query = get_supabase_client().table('user_plans').select('id')
+                    if owner_id:
+                        query = query.eq('owner_id', owner_id)
+                    else:
+                        query = query.eq('anonymous_id', anonymous_id)
+                    query = query.eq('plan_name', plan_name)
+                    existing = query.execute()
+                    
+                    if force_save_as and existing.data:
+                        return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
+                    
+                    # Insert or update
+                    plan_record = {
+                        'owner_id': owner_id,
+                        'anonymous_id': anonymous_id,
+                        'plan_name': plan_name,
+                        'plan_data': save_data
+                    }
+                    
+                    if existing.data and not force_save_as:
+                        # Update existing plan
+                        result = get_supabase_client().table('user_plans').update({
+                            'plan_data': save_data,
+                            'updated_at': datetime.now().isoformat()
+                        }).eq('id', existing.data[0]['id']).execute()
+                    else:
+                        # Insert new plan
+                        result = get_supabase_client().table('user_plans').insert(plan_record).execute()
+                    
+                    return jsonify({'message': 'Plan saved successfully', 'filename': f"{plan_name}.json"})
+                except Exception as e:
+                    print(f"Supabase save error: {e}")
+                    # Fall through to file-based storage
+        
+        # Fall back to file-based storage
+        plan_filename = f"{plan_name}.json"
+        filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], plan_filename)
+        
+        if force_save_as and os.path.exists(filepath):
+            return jsonify({'error': 'A plan with this name already exists. Please choose a different name.'}), 409
+        
         with open(filepath, 'w') as f:
             json.dump(save_data, f, indent=2)
         
-        return jsonify({'message': 'Plan saved successfully', 'filename': plan_name})
+        return jsonify({'message': 'Plan saved successfully', 'filename': plan_filename})
     except Exception as e:
+        print(f"Save plan error: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/list-plans', methods=['GET'])
 def list_plans():
-    """List all saved race plans."""
+    """List all saved race plans - supports both Supabase and legacy file-based storage."""
     try:
+        # Try Supabase first if enabled
+        if is_supabase_enabled():
+            user_info = get_user_id_from_request()
+            
+            if user_info:
+                try:
+                    # Query plans for this user
+                    query = get_supabase_client().table('user_plans').select('id, plan_name, created_at, updated_at')
+                    
+                    if user_info['type'] == 'authenticated':
+                        query = query.eq('owner_id', user_info['id'])
+                    else:
+                        query = query.eq('anonymous_id', user_info['id'])
+                    
+                    result = query.order('updated_at', desc=True).execute()
+                    
+                    plans = []
+                    for plan in result.data:
+                        plans.append({
+                            'filename': f"{plan['plan_name']}.json",
+                            'name': plan['plan_name'],
+                            'modified': plan['updated_at'][:19].replace('T', ' ')  # Format as YYYY-MM-DD HH:MM:SS
+                        })
+                    
+                    return jsonify({'plans': plans})
+                except Exception as e:
+                    print(f"Supabase list error: {e}")
+                    # Fall through to file-based storage
+        
+        # Fall back to file-based storage
         plans = []
-        for filename in os.listdir(app.config['SAVED_PLANS_FOLDER']):
-            if filename.endswith('.json'):
-                filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], filename)
-                modified_time = os.path.getmtime(filepath)
-                plans.append({
-                    'filename': filename,
-                    'name': filename.replace('.json', ''),
-                    'modified': datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')
-                })
+        if os.path.exists(app.config['SAVED_PLANS_FOLDER']):
+            for filename in os.listdir(app.config['SAVED_PLANS_FOLDER']):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], filename)
+                    modified_time = os.path.getmtime(filepath)
+                    plans.append({
+                        'filename': filename,
+                        'name': filename.replace('.json', ''),
+                        'modified': datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')
+                    })
         
         plans.sort(key=lambda x: x['modified'], reverse=True)
         return jsonify({'plans': plans})
     except Exception as e:
+        print(f"List plans error: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/load-plan/<filename>', methods=['GET'])
 def load_plan(filename):
-    """Load a saved race plan."""
-    from datetime import datetime
-    from werkzeug.utils import secure_filename
+    """Load a saved race plan - supports both Supabase and legacy file-based storage."""
     try:
+        # Remove .json extension if present for database queries
+        plan_name = filename.replace('.json', '')
+        
+        # Try Supabase first if enabled
+        if is_supabase_enabled():
+            user_info = get_user_id_from_request()
+            
+            if user_info:
+                try:
+                    # Query plan for this user
+                    query = get_supabase_client().table('user_plans').select('plan_data')
+                    
+                    if user_info['type'] == 'authenticated':
+                        query = query.eq('owner_id', user_info['id'])
+                    else:
+                        query = query.eq('anonymous_id', user_info['id'])
+                    
+                    query = query.eq('plan_name', plan_name)
+                    result = query.execute()
+                    
+                    if result.data:
+                        return jsonify(result.data[0]['plan_data'])
+                    else:
+                        # Try file-based storage as fallback
+                        pass
+                except Exception as e:
+                    print(f"Supabase load error: {e}")
+                    # Fall through to file-based storage
+        
+        # Fall back to file-based storage
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], secure_filename(filename))
         
         if not os.path.exists(filepath):
@@ -979,12 +1205,43 @@ def load_plan(filename):
         
         return jsonify(data)
     except Exception as e:
+        print(f"Load plan error: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/delete-plan/<filename>', methods=['DELETE'])
 def delete_plan(filename):
-    """Delete a saved race plan."""
+    """Delete a saved race plan - supports both Supabase and legacy file-based storage."""
     try:
+        # Remove .json extension if present for database queries
+        plan_name = filename.replace('.json', '')
+        
+        # Try Supabase first if enabled
+        if is_supabase_enabled():
+            user_info = get_user_id_from_request()
+            
+            if user_info:
+                try:
+                    # Delete plan for this user
+                    query = get_supabase_client().table('user_plans').delete()
+                    
+                    if user_info['type'] == 'authenticated':
+                        query = query.eq('owner_id', user_info['id'])
+                    else:
+                        query = query.eq('anonymous_id', user_info['id'])
+                    
+                    query = query.eq('plan_name', plan_name)
+                    result = query.execute()
+                    
+                    if result.data:
+                        return jsonify({'message': 'Plan deleted successfully'})
+                    else:
+                        # Try file-based storage as fallback
+                        pass
+                except Exception as e:
+                    print(f"Supabase delete error: {e}")
+                    # Fall through to file-based storage
+        
+        # Fall back to file-based storage
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], secure_filename(filename))
         
         if not os.path.exists(filepath):
@@ -993,6 +1250,7 @@ def delete_plan(filename):
         os.remove(filepath)
         return jsonify({'message': 'Plan deleted successfully'})
     except Exception as e:
+        print(f"Delete plan error: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/export-plan', methods=['POST'])
@@ -1140,6 +1398,106 @@ def export_csv():
                         mimetype='text/csv')
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+
+# Authentication Endpoints
+
+@app.route('/api/auth/check', methods=['GET'])
+def check_auth():
+    """Check if Supabase authentication is enabled and get current user status."""
+    return jsonify({
+        'supabase_enabled': is_supabase_enabled(),
+        'supabase_url': SUPABASE_URL if is_supabase_enabled() else None,
+        'supabase_anon_key': SUPABASE_ANON_KEY if is_supabase_enabled() else None
+    })
+
+
+@app.route('/api/auth/list-anonymous-plans', methods=['POST'])
+def list_anonymous_plans():
+    """List all plans for a given anonymous ID."""
+    if not is_supabase_enabled():
+        return jsonify({'error': 'Supabase is not configured'}), 400
+    
+    try:
+        data = request.json
+        anonymous_id = data.get('anonymous_id')
+        
+        if not anonymous_id:
+            return jsonify({'error': 'Anonymous ID required'}), 400
+        
+        # Query plans for this anonymous ID
+        result = get_supabase_client().table('user_plans').select('id, plan_name, created_at, updated_at').eq('anonymous_id', anonymous_id).order('updated_at', desc=True).execute()
+        
+        plans = []
+        for plan in result.data:
+            plans.append({
+                'id': plan['id'],
+                'name': plan['plan_name'],
+                'created_at': plan['created_at'][:19].replace('T', ' '),
+                'updated_at': plan['updated_at'][:19].replace('T', ' ')
+            })
+        
+        return jsonify({'plans': plans})
+    except Exception as e:
+        print(f"List anonymous plans error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/auth/migrate', methods=['POST'])
+def migrate_anonymous_data():
+    """Migrate selected anonymous plans to authenticated user account."""
+    if not is_supabase_enabled():
+        return jsonify({'error': 'Supabase is not configured'}), 400
+    
+    try:
+        data = request.json
+        auth_header = request.headers.get('Authorization')
+        anonymous_id = data.get('anonymous_id')
+        plan_ids = data.get('plan_ids', [])  # List of plan IDs to migrate
+        
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header required'}), 401
+        
+        if not anonymous_id:
+            return jsonify({'error': 'Anonymous ID required'}), 400
+        
+        # Get authenticated user
+        token = auth_header.replace('Bearer ', '')
+        user = get_supabase_client().auth.get_user(token)
+        
+        if not user or not hasattr(user, 'user') or not user.user:
+            return jsonify({'error': 'Invalid authentication token'}), 401
+        
+        user_id = user.user.id
+        
+        # If no plan_ids provided, don't migrate anything (user chose to skip)
+        if not plan_ids:
+            return jsonify({
+                'message': 'No plans migrated',
+                'migrated_plans': 0
+            })
+        
+        # Call the migration function in Supabase with selected plan IDs
+        admin_client = get_supabase_admin_client()
+        if admin_client:
+            result = admin_client.rpc(
+                'migrate_selected_anonymous_plans',
+                {'p_anonymous_id': anonymous_id, 'p_user_id': user_id, 'p_plan_ids': plan_ids}
+            ).execute()
+            
+            migrated_count = result.data if result.data else 0
+            
+            return jsonify({
+                'message': 'Migration completed successfully',
+                'migrated_plans': migrated_count
+            })
+        else:
+            return jsonify({'error': 'Migration service not available'}), 500
+            
+    except Exception as e:
+        print(f"Migration error: {e}")
+        return jsonify({'error': f'Migration failed: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true')
