@@ -134,7 +134,7 @@ async function calculateSeason() {
         const peakLoad = parseFloat(entry.querySelector('.peak-load').value);
         
         if (!name || !date || !peakLoad) {
-            alert('Please fill in all race details');
+            alert(`Race ${Array.from(raceEntries).indexOf(entry) + 1}: Please fill in all fields (name, date, and peak load)`);
             return;
         }
         
@@ -287,7 +287,9 @@ function renderTable(schedule, unit) {
 }
 
 function formatDate(dateString) {
-    const date = new Date(dateString);
+    // Parse date components to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     const options = { month: 'short', day: 'numeric', year: 'numeric' };
     return date.toLocaleDateString('en-US', options);
 }

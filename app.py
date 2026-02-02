@@ -1999,8 +1999,8 @@ def calculate_season_plan():
             race_date = datetime.strptime(race['date'], '%Y-%m-%d')
             peak_load = race['peakLoad']
             
-            # Calculate weeks until race
-            weeks_until_race = max(1, int((race_date - current_date).days / 7))
+            # Calculate weeks until race (round up to ensure adequate training time)
+            weeks_until_race = max(1, math.ceil((race_date - current_date).days / 7))
             
             # Account for taper weeks
             build_weeks = max(1, weeks_until_race - taper_weeks)
