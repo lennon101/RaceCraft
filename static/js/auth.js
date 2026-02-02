@@ -554,6 +554,12 @@ class AuthManager {
             
             // Recreate anonymous ID
             this.anonymousId = this.getOrCreateAnonymousId();
+            
+            // Clear all form inputs and state when signing out
+            // This ensures no data persists from the signed-in user to the next session
+            if (typeof clearAllInputs === 'function') {
+                clearAllInputs();
+            }
         } catch (error) {
             console.error('Logout error:', error);
         }
