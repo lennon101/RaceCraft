@@ -505,11 +505,7 @@ function resetPlanState() {
     exportBtn.disabled = true;
 }
 
-function clearAll() {
-    if (!confirm('Are you sure you want to clear all data and start again?')) {
-        return;
-    }
-    
+function clearAllInputs() {
     // Reset state using resetPlanState
     resetPlanState();
     
@@ -539,17 +535,25 @@ function clearAll() {
     generateCheckpointInputs();
 }
 
+function clearAll() {
+    if (!confirm('Are you sure you want to clear all data and start again?')) {
+        return;
+    }
+    
+    // Call the shared clear inputs function
+    clearAllInputs();
+}
+
 async function handleGPXUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Reset all plan state when uploading a new GPX
-    // This ensures no stale data from previously loaded plans persists
-    // Note: This clears the UI (hides results, destroys chart) before processing
-    // the new GPX to prevent confusion with old data. The UI will be repopulated
-    // with new data once the GPX is processed.
-    resetPlanState();
+    // Reset all inputs to defaults when uploading a new GPX
+    // This ensures a clean slate and prevents confusion when switching between plans
+    // Per requirement: Call "Clear and Start again" logic before loading GPX
+    clearAllInputs();
 
+    // Set the file name display (clearAllInputs resets it, so we set it again)
     fileNameDisplay.textContent = file.name;
     
     const formData = new FormData();
