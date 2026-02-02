@@ -77,7 +77,7 @@ exportBtn.addEventListener('click', exportToCSV);
 clearBtn.addEventListener('click', clearAll);
 saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
-saveCancelBtn.addEventListener('click', () => hideModal(loadModal));
+saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
 exportImportBtn.addEventListener('click', showExportImportModal);

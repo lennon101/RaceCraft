@@ -605,7 +605,7 @@ tbody tr:last-child td {
 
 .plan-claim:hover,
 .plan-import:hover {
-    background: #1e40af;
+    background: var(--primary-hover);
 }
 
 /* Scrollbar styling */
