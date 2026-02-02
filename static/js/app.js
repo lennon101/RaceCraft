@@ -47,6 +47,7 @@ const saveConfirmBtn = document.getElementById('save-confirm-btn');
 const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
+const importUnownedPlansBtn = document.getElementById('import-unowned-plans-btn');
 const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
@@ -76,8 +77,9 @@ exportBtn.addEventListener('click', exportToCSV);
 clearBtn.addEventListener('click', clearAll);
 saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
-saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
+saveCancelBtn.addEventListener('click', () => hideModal(loadModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
+importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
 exportImportBtn.addEventListener('click', showExportImportModal);
 exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
 exportPlanBtn.addEventListener('click', exportCurrentPlan);
@@ -1268,9 +1270,14 @@ async function loadSavedPlans() {
                 div.className = 'plan-item';
                 
                 // Add source badge
-                const sourceBadge = plan.source === 'local' 
-                    ? '<span class="plan-source-badge plan-source-local">Local</span>'
-                    : '<span class="plan-source-badge plan-source-cloud">Account</span>';
+                let sourceBadge;
+                if (plan.source === 'local') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-local">Local</span>';
+                } else if (plan.source === 'unowned') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-unowned">Unowned</span>';
+                } else {
+                    sourceBadge = '<span class="plan-source-badge plan-source-cloud">Account</span>';
+                }
                 
                 div.innerHTML = `
                     <div class="plan-info">
@@ -1296,6 +1303,152 @@ async function loadSavedPlans() {
         }
     } catch (error) {
         alert('Error loading plans: ' + error.message);
+    }
+}
+
+async function importUnownedPlans() {
+    try {
+        const response = await fetch('/api/list-unowned-plans');
+        const data = await response.json();
+
+        if (response.ok) {
+            plansList.innerHTML = '';
+            
+            if (data.plans.length === 0) {
+                plansList.innerHTML = '<p style="text-align: center; color: #64748b;">No unowned or local plans found</p>';
+                return;
+            }
+
+            // Add info message
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'migration-prompt';
+            infoDiv.innerHTML = `
+                <div class="migration-prompt-content">
+                    <span class="mdi mdi-information"></span>
+                    <span>Showing local and unowned plans. Click a plan to load it, or claim it to add to your account.</span>
+                </div>
+            `;
+            plansList.appendChild(infoDiv);
+
+            data.plans.forEach(plan => {
+                const div = document.createElement('div');
+                div.className = 'plan-item';
+                
+                // Add source badge
+                let sourceBadge;
+                if (plan.source === 'local') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-local">Local</span>';
+                } else if (plan.source === 'unowned') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-unowned">Unowned</span>';
+                }
+                
+                // Add action buttons based on source and authentication status
+                let actionButtons = '';
+                if (plan.source === 'unowned' && authManager.currentUser) {
+                    // For unowned plans, show claim button if user is authenticated
+                    actionButtons = `
+                        <button class="plan-claim" data-plan-id="${plan.plan_id}" data-filename="${plan.filename}">Claim</button>
+                    `;
+                } else if (plan.source === 'local' && authManager.currentUser) {
+                    // For local plans, show import button if user is authenticated
+                    actionButtons = `
+                        <button class="plan-import" data-filename="${plan.filename}">Import to Account</button>
+                    `;
+                }
+                
+                div.innerHTML = `
+                    <div class="plan-info">
+                        <div class="plan-name">
+                            ${plan.name}
+                            ${sourceBadge}
+                        </div>
+                        <div class="plan-date">${plan.modified}</div>
+                    </div>
+                    ${actionButtons}
+                `;
+                
+                div.querySelector('.plan-info').addEventListener('click', () => loadPlan(plan.filename, plan.source));
+                
+                // Add handlers for action buttons
+                const claimBtn = div.querySelector('.plan-claim');
+                if (claimBtn) {
+                    claimBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        claimUnownedPlan(plan.plan_id, plan.filename);
+                    });
+                }
+                
+                const importBtn = div.querySelector('.plan-import');
+                if (importBtn) {
+                    importBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        importLocalPlanToAccount(plan.filename);
+                    });
+                }
+                
+                plansList.appendChild(div);
+            });
+        } else {
+            alert('Error loading unowned plans: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error loading unowned plans: ' + error.message);
+    }
+}
+
+async function claimUnownedPlan(planId, filename) {
+    if (!confirm(`Claim this plan and add it to your account?`)) {
+        return;
+    }
+    
+    try {
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/auth/claim-unowned-plan', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ plan_id: planId })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Plan claimed successfully!');
+            // Reload the unowned plans list
+            importUnownedPlans();
+        } else {
+            alert('Error claiming plan: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error claiming plan: ' + error.message);
+    }
+}
+
+async function importLocalPlanToAccount(filename) {
+    if (!confirm(`Import this local plan to your account?`)) {
+        return;
+    }
+    
+    try {
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/auth/migrate-local-plan', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ filename: filename })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Plan imported successfully!');
+            // Reload the unowned plans list
+            importUnownedPlans();
+        } else {
+            alert('Error importing plan: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error importing plan: ' + error.message);
     }
 }
 
