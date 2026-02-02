@@ -1059,8 +1059,14 @@ def save_plan():
                     owner_id = user_info['id'] if user_info['type'] == 'authenticated' else None
                     anonymous_id = user_info['id'] if user_info['type'] == 'anonymous' else None
                     
+                    # Use admin client for authenticated users (bypasses RLS since we've already validated)
+                    # Use regular client for anonymous users (RLS allows anonymous_id based access)
+                    client = get_supabase_admin_client() if owner_id else get_supabase_client()
+                    if not client:
+                        raise Exception("Supabase client not available")
+                    
                     # Check if plan exists for this user
-                    query = get_supabase_client().table('user_plans').select('id')
+                    query = client.table('user_plans').select('id')
                     if owner_id:
                         query = query.eq('owner_id', owner_id)
                     else:
@@ -1081,13 +1087,13 @@ def save_plan():
                     
                     if existing.data and not force_save_as:
                         # Update existing plan
-                        result = get_supabase_client().table('user_plans').update({
+                        result = client.table('user_plans').update({
                             'plan_data': save_data,
                             'updated_at': datetime.now().isoformat()
                         }).eq('id', existing.data[0]['id']).execute()
                     else:
                         # Insert new plan
-                        result = get_supabase_client().table('user_plans').insert(plan_record).execute()
+                        result = client.table('user_plans').insert(plan_record).execute()
                     
                     return jsonify({'message': 'Plan saved successfully', 'filename': f"{plan_name}.json"})
                 except Exception as e:
@@ -1119,8 +1125,13 @@ def list_plans():
             
             if user_info:
                 try:
+                    # Use admin client for authenticated users, regular client for anonymous
+                    client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
+                    if not client:
+                        raise Exception("Supabase client not available")
+                    
                     # Query plans for this user
-                    query = get_supabase_client().table('user_plans').select('id, plan_name, created_at, updated_at')
+                    query = client.table('user_plans').select('id, plan_name, created_at, updated_at')
                     
                     if user_info['type'] == 'authenticated':
                         query = query.eq('owner_id', user_info['id'])
@@ -1174,8 +1185,13 @@ def load_plan(filename):
             
             if user_info:
                 try:
+                    # Use admin client for authenticated users, regular client for anonymous
+                    client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
+                    if not client:
+                        raise Exception("Supabase client not available")
+                    
                     # Query plan for this user
-                    query = get_supabase_client().table('user_plans').select('plan_data')
+                    query = client.table('user_plans').select('plan_data')
                     
                     if user_info['type'] == 'authenticated':
                         query = query.eq('owner_id', user_info['id'])
@@ -1221,8 +1237,13 @@ def delete_plan(filename):
             
             if user_info:
                 try:
+                    # Use admin client for authenticated users, regular client for anonymous
+                    client = get_supabase_admin_client() if user_info['type'] == 'authenticated' else get_supabase_client()
+                    if not client:
+                        raise Exception("Supabase client not available")
+                    
                     # Delete plan for this user
-                    query = get_supabase_client().table('user_plans').delete()
+                    query = client.table('user_plans').delete()
                     
                     if user_info['type'] == 'authenticated':
                         query = query.eq('owner_id', user_info['id'])
@@ -1425,8 +1446,12 @@ def list_anonymous_plans():
         if not anonymous_id:
             return jsonify({'error': 'Anonymous ID required'}), 400
         
-        # Query plans for this anonymous ID
-        result = get_supabase_client().table('user_plans').select('id, plan_name, created_at, updated_at').eq('anonymous_id', anonymous_id).order('updated_at', desc=True).execute()
+        # Query plans for this anonymous ID - use admin client to bypass RLS
+        admin_client = get_supabase_admin_client()
+        if not admin_client:
+            return jsonify({'error': 'Database service not available'}), 500
+        
+        result = admin_client.table('user_plans').select('id, plan_name, created_at, updated_at').eq('anonymous_id', anonymous_id).order('updated_at', desc=True).execute()
         
         plans = []
         for plan in result.data:
