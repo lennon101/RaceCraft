@@ -48,6 +48,7 @@ Major Changes in v1.2.1:
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, after_this_request
+import sys
 import xml.etree.ElementTree as ET
 import math
 import io
@@ -63,6 +64,12 @@ from whitenoise import WhiteNoise
 
 # Load environment variables
 load_dotenv()
+
+# Helper function for logging that ensures output is visible in Railway/gunicorn
+def log_message(message):
+    """Print message and immediately flush to ensure it appears in logs."""
+    print(message)
+    sys.stdout.flush()
 
 # Supabase Configuration
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
@@ -1067,20 +1074,24 @@ def save_plan():
             'dropbag_contents': data.get('dropbag_contents')
         }
         
+        log_message(f"🚀 SAVE PLAN REQUEST START - Plan name: '{plan_name}'")
+        log_message(f"   Supabase enabled: {is_supabase_enabled()}")
+        
         # Try Supabase first if enabled
         if is_supabase_enabled():
             user_info = get_user_id_from_request()
+            log_message(f"   User info from request: {user_info}")
             
             if user_info:
-                print(f"📝 Save plan request - User type: {user_info.get('type')}, ID: {user_info.get('id')}")
+                log_message(f"📝 Save plan request - User type: {user_info.get('type')}, ID: {user_info.get('id')}")
                 try:
                     # Determine owner_id or anonymous_id
                     owner_id = user_info['id'] if user_info['type'] == 'authenticated' else None
                     anonymous_id = user_info['id'] if user_info['type'] == 'anonymous' else None
                     
-                    print(f"  Plan name: '{plan_name}'")
-                    print(f"  Owner ID: {owner_id}")
-                    print(f"  Anonymous ID: {anonymous_id}")
+                    log_message(f"  Plan name: '{plan_name}'")
+                    log_message(f"  Owner ID: {owner_id}")
+                    log_message(f"  Anonymous ID: {anonymous_id}")
                     
                     # Use admin client for authenticated users (bypasses RLS since we've already validated)
                     # Use regular client for anonymous users (RLS allows anonymous_id based access)
@@ -1089,7 +1100,7 @@ def save_plan():
                         # For authenticated users, this is a configuration error - don't fall back
                         if owner_id:
                             error_msg = "Supabase admin client not available. SUPABASE_SERVICE_KEY may not be set."
-                            print(f"ERROR: {error_msg}")
+                            log_message(f"ERROR: {error_msg}")
                             return jsonify({'error': error_msg}), 500
                         # For anonymous users, fall through to file-based storage
                         raise Exception("Supabase client not available for anonymous user")
@@ -1124,16 +1135,16 @@ def save_plan():
                         # Verify the update succeeded
                         if hasattr(result, 'error') and result.error:
                             error_msg = f"Failed to update plan: {result.error}"
-                            print(f"❌ {error_msg}")
+                            log_message(f"❌ {error_msg}")
                             return jsonify({'error': error_msg}), 500
                         
                         if not result.data:
                             error_msg = f"Update returned no data - operation may have failed"
-                            print(f"❌ {error_msg}")
+                            log_message(f"❌ {error_msg}")
                             return jsonify({'error': error_msg}), 500
                             
-                        print(f"✓ Updated plan '{plan_name}' for user {owner_id or anonymous_id}")
-                        print(f"  Result data: {result.data}")
+                        log_message(f"✓ Updated plan '{plan_name}' for user {owner_id or anonymous_id}")
+                        log_message(f"  Result data: {result.data}")
                     else:
                         # Insert new plan
                         result = client.table('user_plans').insert(plan_record).execute()
@@ -1141,29 +1152,35 @@ def save_plan():
                         # Verify the insert succeeded
                         if hasattr(result, 'error') and result.error:
                             error_msg = f"Failed to insert plan: {result.error}"
-                            print(f"❌ {error_msg}")
+                            log_message(f"❌ {error_msg}")
                             return jsonify({'error': error_msg}), 500
                         
                         if not result.data:
                             error_msg = f"Insert returned no data - operation may have failed. Check RLS policies."
-                            print(f"❌ {error_msg}")
-                            print(f"  Attempted insert with owner_id={owner_id}, anonymous_id={anonymous_id}")
+                            log_message(f"❌ {error_msg}")
+                            log_message(f"  Attempted insert with owner_id={owner_id}, anonymous_id={anonymous_id}")
                             return jsonify({'error': error_msg}), 500
                             
-                        print(f"✓ Inserted new plan '{plan_name}' for user {owner_id or anonymous_id}")
-                        print(f"  Result data: {result.data}")
+                        log_message(f"✓ Inserted new plan '{plan_name}' for user {owner_id or anonymous_id}")
+                        log_message(f"  Result data: {result.data}")
                     
                     return jsonify({'message': 'Plan saved successfully', 'filename': f"{plan_name}.json"})
                 except Exception as e:
-                    print(f"Supabase save error: {e}")
+                    log_message(f"Supabase save error: {e}")
                     import traceback
                     traceback.print_exc()
+                    sys.stdout.flush()
                     # For authenticated users, return error instead of falling back
                     if user_info.get('type') == 'authenticated':
                         return jsonify({'error': f'Failed to save plan to database: {str(e)}'}), 500
                     # Fall through to file-based storage for anonymous users
+            else:
+                log_message(f"⚠️  No user_info - falling back to file-based storage")
+        else:
+            log_message(f"⚠️  Supabase not enabled - falling back to file-based storage")
         
         # Fall back to file-based storage
+        log_message(f"💾 Using file-based storage for plan: '{plan_name}'")
         plan_filename = f"{plan_name}.json"
         filepath = os.path.join(app.config['SAVED_PLANS_FOLDER'], plan_filename)
         
