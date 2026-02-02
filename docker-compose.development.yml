@@ -8,6 +8,13 @@ services:
       - "5000:5000"
     volumes:
       - racecraft-data:/app/data
+    environment:
+      # Supabase Configuration (set these in your .env file or uncomment and fill in)
+      # - SUPABASE_URL=${SUPABASE_URL}
+      # - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      # - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
     command: ["python", "app.py"]
     restart: unless-stopped
     networks:

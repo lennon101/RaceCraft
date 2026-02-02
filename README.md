@@ -11,6 +11,11 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 - **GPX Route Upload**: Drag and drop your race route
 - **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](FATIGUE_MODEL.md))
 - **Terrain Difficulty System**: Sophisticated trail surface modelling with skill adjustment ([learn more](TERRAIN_DIFFICULTY.md))
+- **User Authentication**: Optional Supabase-powered authentication for secure data management
+  - Anonymous access for low-friction use
+  - Seamless upgrade from anonymous to authenticated account
+  - Secure data isolation per user
+  - Multi-device sync for authenticated users
 - **Real-time Calculations**: Results update as you adjust parameters
 - **Save/Load Plans**: Store multiple race plans for different events
 - **Interactive Results**: Visual summary cards and detailed segment breakdown
@@ -85,7 +90,27 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 4. **Access the application:**
    Open your browser to `http://localhost:5000`
 
-### Option 3: Run Locally (Development)
+### Option 3: Railway Deployment
+
+Deploy directly from GitHub to Railway.app with one click:
+
+1. **Connect to Railway:**
+   - Go to [Railway.app](https://railway.app)
+   - Create a new project from GitHub repo
+   - Select the `lennon101/RaceCraft` repository
+
+2. **Automatic Deployment:**
+   - Railway detects Python automatically
+   - Uses `Procfile` for gunicorn configuration
+   - Static files served via WhiteNoise middleware
+
+3. **Access your app:**
+   - Railway provides a public URL
+   - App deploys automatically on each commit
+
+For detailed Railway deployment instructions, see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md).
+
+### Option 4: Run Locally (Development)
 
 1. **Clone the repository:**
    ```bash
@@ -104,7 +129,64 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
    ```
 
 4. **Open your browser:**
-   Navigate to `http://localhost:5000`
+   Navigate to `http://localhost:5001` (dev server uses port 5001, Docker uses 5000)
+
+## Authentication Setup (Optional)
+
+RaceCraft supports optional Supabase authentication for secure user data management and multi-device sync. The app works in two modes:
+
+- **Legacy Mode (Default)**: No authentication required. Plans are stored locally or in file-based storage.
+- **Authenticated Mode**: Supabase-powered authentication with secure data isolation and multi-device sync.
+
+### Anonymous Users
+
+By default, users can access RaceCraft without signing up:
+- A temporary anonymous session is created automatically
+- Plans can be saved and accessed during the session
+- Data persists locally in the browser
+- Gentle prompts encourage account creation for multi-device access
+
+### Setting Up Authentication
+
+1. **Create a Supabase project** at [supabase.com](https://supabase.com)
+
+2. **Run the database migration**:
+   - Go to your Supabase project dashboard
+   - Navigate to **SQL Editor**
+   - Run the SQL script from `supabase/migrations/001_create_user_plans.sql`
+   - See [supabase/SETUP.md](supabase/SETUP.md) for detailed instructions
+
+3. **Configure environment variables**:
+   ```bash
+   # Create a .env file or set environment variables
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your_anon_key_here
+   SUPABASE_SERVICE_KEY=your_service_key_here
+   ```
+
+4. **Deploy with Docker Compose**:
+   ```yaml
+   services:
+     fuel-planner:
+       image: lennon101/racecraft:latest
+       environment:
+         - SUPABASE_URL=https://your-project.supabase.co
+         - SUPABASE_ANON_KEY=your_anon_key
+         - SUPABASE_SERVICE_KEY=your_service_key
+         - FLASK_ENV=production
+   ```
+
+5. **Restart the application** - authentication will be automatically enabled
+
+### Authentication Features
+
+- **Email + Password**: Traditional sign up and sign in
+- **Magic Links**: Passwordless email authentication
+- **Anonymous Migration**: Existing anonymous plans are automatically migrated when creating an account
+- **Data Security**: Row Level Security (RLS) ensures users can only access their own data
+- **Multi-Device Sync**: Access your plans from any device when authenticated
+
+For complete setup instructions, see [supabase/SETUP.md](supabase/SETUP.md).
 
 ## Project Structure
 
@@ -128,13 +210,22 @@ Fuel-Plan-Tool/
 
 ## API Endpoints
 
+### Race Planning
 - `POST /api/upload-gpx` - Upload and parse GPX file
 - `POST /api/calculate` - Calculate race plan
-- `POST /api/save-plan` - Save race plan
-- `GET /api/list-plans` - List all saved plans
-- `GET /api/load-plan/<filename>` - Load a specific plan
-- `DELETE /api/delete-plan/<filename>` - Delete a plan
 - `POST /api/export-csv` - Export race plan to CSV
+
+### Plan Management
+- `POST /api/save-plan` - Save race plan (supports both authenticated and anonymous users)
+- `GET /api/list-plans` - List all saved plans (filtered by user ownership)
+- `GET /api/load-plan/<filename>` - Load a specific plan (with ownership verification)
+- `DELETE /api/delete-plan/<filename>` - Delete a plan (with ownership verification)
+- `POST /api/export-plan` - Export plan as JSON
+- `POST /api/import-plan` - Import plan from JSON
+
+### Authentication (when Supabase is configured)
+- `GET /api/auth/check` - Check if authentication is enabled
+- `POST /api/auth/migrate` - Migrate anonymous plans to authenticated account
 
 ## Configuration
 

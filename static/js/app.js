@@ -42,10 +42,12 @@ const noResults = document.getElementById('no-results');
 // Modal elements
 const saveModal = document.getElementById('save-modal');
 const loadModal = document.getElementById('load-modal');
+const exportImportModal = document.getElementById('export-import-modal');
 const saveConfirmBtn = document.getElementById('save-confirm-btn');
 const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
+const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
@@ -56,6 +58,10 @@ const terrainSkillContainer = document.getElementById('terrain-skill-container')
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
 const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
+const exportImportBtn = document.getElementById('export-import-btn');
+const exportPlanBtn = document.getElementById('export-plan-btn');
+const importPlanBtn = document.getElementById('import-plan-btn');
+const importPlanFileInput = document.getElementById('import-plan-file-input');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -72,6 +78,11 @@ saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
+exportImportBtn.addEventListener('click', showExportImportModal);
+exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
+exportPlanBtn.addEventListener('click', exportCurrentPlan);
+importPlanBtn.addEventListener('click', () => importPlanFileInput.click());
+importPlanFileInput.addEventListener('change', handleImportPlan);
 
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
@@ -927,6 +938,11 @@ async function calculateRacePlan() {
         skill_level: skillLevel
     };
 
+    // Include elevation profile if available (from loaded plan)
+    if (currentPlan.elevation_profile) {
+        requestData.elevation_profile = currentPlan.elevation_profile;
+    }
+
     try {
         const response = await fetch('/api/calculate', {
             method: 'POST',
@@ -942,6 +958,10 @@ async function calculateRacePlan() {
             currentPlan.segments = data.segments;
             currentPlan.summary = data.summary;
             currentPlan.race_start_time = raceStartTime;
+            // Update elevation profile if returned (in case it was recalculated)
+            if (data.elevation_profile) {
+                currentPlan.elevation_profile = data.elevation_profile;
+            }
             displayResults(data);
             saveBtn.disabled = false;
             exportBtn.disabled = false;
@@ -1162,11 +1182,12 @@ async function savePlan(forceSaveAs = false) {
     };
 
     try {
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
         const response = await fetch('/api/save-plan', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify(saveData)
         });
 
@@ -1178,6 +1199,9 @@ async function savePlan(forceSaveAs = false) {
             
             // Always update to the filename returned by the server
             currentPlan.loadedFilename = data.filename;
+            
+            // Mark that user has saved plans (for anonymous notice)
+            localStorage.setItem('has_saved_plans', 'true');
             
             // Show appropriate message based on operation
             if (wasUpdate) {
@@ -1200,7 +1224,12 @@ async function savePlan(forceSaveAs = false) {
 
 async function loadSavedPlans() {
     try {
-        const response = await fetch('/api/list-plans');
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/list-plans', {
+            headers: headers
+        });
         const data = await response.json();
 
         if (response.ok) {
@@ -1240,7 +1269,12 @@ async function loadSavedPlans() {
 
 async function loadPlan(filename) {
     try {
-        const response = await fetch(`/api/load-plan/${filename}`);
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch(`/api/load-plan/${filename}`, {
+            headers: headers
+        });
         const data = await response.json();
 
         if (response.ok) {
@@ -1317,8 +1351,12 @@ async function deletePlan(filename) {
     }
 
     try {
+        // Get auth headers from auth manager
+        const headers = await authManager.getAuthHeaders();
+        
         const response = await fetch(`/api/delete-plan/${filename}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: headers
         });
 
         const data = await response.json();
@@ -1330,6 +1368,189 @@ async function deletePlan(filename) {
         }
     } catch (error) {
         alert('Error deleting plan: ' + error.message);
+    }
+}
+
+function showExportImportModal() {
+    // Enable/disable export button based on whether a plan is loaded
+    if (currentPlan.segments && currentPlan.segments.length > 0) {
+        exportPlanBtn.disabled = false;
+    } else {
+        exportPlanBtn.disabled = true;
+    }
+    exportImportModal.classList.add('active');
+}
+
+async function exportCurrentPlan() {
+    if (!currentPlan.segments) {
+        alert('Please calculate or load a race plan first');
+        return;
+    }
+
+    // Gather all current plan data
+    const planData = {
+        plan_name: currentPlan.loadedFilename ? currentPlan.loadedFilename.replace('.json', '') : 'race_plan',
+        gpx_filename: currentPlan.gpx_filename,
+        checkpoint_distances: currentPlan.checkpoint_distances,
+        checkpoint_dropbags: currentPlan.checkpoint_dropbags,
+        segment_terrain_types: currentPlan.segment_terrain_types,
+        avg_cp_time: parseFloat(document.getElementById('avg-cp-time').value) || 5,
+        z2_pace: parseFloat(document.getElementById('z2-pace-min').value) + 
+                 parseFloat(document.getElementById('z2-pace-sec').value) / 60,
+        climbing_ability: document.getElementById('climbing-ability').value,
+        carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value) || 60,
+        water_per_hour: parseFloat(document.getElementById('water-per-hour').value) || 500,
+        carbs_per_gel: document.getElementById('carbs-per-gel').value ? 
+                       parseFloat(document.getElementById('carbs-per-gel').value) : null,
+        race_start_time: document.getElementById('race-start-time').value || null,
+        fatigue_enabled: document.getElementById('fatigue-enabled').checked,
+        fitness_level: document.getElementById('fitness-level').value,
+        skill_level: parseFloat(document.getElementById('skill-level').value),
+        segments: currentPlan.segments,
+        summary: currentPlan.summary,
+        elevation_profile: currentPlan.elevation_profile,
+        dropbag_contents: currentPlan.dropbag_contents
+    };
+
+    try {
+        const response = await fetch('/api/export-plan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(planData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Create a Blob with the JSON data
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const planName = planData.plan_name || 'race_plan';
+            a.download = `${planName}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert('Plan exported successfully!');
+            hideModal(exportImportModal);
+        } else {
+            alert('Error exporting plan: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error exporting plan: ' + error.message);
+    }
+}
+
+async function handleImportPlan(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+
+    // Reset the file input so the same file can be selected again
+    event.target.value = '';
+
+    try {
+        // Read the file
+        const text = await file.text();
+        let importData;
+        
+        try {
+            importData = JSON.parse(text);
+        } catch (e) {
+            alert('Error: Invalid JSON file. Please select a valid JSON file exported from RaceCraft.');
+            return;
+        }
+
+        // Confirm import
+        const confirmed = confirm(
+            'This will replace your current plan with the imported plan.\n\n' +
+            'Do you want to continue?'
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        // Send to backend for validation
+        const response = await fetch('/api/import-plan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(importData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // Load the imported plan data into the form
+            const data = result.plan;
+            
+            // Clear current plan tracking
+            currentPlan.loadedFilename = null;
+            
+            // Load plan data into form
+            currentPlan.gpx_filename = data.gpx_filename;
+            currentPlan.checkpoint_distances = data.checkpoint_distances || [];
+            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
+            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
+            
+            document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
+            document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            
+            const z2Pace = data.z2_pace || 6.5;
+            document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
+            document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
+            
+            document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
+            document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
+            document.getElementById('water-per-hour').value = data.water_per_hour || 500;
+            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
+            document.getElementById('race-start-time').value = data.race_start_time || '';
+            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
+            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
+            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            
+            // Load terrain settings
+            const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
+            document.getElementById('terrain-enabled').checked = hasTerrainTypes;
+            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
+
+            // Generate checkpoint inputs
+            generateCheckpointInputs();
+
+            // Load results if available
+            if (data.segments && data.summary) {
+                currentPlan.segments = data.segments;
+                currentPlan.summary = data.summary;
+                currentPlan.total_distance = data.summary.total_distance;
+                currentPlan.race_start_time = data.race_start_time;
+                currentPlan.elevation_profile = data.elevation_profile || null;
+                currentPlan.dropbag_contents = data.dropbag_contents || null;
+                
+                displayResults(data);
+                
+                saveBtn.disabled = false;
+                exportBtn.disabled = false;
+            }
+
+            hideModal(exportImportModal);
+            alert('Plan imported successfully!');
+        } else {
+            alert('Error importing plan: ' + result.error);
+        }
+    } catch (error) {
+        alert('Error importing plan: ' + error.message);
     }
 }
 

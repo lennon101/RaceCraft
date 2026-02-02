@@ -1,3 +1,5 @@
 saved_plans/
 __pycache__/
 static/uploads/
+.env
+FuelPlanData/
