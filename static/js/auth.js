@@ -77,52 +77,48 @@ class AuthManager {
 
     async handleAuthStateChange() {
         if (this.currentUser) {
-            // User logged in - check for anonymous data
-            const anonymousId = localStorage.getItem('racecraft_anonymous_id');
-            if (anonymousId) {
-                await this.showMigrationModal(anonymousId);
-            }
+            // User logged in - check for local plans on disk (not anonymous Supabase plans)
+            await this.checkForLocalPlans();
         }
         this.renderAuthUI();
     }
 
-    async showMigrationModal(anonymousId) {
+    async checkForLocalPlans() {
         try {
-            // Fetch anonymous plans
-            const response = await fetch('/api/auth/list-anonymous-plans', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ anonymous_id: anonymousId })
-            });
+            // Fetch local plans from disk
+            const response = await fetch('/api/auth/list-local-plans');
 
             if (!response.ok) {
-                console.error('Failed to fetch anonymous plans');
+                console.error('Failed to fetch local plans');
                 return;
             }
 
             const data = await response.json();
             
             if (!data.plans || data.plans.length === 0) {
-                // No plans to migrate, just clear the anonymous ID
-                localStorage.removeItem('racecraft_anonymous_id');
-                this.anonymousId = null;
+                // No local plans to migrate
                 return;
             }
 
-            // Store anonymous plans for migration
-            this.anonymousPlans = data.plans;
-            this.pendingAnonymousId = anonymousId;
+            // Store local plans for migration
+            this.localPlans = data.plans;
             
             // Show migration modal
-            this.renderMigrationModal();
+            this.renderLocalMigrationModal();
         } catch (error) {
-            console.error('Error showing migration modal:', error);
+            console.error('Error checking for local plans:', error);
         }
     }
 
+    async showMigrationModal(anonymousId) {
+        // This method is kept for backward compatibility but is no longer used
+        // Migration now happens from local disk plans, not anonymous Supabase plans
+        console.log('showMigrationModal called - this is deprecated, use checkForLocalPlans instead');
+    }
+
     renderMigrationModal() {
+        // Legacy method for anonymous Supabase plans migration
+        // Kept for backward compatibility but not actively used
         const modal = document.getElementById('migration-modal');
         const plansList = document.getElementById('migration-plans-list');
         
@@ -174,6 +170,64 @@ class AuthManager {
         modal.style.display = 'flex';
     }
 
+    renderLocalMigrationModal() {
+        const modal = document.getElementById('migration-modal');
+        const plansList = document.getElementById('migration-plans-list');
+        
+        if (!modal || !plansList || !this.localPlans) return;
+
+        // Update modal title and description
+        const title = modal.querySelector('h2');
+        const description = modal.querySelector('.info-text');
+        if (title) title.textContent = 'Import Local Plans to Your Account';
+        if (description) description.textContent = 'You have some race plans saved locally. Would you like to import them into your account?';
+
+        // Clear previous content
+        plansList.innerHTML = '';
+
+        // Add select all checkbox
+        const selectAllDiv = document.createElement('div');
+        selectAllDiv.className = 'migration-select-all';
+        selectAllDiv.innerHTML = `
+            <input type="checkbox" id="migration-select-all" checked />
+            <label for="migration-select-all">Select All</label>
+        `;
+        plansList.appendChild(selectAllDiv);
+
+        // Add plan items (use filename as id for local plans)
+        this.localPlans.forEach(plan => {
+            const planDiv = document.createElement('div');
+            planDiv.className = 'migration-plan-item';
+            planDiv.innerHTML = `
+                <input type="checkbox" class="migration-plan-checkbox" data-filename="${plan.id}" checked />
+                <div class="migration-plan-info">
+                    <div class="migration-plan-name">${plan.name}</div>
+                    <div class="migration-plan-date">Last updated: ${plan.updated_at}</div>
+                </div>
+            `;
+            plansList.appendChild(planDiv);
+        });
+
+        // Set up select all functionality
+        const selectAllCheckbox = document.getElementById('migration-select-all');
+        const planCheckboxes = document.querySelectorAll('.migration-plan-checkbox');
+        
+        selectAllCheckbox.addEventListener('change', (e) => {
+            planCheckboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+
+        // Update select all when individual checkboxes change
+        planCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const allChecked = Array.from(planCheckboxes).every(checkbox => checkbox.checked);
+                selectAllCheckbox.checked = allChecked;
+            });
+        });
+
+        // Show modal
+        modal.style.display = 'flex';
+    }
+
     async migrateAnonymousData(anonymousId) {
         // This method is no longer used for automatic migration
         // Kept for backward compatibility
@@ -182,6 +236,90 @@ class AuthManager {
 
     async performMigration() {
         const selectedCheckboxes = document.querySelectorAll('.migration-plan-checkbox:checked');
+        
+        // Check if we're migrating local plans (by filename) or anonymous plans (by plan ID)
+        const hasFilename = selectedCheckboxes.length > 0 && selectedCheckboxes[0].dataset.filename;
+        
+        if (hasFilename) {
+            // Migrating local disk plans
+            await this.performLocalMigration(selectedCheckboxes);
+        } else {
+            // Migrating anonymous Supabase plans (legacy)
+            await this.performAnonymousMigration(selectedCheckboxes);
+        }
+    }
+
+    async performLocalMigration(selectedCheckboxes) {
+        const selectedFilenames = Array.from(selectedCheckboxes).map(cb => cb.dataset.filename);
+
+        if (selectedFilenames.length === 0) {
+            document.getElementById('migration-modal').style.display = 'none';
+            return;
+        }
+
+        try {
+            const session = await this.supabase.auth.getSession();
+            if (!session?.data?.session?.access_token) {
+                this.showNotification('Please sign in to migrate plans', 'error');
+                return;
+            }
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            // Migrate each selected plan
+            for (const filename of selectedFilenames) {
+                try {
+                    const response = await fetch('/api/auth/migrate-local-plan', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.data.session.access_token}`
+                        },
+                        body: JSON.stringify({ filename })
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        const data = await response.json();
+                        console.error(`Failed to migrate ${filename}:`, data.error);
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error(`Error migrating ${filename}:`, error);
+                }
+            }
+
+            // Clear local plans reference
+            this.localPlans = null;
+
+            // Hide modal
+            const modal = document.getElementById('migration-modal');
+            if (modal) modal.style.display = 'none';
+
+            // Show result message
+            if (successCount > 0) {
+                this.showNotification(
+                    `Successfully imported ${successCount} plan(s) to your account!`, 
+                    'success'
+                );
+            }
+
+            if (errorCount > 0) {
+                this.showNotification(
+                    `Failed to import ${errorCount} plan(s). Please try again.`, 
+                    'error'
+                );
+            }
+        } catch (error) {
+            console.error('Migration error:', error);
+            this.showNotification('Failed to import plans. Please try again.', 'error');
+        }
+    }
+
+    async performAnonymousMigration(selectedCheckboxes) {
         const selectedPlanIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.planId);
 
         try {
@@ -228,11 +366,12 @@ class AuthManager {
     }
 
     skipMigration() {
-        // Clear anonymous ID without migrating
+        // Clear migration data without migrating
         localStorage.removeItem('racecraft_anonymous_id');
         this.anonymousId = null;
         this.pendingAnonymousId = null;
         this.anonymousPlans = null;
+        this.localPlans = null;
         
         // Hide modal
         const modal = document.getElementById('migration-modal');
