@@ -47,6 +47,7 @@ const saveConfirmBtn = document.getElementById('save-confirm-btn');
 const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
+const importUnownedPlansBtn = document.getElementById('import-unowned-plans-btn');
 const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
@@ -78,6 +79,7 @@ saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
+importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
 exportImportBtn.addEventListener('click', showExportImportModal);
 exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
 exportPlanBtn.addEventListener('click', exportCurrentPlan);
@@ -470,12 +472,8 @@ function renderElevationChart(elevationProfile, segments) {
     });
 }
 
-function clearAll() {
-    if (!confirm('Are you sure you want to clear all data and start again?')) {
-        return;
-    }
-    
-    // Reset state
+function resetPlanState() {
+    // Reset currentPlan state completely
     currentPlan = {
         gpx_filename: null,
         checkpoint_distances: [],
@@ -485,19 +483,35 @@ function clearAll() {
         summary: null,
         elevation_profile: null,
         dropbag_contents: null,
-        loadedFilename: null  // Clear loaded filename
+        loadedFilename: null,
+        loadedSource: null
     };
     
-    // Destroy chart
+    // Destroy elevation chart
     if (elevationChart) {
         elevationChart.destroy();
         elevationChart = null;
     }
     
+    // Clear GPX info box
+    gpxInfoBox.style.display = 'none';
+    
+    // Hide results
+    resultsContainer.style.display = 'none';
+    noResults.style.display = 'block';
+    
+    // Disable save/export buttons
+    saveBtn.disabled = true;
+    exportBtn.disabled = true;
+}
+
+function clearAllInputs() {
+    // Reset state using resetPlanState
+    resetPlanState();
+    
     // Reset file input
     gpxFileInput.value = '';
     fileNameDisplay.textContent = 'Choose GPX file...';
-    gpxInfoBox.style.display = 'none';
     
     // Reset all inputs to defaults
     document.getElementById('num-checkpoints').value = 3;
@@ -517,22 +531,29 @@ function clearAll() {
     document.getElementById('default-terrain-type').value = '';
     terrainSkillContainer.style.display = 'none';
     
-    // Regenerate checkpoint inputs
+    // Regenerate checkpoint inputs with default value
     generateCheckpointInputs();
+}
+
+function clearAll() {
+    if (!confirm('Are you sure you want to clear all data and start again?')) {
+        return;
+    }
     
-    // Hide results
-    resultsContainer.style.display = 'none';
-    noResults.style.display = 'block';
-    
-    // Disable buttons
-    saveBtn.disabled = true;
-    exportBtn.disabled = true;
+    // Call the shared clear inputs function
+    clearAllInputs();
 }
 
 async function handleGPXUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Reset all inputs to defaults when uploading a new GPX
+    // This ensures a clean slate and prevents confusion when switching between plans
+    // Per requirement: Call "Clear and Start again" logic before loading GPX
+    clearAllInputs();
+
+    // Set the file name display (clearAllInputs resets it, so we set it again)
     fileNameDisplay.textContent = file.name;
     
     const formData = new FormData();
@@ -1240,21 +1261,58 @@ async function loadSavedPlans() {
                 return;
             }
 
+            // Check if we have local plans and user is authenticated - show migration prompt
+            const hasLocalPlans = data.plans.some(p => p.source === 'local');
+            const isAuthenticated = authManager.currentUser !== null;
+            
+            if (hasLocalPlans && isAuthenticated) {
+                // Add migration prompt at the top
+                const migrationDiv = document.createElement('div');
+                migrationDiv.className = 'migration-prompt';
+                migrationDiv.innerHTML = `
+                    <div class="migration-prompt-content">
+                        <span class="mdi mdi-cloud-upload"></span>
+                        <span>You have local plans. <a href="#" id="migrate-local-plans-link">Import them to your account</a></span>
+                    </div>
+                `;
+                plansList.appendChild(migrationDiv);
+                
+                // Add click handler for migration link
+                document.getElementById('migrate-local-plans-link').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    showLocalMigrationModal();
+                });
+            }
+
             data.plans.forEach(plan => {
                 const div = document.createElement('div');
                 div.className = 'plan-item';
+                
+                // Add source badge
+                let sourceBadge;
+                if (plan.source === 'local') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-local">Local</span>';
+                } else if (plan.source === 'unowned') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-unowned">Unowned</span>';
+                } else {
+                    sourceBadge = '<span class="plan-source-badge plan-source-cloud">Account</span>';
+                }
+                
                 div.innerHTML = `
                     <div class="plan-info">
-                        <div class="plan-name">${plan.name}</div>
+                        <div class="plan-name">
+                            ${plan.name}
+                            ${sourceBadge}
+                        </div>
                         <div class="plan-date">${plan.modified}</div>
                     </div>
-                    <button class="plan-delete" data-filename="${plan.filename}">Delete</button>
+                    <button class="plan-delete" data-filename="${plan.filename}" data-source="${plan.source}">Delete</button>
                 `;
                 
-                div.querySelector('.plan-info').addEventListener('click', () => loadPlan(plan.filename));
+                div.querySelector('.plan-info').addEventListener('click', () => loadPlan(plan.filename, plan.source));
                 div.querySelector('.plan-delete').addEventListener('click', (e) => {
                     e.stopPropagation();
-                    deletePlan(plan.filename);
+                    deletePlan(plan.filename, plan.source);
                 });
                 
                 plansList.appendChild(div);
@@ -1267,12 +1325,158 @@ async function loadSavedPlans() {
     }
 }
 
-async function loadPlan(filename) {
+async function importUnownedPlans() {
+    try {
+        const response = await fetch('/api/list-unowned-plans');
+        const data = await response.json();
+
+        if (response.ok) {
+            plansList.innerHTML = '';
+            
+            if (data.plans.length === 0) {
+                plansList.innerHTML = '<p style="text-align: center; color: #64748b;">No unowned or local plans found</p>';
+                return;
+            }
+
+            // Add info message
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'migration-prompt';
+            infoDiv.innerHTML = `
+                <div class="migration-prompt-content">
+                    <span class="mdi mdi-information"></span>
+                    <span>Showing local and unowned plans. Click a plan to load it, or claim it to add to your account.</span>
+                </div>
+            `;
+            plansList.appendChild(infoDiv);
+
+            data.plans.forEach(plan => {
+                const div = document.createElement('div');
+                div.className = 'plan-item';
+                
+                // Add source badge
+                let sourceBadge;
+                if (plan.source === 'local') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-local">Local</span>';
+                } else if (plan.source === 'unowned') {
+                    sourceBadge = '<span class="plan-source-badge plan-source-unowned">Unowned</span>';
+                }
+                
+                // Add action buttons based on source and authentication status
+                let actionButtons = '';
+                if (plan.source === 'unowned' && authManager.currentUser) {
+                    // For unowned plans, show claim button if user is authenticated
+                    actionButtons = `
+                        <button class="plan-claim" data-plan-id="${plan.plan_id}" data-filename="${plan.filename}">Claim</button>
+                    `;
+                } else if (plan.source === 'local' && authManager.currentUser) {
+                    // For local plans, show import button if user is authenticated
+                    actionButtons = `
+                        <button class="plan-import" data-filename="${plan.filename}">Import to Account</button>
+                    `;
+                }
+                
+                div.innerHTML = `
+                    <div class="plan-info">
+                        <div class="plan-name">
+                            ${plan.name}
+                            ${sourceBadge}
+                        </div>
+                        <div class="plan-date">${plan.modified}</div>
+                    </div>
+                    ${actionButtons}
+                `;
+                
+                div.querySelector('.plan-info').addEventListener('click', () => loadPlan(plan.filename, plan.source));
+                
+                // Add handlers for action buttons
+                const claimBtn = div.querySelector('.plan-claim');
+                if (claimBtn) {
+                    claimBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        claimUnownedPlan(plan.plan_id, plan.filename);
+                    });
+                }
+                
+                const importBtn = div.querySelector('.plan-import');
+                if (importBtn) {
+                    importBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        importLocalPlanToAccount(plan.filename);
+                    });
+                }
+                
+                plansList.appendChild(div);
+            });
+        } else {
+            alert('Error loading unowned plans: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error loading unowned plans: ' + error.message);
+    }
+}
+
+async function claimUnownedPlan(planId, filename) {
+    if (!confirm(`Claim this plan and add it to your account?`)) {
+        return;
+    }
+    
+    try {
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/auth/claim-unowned-plan', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ plan_id: planId })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Plan claimed successfully!');
+            // Reload the unowned plans list
+            importUnownedPlans();
+        } else {
+            alert('Error claiming plan: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error claiming plan: ' + error.message);
+    }
+}
+
+async function importLocalPlanToAccount(filename) {
+    if (!confirm(`Import this local plan to your account?`)) {
+        return;
+    }
+    
+    try {
+        const headers = await authManager.getAuthHeaders();
+        
+        const response = await fetch('/api/auth/migrate-local-plan', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ filename: filename })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Plan imported successfully!');
+            // Reload the unowned plans list
+            importUnownedPlans();
+        } else {
+            alert('Error importing plan: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error importing plan: ' + error.message);
+    }
+}
+
+async function loadPlan(filename, source = 'local') {
     try {
         // Get auth headers from auth manager
         const headers = await authManager.getAuthHeaders();
         
-        const response = await fetch(`/api/load-plan/${filename}`, {
+        const response = await fetch(`/api/load-plan/${filename}?source=${source}`, {
             headers: headers
         });
         const data = await response.json();
@@ -1280,6 +1484,7 @@ async function loadPlan(filename) {
         if (response.ok) {
             // Track the loaded filename for save/save-as functionality
             currentPlan.loadedFilename = filename;
+            currentPlan.loadedSource = source;  // Track source for future saves
             
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
@@ -1345,7 +1550,7 @@ async function loadPlan(filename) {
     }
 }
 
-async function deletePlan(filename) {
+async function deletePlan(filename, source = 'local') {
     if (!confirm('Are you sure you want to delete this plan?')) {
         return;
     }
@@ -1354,7 +1559,7 @@ async function deletePlan(filename) {
         // Get auth headers from auth manager
         const headers = await authManager.getAuthHeaders();
         
-        const response = await fetch(`/api/delete-plan/${filename}`, {
+        const response = await fetch(`/api/delete-plan/${filename}?source=${source}`, {
             method: 'DELETE',
             headers: headers
         });
@@ -1684,6 +1889,169 @@ function setupNumericInputFiltering() {
             setupDecimalInput(element);
         }
     });
+}
+
+// Migration modal for local plans
+async function showLocalMigrationModal() {
+    try {
+        const response = await fetch('/api/auth/list-local-plans');
+        const data = await response.json();
+        
+        if (!response.ok || !data.plans || data.plans.length === 0) {
+            authManager.showNotification('No local plans found to migrate', 'info');
+            return;
+        }
+        
+        // Store plans for migration
+        authManager.localPlansToMigrate = data.plans;
+        
+        // Show migration modal
+        const modal = document.getElementById('migration-modal');
+        const plansList = document.getElementById('migration-plans-list');
+        
+        if (!modal || !plansList) return;
+        
+        // Update modal title and description for local migration
+        const title = modal.querySelector('h2');
+        const infoText = modal.querySelector('.info-text');
+        if (title) title.textContent = 'Import Local Plans to Your Account';
+        if (infoText) infoText.textContent = 'Select which local plans to import into your cloud account. Selected plans will be moved from local storage to your account.';
+        
+        // Clear previous content
+        plansList.innerHTML = '';
+        
+        // Add select all checkbox
+        const selectAllDiv = document.createElement('div');
+        selectAllDiv.className = 'migration-select-all';
+        selectAllDiv.innerHTML = `
+            <input type="checkbox" id="migration-select-all" checked />
+            <label for="migration-select-all">Select All</label>
+        `;
+        plansList.appendChild(selectAllDiv);
+        
+        // Add plan items
+        data.plans.forEach(plan => {
+            const planDiv = document.createElement('div');
+            planDiv.className = 'migration-plan-item';
+            planDiv.innerHTML = `
+                <input type="checkbox" class="migration-plan-checkbox" data-filename="${plan.id}" checked />
+                <div class="migration-plan-info">
+                    <div class="migration-plan-name">${plan.name}</div>
+                    <div class="migration-plan-date">Last updated: ${plan.updated_at}</div>
+                </div>
+            `;
+            plansList.appendChild(planDiv);
+        });
+        
+        // Set up select all functionality
+        const selectAllCheckbox = document.getElementById('migration-select-all');
+        const planCheckboxes = document.querySelectorAll('.migration-plan-checkbox');
+        
+        selectAllCheckbox.addEventListener('change', (e) => {
+            planCheckboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+        
+        // Update select all when individual checkboxes change
+        planCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const allChecked = Array.from(planCheckboxes).every(checkbox => checkbox.checked);
+                selectAllCheckbox.checked = allChecked;
+            });
+        });
+        
+        // Override import button handler for local migration
+        const importBtn = document.getElementById('migration-import-btn');
+        const skipBtn = document.getElementById('migration-skip-btn');
+        
+        // Remove old handlers
+        const newImportBtn = importBtn.cloneNode(true);
+        importBtn.parentNode.replaceChild(newImportBtn, importBtn);
+        const newSkipBtn = skipBtn.cloneNode(true);
+        skipBtn.parentNode.replaceChild(newSkipBtn, skipBtn);
+        
+        newImportBtn.addEventListener('click', async () => {
+            await performLocalMigration();
+        });
+        
+        newSkipBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        // Show modal
+        modal.style.display = 'flex';
+    } catch (error) {
+        console.error('Error showing migration modal:', error);
+        authManager.showNotification('Failed to load local plans', 'error');
+    }
+}
+
+async function performLocalMigration() {
+    const selectedCheckboxes = document.querySelectorAll('.migration-plan-checkbox:checked');
+    const selectedFilenames = Array.from(selectedCheckboxes).map(cb => cb.dataset.filename);
+    
+    if (selectedFilenames.length === 0) {
+        document.getElementById('migration-modal').style.display = 'none';
+        return;
+    }
+    
+    try {
+        const session = await authManager.supabase.auth.getSession();
+        if (!session?.data?.session?.access_token) {
+            authManager.showNotification('Please sign in to migrate plans', 'error');
+            return;
+        }
+        
+        let successCount = 0;
+        let errorCount = 0;
+        
+        // Migrate each selected plan
+        for (const filename of selectedFilenames) {
+            try {
+                const response = await fetch('/api/auth/migrate-local-plan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.data.session.access_token}`
+                    },
+                    body: JSON.stringify({ filename })
+                });
+                
+                if (response.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    const data = await response.json();
+                    console.error(`Failed to migrate ${filename}:`, data.error);
+                }
+            } catch (error) {
+                errorCount++;
+                console.error(`Error migrating ${filename}:`, error);
+            }
+        }
+        
+        // Hide modal
+        document.getElementById('migration-modal').style.display = 'none';
+        
+        // Show result message
+        if (successCount > 0) {
+            authManager.showNotification(
+                `Successfully imported ${successCount} plan(s) to your account!`, 
+                'success'
+            );
+            // Refresh the plans list
+            loadSavedPlans();
+        }
+        
+        if (errorCount > 0) {
+            authManager.showNotification(
+                `Failed to import ${errorCount} plan(s). Please try again.`, 
+                'error'
+            );
+        }
+    } catch (error) {
+        console.error('Migration error:', error);
+        authManager.showNotification('Failed to import plans. Please try again.', 'error');
+    }
 }
 
 // Initialize input filtering when DOM is loaded
