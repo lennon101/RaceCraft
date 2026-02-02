@@ -190,39 +190,67 @@ TERRAIN_DESCENT_FACTOR = 1.0   # 100% effect on descents
 def get_user_from_token(auth_header):
     """Extract and validate user from authorization header."""
     if not auth_header or not auth_header.startswith('Bearer '):
+        log_message(f"   Invalid auth header format")
         return None
     
     if not supabase_client:
+        log_message(f"   supabase_client not available for token validation")
         return None
     
     client = get_supabase_client()
     if not client:
+        log_message(f"   Failed to get supabase client")
         return None
     
     try:
         token = auth_header.replace('Bearer ', '')
+        log_message(f"   Validating token (length: {len(token)})")
         user = client.auth.get_user(token)
+        log_message(f"   Token validation successful: {bool(user)}")
+        if user:
+            log_message(f"   User object has .user attribute: {hasattr(user, 'user')}")
+            if hasattr(user, 'user'):
+                log_message(f"   user.user value: {user.user}")
         return user
     except Exception as e:
-        print(f"Error validating token: {e}")
+        log_message(f"   ❌ Error validating token: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
         return None
 
 
 def get_user_id_from_request():
     """Get user ID from request, supporting both authenticated and anonymous users."""
     auth_header = request.headers.get('Authorization')
+    log_message(f"🔐 get_user_id_from_request called")
+    log_message(f"   Authorization header present: {bool(auth_header)}")
+    log_message(f"   Authorization header value: {auth_header[:50] if auth_header else 'None'}...")
     
     # Try to get authenticated user
     if auth_header and supabase_client:
+        log_message(f"   Attempting to validate token...")
         user = get_user_from_token(auth_header)
+        log_message(f"   Token validation result: {user}")
         if user and hasattr(user, 'user') and user.user:
+            log_message(f"   ✓ Authenticated user found: {user.user.id}")
             return {'type': 'authenticated', 'id': user.user.id}
+        else:
+            log_message(f"   ❌ Token validation failed or returned no user")
+    else:
+        if not auth_header:
+            log_message(f"   ⚠️ No Authorization header in request")
+        if not supabase_client:
+            log_message(f"   ⚠️ supabase_client not available")
     
     # Fall back to anonymous ID from request
     anonymous_id = request.headers.get('X-Anonymous-ID')
+    log_message(f"   X-Anonymous-ID header: {anonymous_id}")
     if anonymous_id:
+        log_message(f"   Using anonymous ID: {anonymous_id}")
         return {'type': 'anonymous', 'id': anonymous_id}
     
+    log_message(f"   ❌ No user identification found - returning None")
     return None
 
 
