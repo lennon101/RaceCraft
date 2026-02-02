@@ -1,7 +1,12 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.4.0
+Version: v1.4.1
 Release Date: Feb 02, 2026
+
+Major Changes in v1.4.1:
+- Fix Supabase client initialization to be lazy and handle invalid credentials gracefully
+- Improved logging for authentication processes
+- Input fields now cleared on gpx load or user sign-out to prevent stale data issues
 
 Major Changes in v1.4.0:
 - Supabase Integration for User Authentication and Data Storage
