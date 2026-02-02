@@ -21,6 +21,32 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+    <!-- Hamburger Menu Button -->
+    <button class="hamburger-menu" id="hamburger-btn" aria-label="Toggle navigation menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+    </button>
+
+    <!-- Slide-out Navigation Menu -->
+    <nav class="side-menu" id="side-menu">
+        <div class="side-menu-header">
+            <h3>Navigation</h3>
+            <button class="close-menu" id="close-menu-btn" aria-label="Close menu">&times;</button>
+        </div>
+        <ul class="side-menu-links">
+            <li><a href="/" class="side-menu-link">
+                <span class="mdi mdi-run"></span> Race Planner
+            </a></li>
+            <li><a href="/season-planner" class="side-menu-link active">
+                <span class="mdi mdi-calendar-month"></span> Season Planner
+            </a></li>
+        </ul>
+    </nav>
+
+    <!-- Overlay -->
+    <div class="menu-overlay" id="menu-overlay"></div>
+
     <div class="container">
         <header>
             <div class="header-content">
@@ -151,6 +177,7 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/hamburger-menu.js') }}"></script>
     <script src="{{ url_for('static', filename='js/season-planner.js') }}"></script>
 </body>
 </html>
