@@ -242,9 +242,13 @@ def get_supabase_client():
     if supabase_client is None and is_supabase_enabled() and supabase_import_available:
         try:
             from supabase import create_client
+            print(f"Attempting to create Supabase anon client with URL: {SUPABASE_URL}")
             supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+            print("✓ Supabase anon client created successfully")
         except Exception as e:
-            print(f"Failed to create Supabase client: {e}")
+            print(f"❌ Failed to create Supabase client: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     return supabase_client
 
@@ -254,9 +258,13 @@ def get_supabase_admin_client():
     if supabase_admin_client is None and is_supabase_enabled() and supabase_import_available and SUPABASE_SERVICE_KEY:
         try:
             from supabase import create_client
+            print(f"Attempting to create Supabase admin client with URL: {SUPABASE_URL}")
             supabase_admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            print("✓ Supabase admin client created successfully")
         except Exception as e:
-            print(f"Failed to create Supabase admin client: {e}")
+            print(f"❌ Failed to create Supabase admin client: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     return supabase_admin_client
 
@@ -1471,10 +1479,45 @@ def diagnose_supabase():
     
     # Try to initialize clients if not already done
     if is_supabase_enabled():
-        anon_client = get_supabase_client()
-        admin_client = get_supabase_admin_client()
+        # Try anon client with error capture
+        anon_client = None
+        anon_error = None
+        try:
+            if supabase_client is None and supabase_import_available:
+                from supabase import create_client
+                anon_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        except Exception as e:
+            anon_error = str(e)
+            import traceback
+            anon_error_detail = traceback.format_exc()
+            print(f"Anon client initialization error: {anon_error_detail}")
+        
+        if anon_client is None:
+            anon_client = supabase_client
+        
         diagnostics['anon_client_available'] = anon_client is not None
+        if anon_error:
+            diagnostics['anon_client_error'] = anon_error
+        
+        # Try admin client with error capture
+        admin_client = None
+        admin_error = None
+        try:
+            if supabase_admin_client is None and supabase_import_available and SUPABASE_SERVICE_KEY:
+                from supabase import create_client
+                admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        except Exception as e:
+            admin_error = str(e)
+            import traceback
+            admin_error_detail = traceback.format_exc()
+            print(f"Admin client initialization error: {admin_error_detail}")
+        
+        if admin_client is None:
+            admin_client = supabase_admin_client
+            
         diagnostics['admin_client_available'] = admin_client is not None
+        if admin_error:
+            diagnostics['admin_client_error'] = admin_error
         
         # Test admin client connection
         if admin_client:
