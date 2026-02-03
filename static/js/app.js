@@ -1550,6 +1550,16 @@ async function loadPlan(filename, source = 'local') {
             currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
             currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
+            // Set total_distance early (before validation) to avoid showing stale distance in error messages
+            if (data.summary && data.summary.total_distance) {
+                currentPlan.total_distance = data.summary.total_distance;
+            }
+            
+            // Update the GPX file display to show the loaded GPX filename
+            if (data.gpx_filename) {
+                fileNameDisplay.textContent = data.gpx_filename;
+            }
+            
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
