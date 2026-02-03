@@ -178,12 +178,12 @@
                             </div>
                         </div>
                     </div>
-                    <div class="input-group">
+                    <div class="input-group" id="climbing-ability-group">
                         <label for="climbing-ability">
                             Climbing Ability:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your vertical ascent rate capability. This determines how much climbing affects your pace on uphills. Conservative climbers slow down more on steep ascents, while elite climbers maintain better speed on climbs."></span>
+                                  data-tooltip="Your vertical ascent rate capability. This determines how much climbing affects your pace on uphills. Conservative climbers slow down more on steep ascents, while elite climbers maintain better speed on climbs. Note: In Target Time mode, this setting does not affect calculations."></span>
                         </label>
                         <select id="climbing-ability">
                             <option value="conservative">Conservative Climber (600 m/h)</option>
@@ -199,7 +199,7 @@
                             Include Fatigue Penalty
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="When enabled, your pace will gradually slow down as accumulated distance and elevation increase throughout the race, simulating the natural effects of physical fatigue. Disable this for fresh or well-rested segment predictions."></span>
+                                  data-tooltip="When enabled, your pace will gradually slow down as accumulated distance and elevation increase throughout the race, simulating the natural effects of physical fatigue. Disable this for fresh or well-rested segment predictions. Note: In Target Time mode, fatigue affects difficulty calculation but not individual athlete abilities."></span>
                         </label>
                     </div>
                     <div class="input-group" id="fitness-level-group">
@@ -207,7 +207,7 @@
                             Fitness Level:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your endurance fitness level determines how fatigue accumulates over the race distance. FOP (Fatigue Onset Point) indicates the distance where you start experiencing significant pace degradation. Higher fitness levels delay fatigue onset and reduce its impact."></span>
+                                  data-tooltip="Your endurance fitness level determines how fatigue accumulates over the race distance. FOP (Fatigue Onset Point) indicates the distance where you start experiencing significant pace degradation. Higher fitness levels delay fatigue onset and reduce its impact. Note: In Target Time mode, this setting does not affect calculations."></span>
                         </label>
                         <select id="fitness-level">
                             <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
