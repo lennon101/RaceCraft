@@ -2252,6 +2252,10 @@ async function loadKnownRace(filename) {
     console.log('=== loadKnownRace called ===');
     console.log('Filename:', filename);
     
+    // Clear all inputs and reset state before loading the known race
+    // This ensures any previously loaded plan name is cleared from the UI
+    clearAllInputs();
+    
     try {
         console.log('Fetching known race from API...');
         const response = await fetch(`/api/load-known-race/${filename}`);
