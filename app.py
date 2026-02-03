@@ -1003,7 +1003,7 @@ def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_abil
     weights = []
     cumulative_effort = 0.0
     
-    for seg_data in segments_data:
+    for i, seg_data in enumerate(segments_data):
         distance_km = seg_data['distance']
         elev_gain = seg_data['elev_gain']
         elev_loss = seg_data['elev_loss']
@@ -1020,10 +1020,15 @@ def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_abil
         segment_weight = adjusted_pace * distance_km
         weights.append(segment_weight)
         
+        # Debug logging
+        log_message(f"  Segment {i}: dist={distance_km:.1f}km, +{elev_gain:.0f}m/-{elev_loss:.0f}m, " +
+                   f"pace={adjusted_pace:.2f} min/km, weight={segment_weight:.2f}")
+        
         # Update cumulative effort for next segment
         segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
         cumulative_effort += segment_effort
     
+    log_message(f"Total weight for {climbing_ability}: {sum(weights):.2f}")
     return weights
 
 
