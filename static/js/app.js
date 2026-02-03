@@ -939,22 +939,17 @@ function handlePacingModeChange() {
     const selectedMode = document.querySelector('input[name="pacing-mode"]:checked').value;
     currentPlan.pacing_mode = selectedMode;
     
-    const climbingAbilityGroup = document.getElementById('climbing-ability-group');
-    const fitnessLevelGroup = document.getElementById('fitness-level-group');
-    
     if (selectedMode === 'base_pace') {
         basePaceInputs.style.display = 'block';
         targetTimeInputs.style.display = 'none';
-        // Show climbing ability and fitness level (they affect calculation in base pace mode)
-        if (climbingAbilityGroup) climbingAbilityGroup.style.display = 'block';
-        if (fitnessLevelGroup) fitnessLevelGroup.style.display = 'block';
     } else {
         basePaceInputs.style.display = 'none';
         targetTimeInputs.style.display = 'block';
-        // Hide climbing ability and fitness level (they don't affect calculation in target time mode)
-        if (climbingAbilityGroup) climbingAbilityGroup.style.display = 'none';
-        if (fitnessLevelGroup) fitnessLevelGroup.style.display = 'none';
     }
+    
+    // Note: Climbing ability, fitness level, and fatigue settings are shown in both modes
+    // - Base Pace Mode: They affect forward prediction (ability → pace → time)
+    // - Target Time Mode: They affect effort allocation optimization (cost, capacity, limits)
     
     // Recalculate if a plan is loaded
     if (currentPlan.gpx_filename && currentPlan.checkpoint_distances.length > 0) {

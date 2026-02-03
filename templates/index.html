@@ -183,7 +183,7 @@
                             Climbing Ability:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your vertical ascent rate capability. This determines how much climbing affects your pace on uphills. Conservative climbers slow down more on steep ascents, while elite climbers maintain better speed on climbs. Note: In Target Time mode, this setting does not affect calculations."></span>
+                                  data-tooltip="Your vertical ascent rate capability. BASE PACE MODE: Determines how much climbing affects your pace on uphills. TARGET TIME MODE: Affects effort cost multipliers - elite climbers find it 'cheaper' to gain time on climbs (0.75x cost) vs conservative climbers (1.2x cost), so optimizer naturally prioritizes climbs for strong climbers."></span>
                         </label>
                         <select id="climbing-ability">
                             <option value="conservative">Conservative Climber (600 m/h)</option>
@@ -199,7 +199,7 @@
                             Include Fatigue Penalty
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="When enabled, your pace will gradually slow down as accumulated distance and elevation increase throughout the race, simulating the natural effects of physical fatigue. Disable this for fresh or well-rested segment predictions. Note: In Target Time mode, fatigue affects difficulty calculation but not individual athlete abilities."></span>
+                                  data-tooltip="BASE PACE MODE: Your pace gradually slows down as accumulated distance and elevation increase throughout the race. TARGET TIME MODE: Effort cost increases over distance (fatigue multiplier), making optimizer prefer early effort over late effort. Fitness level controls how steep the cost curve is."></span>
                         </label>
                     </div>
                     <div class="input-group" id="fitness-level-group">
@@ -207,7 +207,7 @@
                             Fitness Level:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your endurance fitness level determines how fatigue accumulates over the race distance. FOP (Fatigue Onset Point) indicates the distance where you start experiencing significant pace degradation. Higher fitness levels delay fatigue onset and reduce its impact. Note: In Target Time mode, this setting does not affect calculations."></span>
+                                  data-tooltip="Your endurance fitness level. BASE PACE MODE: Determines Fatigue Onset Point (FOP) - the distance where you start experiencing significant pace degradation. TARGET TIME MODE: Controls global effort budget (15-50% max deviation from natural pace) and fatigue cost curve steepness. Higher fitness allows more aggressive target times."></span>
                         </label>
                         <select id="fitness-level">
                             <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
