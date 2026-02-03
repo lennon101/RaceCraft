@@ -224,6 +224,16 @@ function setupDecimalInput(input) {
 
 // Functions
 function renderElevationChart(elevationProfile, segments) {
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not available - elevation chart will not be rendered');
+        const chartContainer = document.getElementById('elevation-chart');
+        if (chartContainer && chartContainer.parentElement) {
+            chartContainer.parentElement.innerHTML = '<p style="text-align: center; padding: 20px; color: #666;">Elevation chart unavailable (Chart.js library not loaded)</p>';
+        }
+        return;
+    }
+    
     const ctx = document.getElementById('elevation-chart');
     
     // Destroy existing chart
@@ -956,6 +966,7 @@ async function calculateRacePlan() {
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
+        is_known_race: currentPlan.is_known_race || false,
         checkpoint_distances: currentPlan.checkpoint_distances,
         checkpoint_dropbags: currentPlan.checkpoint_dropbags,
         segment_terrain_types: currentPlan.segment_terrain_types,

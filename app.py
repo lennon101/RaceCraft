@@ -1019,7 +1019,16 @@ def calculate():
             if not filename:
                 return jsonify({'error': 'No GPX file specified'}), 400
             
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            # Check if this is a known race or user-uploaded file
+            is_known_race = data.get('is_known_race', False)
+            
+            if is_known_race:
+                # Look for file in known races folder
+                filepath = os.path.join(app.config['KNOWN_RACES_FOLDER'], filename)
+            else:
+                # Look for file in upload folder
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
             if not os.path.exists(filepath):
                 return jsonify({'error': 'GPX file not found'}), 400
             
