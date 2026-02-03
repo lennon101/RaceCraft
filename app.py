@@ -1,7 +1,11 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.5.0-load-known-races
+Version: v1.5.3
 Release Date: Feb 02, 2026
+
+Major Changes in v1.5.3:
+- Move all docs to folder and organise 
+- Update Readme with new links
 
 Major Changes in v1.5.0-load-known-races:
 - Display loaded plan name in UI title #64 

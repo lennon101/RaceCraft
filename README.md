@@ -9,8 +9,8 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 ## Features
 
 - **GPX Route Upload**: Drag and drop your race route
-- **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](FATIGUE_MODEL.md))
-- **Terrain Difficulty System**: Sophisticated trail surface modelling with skill adjustment ([learn more](TERRAIN_DIFFICULTY.md))
+- **Advanced Fatigue Model**: Effort-based, fitness-dependent fatigue calculation ([learn more](docs/models/FATIGUE_MODEL.md))
+- **Terrain Difficulty System**: Sophisticated trail surface modelling with skill adjustment ([learn more](docs/models/TERRAIN_DIFFICULTY.md))
 - **User Authentication**: Optional Supabase-powered authentication for secure data management
   - Anonymous access for low-friction use
   - Seamless upgrade from anonymous to authenticated account
@@ -25,43 +25,9 @@ A web-based race planner for athletes needing to estimate their pacing, checkpoi
 
 ## Quick Start
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Docker Compose
 
-1. **Create a `docker-compose.yml` file:**
-   ```yaml
-   version: '3.8'
-
-   services:
-     fuel-planner:
-       image: lennon101/racecraft:latest
-       container_name: racecraft
-       ports:
-         - "5000:5000"
-       volumes:
-         - racecraft-data:/app/data
-       environment:
-         - FLASK_ENV=development
-         - FLASK_DEBUG=1
-         - UPLOAD_FOLDER=/app/data/uploads
-         - SAVED_PLANS_FOLDER=/app/data/saved_plans
-       restart: unless-stopped
-       networks:
-         - racecraft
-
-   volumes:
-     racecraft-data:
-
-   networks:
-     racecraft:
-   ```
-
-2. **Pull and run the container:**
-   ```bash
-   docker compose up -d
-   ```
-
-3. **Access the application:**
-   Open your browser to `http://localhost:5000`
+See [docker-compose.yml](docker-compose.yml) for the complete Docker Compose configuration.
 
 ### Option 2: Docker Run
 
@@ -108,7 +74,7 @@ Deploy directly from GitHub to Railway.app with one click:
    - Railway provides a public URL
    - App deploys automatically on each commit
 
-For detailed Railway deployment instructions, see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md).
+For detailed Railway deployment instructions, see [RAILWAY_DEPLOYMENT.md](docs/deployment/RAILWAY_DEPLOYMENT.md).
 
 ### Option 4: Run Locally (Development)
 
@@ -231,7 +197,7 @@ Fuel-Plan-Tool/
 
 ### Fatigue Model
 
-RaceCraft uses an advanced **effort-based fatigue model** that accounts for cumulative effort, fitness level, and delayed fatigue onset. See [FATIGUE_MODEL.md](FATIGUE_MODEL.md) for complete documentation.
+RaceCraft uses an advanced **effort-based fatigue model** that accounts for cumulative effort, fitness level, and delayed fatigue onset. See [FATIGUE_MODEL.md](docs/models/FATIGUE_MODEL.md) for complete documentation.
 
 **Key parameters:**
 - **Fitness Level**: Determines your Fatigue Onset Point (FOP)
@@ -244,7 +210,7 @@ RaceCraft uses an advanced **effort-based fatigue model** that accounts for cumu
 
 ### Terrain Difficulty Model
 
-RaceCraft models terrain difficulty as a **local efficiency penalty** that slows pace without affecting fatigue accumulation. See [TERRAIN_DIFFICULTY.md](TERRAIN_DIFFICULTY.md) for complete documentation.
+RaceCraft models terrain difficulty as a **local efficiency penalty** that slows pace without affecting fatigue accumulation. See [TERRAIN_DIFFICULTY.md](docs/models/TERRAIN_DIFFICULTY.md) for complete documentation.
 
 **Key features:**
 - **7 Terrain Types**: Road (0.95×) to Scrambling (2.0×)
