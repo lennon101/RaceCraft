@@ -11,6 +11,16 @@ function toUnicodeBold(str) {
     };
     return str.split('').map(c => map[c] || c).join('');
 }
+
+// Helper to update the race plan title
+function updateRacePlanTitle(planName = null) {
+    if (planName) {
+        racePlanTitle.textContent = `Race Plan: ${planName}`;
+    } else {
+        racePlanTitle.textContent = 'Race Plan';
+    }
+}
+
 // State management
 let currentPlan = {
     gpx_filename: null,
@@ -21,7 +31,8 @@ let currentPlan = {
     summary: null,
     elevation_profile: null,
     dropbag_contents: null,  // Calculated dropbag contents for each CP
-    loadedFilename: null  // Track the currently loaded plan filename
+    loadedFilename: null,  // Track the currently loaded plan filename
+    planName: null  // Track the currently loaded plan name for UI display
 };
 
 let elevationChart = null;
@@ -38,6 +49,7 @@ const loadBtn = document.getElementById('load-btn');
 const exportBtn = document.getElementById('export-btn');
 const resultsContainer = document.getElementById('results-container');
 const noResults = document.getElementById('no-results');
+const racePlanTitle = document.getElementById('race-plan-title');
 
 // Modal elements
 const saveModal = document.getElementById('save-modal');
@@ -484,8 +496,12 @@ function resetPlanState() {
         elevation_profile: null,
         dropbag_contents: null,
         loadedFilename: null,
-        loadedSource: null
+        loadedSource: null,
+        planName: null
     };
+    
+    // Reset the race plan title to default
+    updateRacePlanTitle();
     
     // Destroy elevation chart
     if (elevationChart) {
@@ -1486,6 +1502,12 @@ async function loadPlan(filename, source = 'local') {
             currentPlan.loadedFilename = filename;
             currentPlan.loadedSource = source;  // Track source for future saves
             
+            // Store plan name (from data or filename without .json)
+            currentPlan.planName = data.plan_name || filename.replace(/\.json$/, '');
+            
+            // Update the race plan title to show the loaded plan name
+            updateRacePlanTitle(currentPlan.planName);
+            
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
             currentPlan.checkpoint_distances = data.checkpoint_distances || [];
@@ -1702,6 +1724,12 @@ async function handleImportPlan(event) {
             
             // Clear current plan tracking
             currentPlan.loadedFilename = null;
+            
+            // Store plan name (from data or use a default name)
+            currentPlan.planName = data.plan_name || 'Imported Plan';
+            
+            // Update the race plan title to show the imported plan name
+            updateRacePlanTitle(currentPlan.planName);
             
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
