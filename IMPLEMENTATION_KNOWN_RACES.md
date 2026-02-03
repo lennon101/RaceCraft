@@ -30,8 +30,8 @@ Successfully implemented the "Load Known Races" feature that allows users to qui
 
 ### Infrastructure
 - **Dockerfile**
-  - Updated to copy `data/` directory containing known races
-  - Ensured known_races directory is created
+  - Updated to copy `data/known_races/` to `/app/static_data/known_races/` (isolated from volume mounts)
+  - Known races are bundled in the image and always accessible
 
 ### Documentation
 - **KNOWN_RACES.md**
