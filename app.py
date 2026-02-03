@@ -980,6 +980,92 @@ def load_known_race(filename):
     except Exception as e:
         return jsonify({'error': f'Error loading known race: {str(e)}'}), 500
 
+def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_ability='moderate',
+                                        fatigue_enabled=True, fitness_level='recreational',
+                                        skill_level=0.5):
+    """
+    Calculate relative difficulty weight for each segment based on terrain, elevation, and fatigue.
+    
+    This computes a 'difficulty score' for each segment using the same models as forward calculation,
+    allowing proportional time distribution in target time mode.
+    
+    Args:
+        segments_data: List of dicts with 'distance', 'elev_gain', 'elev_loss', 'terrain_type'
+        base_pace: Flat pace in min/km
+        climbing_ability: Athlete climbing ability key
+        fatigue_enabled: Whether to apply fatigue
+        fitness_level: Athlete fitness level
+        skill_level: Technical skill (0.0-1.0)
+    
+    Returns:
+        List of difficulty weights (one per segment)
+    """
+    weights = []
+    cumulative_effort = 0.0
+    
+    for seg_data in segments_data:
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        terrain_type = seg_data.get('terrain_type', 'smooth_trail')
+        
+        # Calculate adjusted pace using existing model (BEFORE adding segment effort)
+        adjusted_pace, _, _, _, _ = adjust_pace_for_elevation(
+            base_pace, elev_gain, elev_loss, distance_km, cumulative_effort,
+            climbing_ability, fatigue_enabled, fitness_level, terrain_type, skill_level
+        )
+        
+        # Segment difficulty weight = adjusted_pace × distance
+        # This represents the "effective time" this segment would take relative to others
+        segment_weight = adjusted_pace * distance_km
+        weights.append(segment_weight)
+        
+        # Update cumulative effort for next segment
+        segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+        cumulative_effort += segment_effort
+    
+    return weights
+
+
+def reverse_calculate_pacing(target_time_minutes, segments_data, difficulty_weights):
+    """
+    Reverse-engineer segment times and paces from a target finish time.
+    
+    Distributes the target time across segments proportionally to their difficulty weights,
+    then calculates the required pace for each segment.
+    
+    Args:
+        target_time_minutes: Target total moving time in minutes (excludes CP stop time)
+        segments_data: List of dicts with 'distance' for each segment
+        difficulty_weights: List of difficulty weights from calculate_segment_difficulty_weights()
+    
+    Returns:
+        List of dicts with 'segment_time' (minutes) and 'required_pace' (min/km) for each segment
+    """
+    if not difficulty_weights or sum(difficulty_weights) == 0:
+        return []
+    
+    # Normalize weights so they sum to the target time
+    total_weight = sum(difficulty_weights)
+    normalized_weights = [w / total_weight for w in difficulty_weights]
+    
+    results = []
+    for i, seg_data in enumerate(segments_data):
+        # Allocate time proportionally
+        allocated_time = target_time_minutes * normalized_weights[i]
+        
+        # Calculate required pace
+        distance_km = seg_data['distance']
+        required_pace = allocated_time / distance_km if distance_km > 0 else 0.0
+        
+        results.append({
+            'segment_time': allocated_time,
+            'required_pace': required_pace
+        })
+    
+    return results
+
+
 @app.route('/api/calculate', methods=['POST'])
 def calculate():
     """Calculate race plan."""
@@ -1010,6 +1096,10 @@ def calculate():
         
         # Terrain settings
         skill_level = float(data.get('skill_level', 0.5))  # 0.0 = novice, 1.0 = expert
+        
+        # Target time mode (new feature)
+        pacing_mode = data.get('pacing_mode', 'base_pace')  # 'base_pace' or 'target_time'
+        target_time_str = data.get('target_time')  # "HH:MM:SS" or None
         
         # Check if elevation profile is provided (from loaded plan)
         elevation_profile_data = data.get('elevation_profile')
@@ -1058,46 +1148,114 @@ def calculate():
             # Find checkpoint indices using trackpoints
             checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
         
-        # Calculate segments with cumulative effort tracking
-        segments = []
-        cumulative_time = 0.0
-        total_moving_time = 0.0
-        cumulative_effort = 0.0  # Track effort in km-effort
-        
+        # === Prepare segment data for calculations ===
         num_checkpoints = len(checkpoint_distances)
         segment_labels = ["Start"]
         for i in range(num_checkpoints):
             segment_labels.append(f"CP{i + 1}")
         segment_labels.append("Finish")
         
+        # Build basic segment info (distance, elevation, terrain)
+        segments_basic_data = []
         for i in range(len(checkpoint_indices) - 1):
             start_idx = checkpoint_indices[i]
             end_idx = checkpoint_indices[i + 1]
             
             segment_dist = distances[end_idx] - distances[start_idx]
             elev_gain, elev_loss = calculate_elevation_change(trackpoints, start_idx, end_idx)
-            net_elev_change = elev_gain - elev_loss
-            
-            # Get terrain type for this segment (default to 'smooth_trail' if not provided)
             terrain_type = segment_terrain_types[i] if i < len(segment_terrain_types) else 'smooth_trail'
             
-            # Calculate pace using cumulative effort (BEFORE adding this segment's effort)
-            adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
-                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
-                fatigue_enabled, fitness_level, terrain_type, skill_level
-            )
+            segments_basic_data.append({
+                'from': segment_labels[i],
+                'to': segment_labels[i + 1],
+                'distance': segment_dist,
+                'elev_gain': elev_gain,
+                'elev_loss': elev_loss,
+                'terrain_type': terrain_type
+            })
+        
+        # === Handle Target Time Mode ===
+        use_target_time = pacing_mode == 'target_time' and target_time_str
+        if use_target_time:
+            try:
+                # Parse target time (HH:MM:SS)
+                time_parts = target_time_str.split(':')
+                if len(time_parts) == 3:
+                    target_hours = int(time_parts[0])
+                    target_minutes = int(time_parts[1])
+                    target_seconds = int(time_parts[2])
+                    target_total_minutes = target_hours * 60 + target_minutes + target_seconds / 60.0
+                    
+                    # Subtract CP stop time to get target moving time
+                    total_cp_time = avg_cp_time * num_checkpoints
+                    target_moving_time = target_total_minutes - total_cp_time
+                    
+                    if target_moving_time <= 0:
+                        return jsonify({'error': 'Target time is too short - not enough time for checkpoint stops'}), 400
+                    
+                    # Calculate difficulty weights for each segment
+                    difficulty_weights = calculate_segment_difficulty_weights(
+                        segments_basic_data, z2_pace, climbing_ability,
+                        fatigue_enabled, fitness_level, skill_level
+                    )
+                    
+                    # Reverse-calculate required paces
+                    reverse_results = reverse_calculate_pacing(
+                        target_moving_time, segments_basic_data, difficulty_weights
+                    )
+                else:
+                    return jsonify({'error': 'Invalid target time format. Use HH:MM:SS'}), 400
+            except Exception as e:
+                return jsonify({'error': f'Error parsing target time: {str(e)}'}), 400
+        
+        # Calculate segments with cumulative effort tracking
+        segments = []
+        cumulative_time = 0.0
+        total_moving_time = 0.0
+        cumulative_effort = 0.0  # Track effort in km-effort
+        
+        for i in range(len(segments_basic_data)):
+            seg_basic = segments_basic_data[i]
+            segment_dist = seg_basic['distance']
+            elev_gain = seg_basic['elev_gain']
+            elev_loss = seg_basic['elev_loss']
+            terrain_type = seg_basic['terrain_type']
+            net_elev_change = elev_gain - elev_loss
+            
+            # === Calculate segment time and pace ===
+            if use_target_time:
+                # Target Time Mode: Use reverse-calculated pace
+                segment_time = reverse_results[i]['segment_time']
+                required_pace = reverse_results[i]['required_pace']
+                
+                # For display: still calculate what the base pace adjustments would be
+                _, elev_adjusted_pace, fatigue_seconds, terrain_factor, _ = adjust_pace_for_elevation(
+                    z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
+                    fatigue_enabled, fitness_level, terrain_type, skill_level
+                )
+                
+                # Check if required pace is aggressive (faster than base pace)
+                pace_aggressive = required_pace < z2_pace * 0.85  # More than 15% faster than base
+                adjusted_pace = required_pace
+                pace_capped = False
+            else:
+                # Base Pace Mode: Use forward-calculated pace
+                adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
+                    z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
+                    fatigue_enabled, fitness_level, terrain_type, skill_level
+                )
+                segment_time = segment_dist * adjusted_pace
+                pace_aggressive = False
+                
+                # Log when pace is capped
+                if pace_capped:
+                    segment_label = f"{seg_basic['from']} → {seg_basic['to']}"
+                    print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2.5× base pace)")
             
             # Update cumulative effort: effort_km = distance_km + ascent_m/100 + descent_m/200
             segment_effort = segment_dist + (elev_gain / 100.0) + (elev_loss / 200.0)
             cumulative_effort += segment_effort
             
-            # Log when pace is capped
-            if pace_capped:
-                segment_label = f"{segment_labels[i]} → {segment_labels[i + 1]}"
-                print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2.5× base pace)")
-
-            
-            segment_time = segment_dist * adjusted_pace
             total_moving_time += segment_time
             
             if i > 0:
@@ -1126,8 +1284,8 @@ def calculate():
             terrain_penalty_pct = (terrain_factor - 1.0) * 100.0
             
             segment_data = {
-                'from': segment_labels[i],
-                'to': segment_labels[i + 1],
+                'from': seg_basic['from'],
+                'to': seg_basic['to'],
                 'distance': round(segment_dist, 2),
                 'elev_gain': round(elev_gain, 0),
                 'elev_loss': round(elev_loss, 0),
@@ -1139,8 +1297,9 @@ def calculate():
                 'pace': round(adjusted_pace, 2),
                 'pace_str': f"{int(adjusted_pace)}:{int((adjusted_pace % 1) * 60):02d}",
                 'pace_capped': pace_capped,
-                'fatigue_seconds': round(fatigue_seconds, 1),
-                'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}",
+                'pace_aggressive': pace_aggressive if use_target_time else False,
+                'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
+                'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
                 'terrain_type': terrain_type,
                 'terrain_factor': round(terrain_factor, 3),
                 'terrain_penalty_pct': round(terrain_penalty_pct, 1),

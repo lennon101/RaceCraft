@@ -128,17 +128,54 @@
                 <section class="input-section">
                     <h3>4. Pacing</h3>
                     <div class="input-group">
-                        <label for="z2-pace-min">
-                            Flat Terrain Pace
+                        <label>
+                            Pacing Mode:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                                  data-tooltip="Base Pace: Calculate finish time from your flat terrain pace. Target Time: Enter your goal finish time and calculate required paces for each segment."></span>
                         </label>
-                        <div class="pace-input">
-                            <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
-                            <span>:</span>
-                            <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
-                            <span class="unit">min/km</span>
+                        <div class="pacing-mode-toggle">
+                            <label class="radio-label">
+                                <input type="radio" name="pacing-mode" id="pacing-mode-base" value="base_pace" checked />
+                                <span>Base Pace</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="pacing-mode" id="pacing-mode-target" value="target_time" />
+                                <span>Target Time</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="base-pace-inputs">
+                        <div class="input-group">
+                            <label for="z2-pace-min">
+                                Flat Terrain Pace
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                            </label>
+                            <div class="pace-input">
+                                <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
+                                <span class="unit">min/km</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="target-time-inputs" style="display: none;">
+                        <div class="input-group">
+                            <label for="target-finish-time">
+                                Target Finish Time
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Your goal total race time including checkpoint stops. The system will calculate required paces for each segment to meet this target, accounting for terrain, elevation, and fatigue."></span>
+                            </label>
+                            <div class="time-input">
+                                <input type="number" id="target-time-hours" min="0" max="99" value="10" placeholder="HH" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="target-time-minutes" min="0" max="59" value="0" placeholder="MM" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="target-time-seconds" min="0" max="59" value="0" placeholder="SS" pattern="[0-9]*" inputmode="numeric" />
+                            </div>
                         </div>
                     </div>
                     <div class="input-group">
