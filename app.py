@@ -1035,41 +1035,75 @@ def calculate_natural_pacing(segments_data, base_pace, climbing_ability='moderat
     return results
 
 
-def get_terrain_effort_bounds(elev_gain, elev_loss, distance_km, climbing_ability):
+def get_terrain_effort_bounds(elev_gain, elev_loss, distance_km, climbing_ability, skill_level):
     """
     Define how much a segment's pace can be adjusted based on terrain type and athlete ability.
     
-    Returns bounds as multipliers: (min_multiplier, max_multiplier)
+    This is where abilities affect COST, CAPACITY, and LIMITS.
+    
+    Returns: (min_multiplier, max_multiplier, effort_cost_multiplier)
     - min_multiplier < 1.0: can speed up
     - max_multiplier > 1.0: can slow down
+    - effort_cost_multiplier: how "expensive" it is to buy time here (lower = cheaper)
     
-    Ability affects the bounds:
-    - Elite climbers: wider speed-up range on climbs
-    - Conservative climbers: narrower speed-up range on climbs
+    Abilities affect:
+    - Climbing ability: cost of buying time on climbs (elite = cheaper)
+    - Technical skill: cost and limits on descents (high skill = less expensive, still constrained)
+    - Bounds: already implemented (capacity limits)
     """
     gradient = (elev_gain - elev_loss) / (distance_km * 1000.0) if distance_km > 0 else 0.0
+    
+    # Climbing ability cost multipliers (lower = cheaper to buy time)
+    climbing_cost_map = {
+        'elite': 0.75,         # Climbs are very cheap for elite
+        'very_strong': 0.85,
+        'strong': 0.95,
+        'moderate': 1.0,       # Baseline
+        'conservative': 1.2    # Climbs are expensive for conservative
+    }
+    climbing_cost = climbing_cost_map.get(climbing_ability, 1.0)
+    
+    # Technical skill affects downhill cost (0.0 = novice, 1.0 = expert)
+    # Even experts pay a cost on descents (safety/risk factor)
+    skill_cost_factor = 1.0 + (1.0 - skill_level) * 0.8  # Range: 1.0 (expert) to 1.8 (novice)
     
     # Classify terrain by gradient
     if gradient > 0.08:  # Steep climb (>8%)
         # Climbing is where ability matters most
+        # Cost is heavily affected by climbing ability
+        effort_cost = climbing_cost
+        
         if climbing_ability == 'elite':
-            return (0.70, 1.15)  # Can push much harder, less slowdown
+            return (0.70, 1.15, effort_cost)  # Can push much harder, less slowdown
         elif climbing_ability == 'very_strong':
-            return (0.75, 1.20)
+            return (0.75, 1.20, effort_cost)
         elif climbing_ability == 'strong':
-            return (0.80, 1.25)
+            return (0.80, 1.25, effort_cost)
         elif climbing_ability == 'moderate':
-            return (0.85, 1.30)
+            return (0.85, 1.30, effort_cost)
         else:  # conservative
-            return (0.90, 1.35)  # Limited improvement, more slowdown
+            return (0.90, 1.35, effort_cost)  # Limited improvement, more slowdown
     
     elif gradient < -0.05:  # Descent (< -5%)
-        # Less ability variation on descents (limited by safety/technique)
-        return (0.85, 1.20)  # Moderate adjustment range for all
+        # Descents are constrained by technical skill
+        # Cost affected by skill level (risk pricing)
+        effort_cost = skill_cost_factor
+        
+        # Hard caps on descents - even skilled athletes have limits
+        if skill_level >= 0.8:  # Expert (0.8-1.0)
+            return (0.80, 1.20, effort_cost)  # Moderate adjustment, still constrained
+        elif skill_level >= 0.6:  # Proficient (0.6-0.8)
+            return (0.85, 1.20, effort_cost)  # Less speed-up range
+        elif skill_level >= 0.4:  # Intermediate (0.4-0.6)
+            return (0.90, 1.25, effort_cost)  # Limited speed-up
+        else:  # Novice (0.0-0.4)
+            return (0.95, 1.30, effort_cost)  # Very limited, expensive
     
     else:  # Flat or rolling (between -5% and +8%)
         # Medium adjustment range, less ability-dependent
-        return (0.80, 1.25)
+        # Baseline cost (not affected much by abilities)
+        effort_cost = 1.0
+        return (0.80, 1.25, effort_cost)
 
 
 def allocate_effort_to_target(target_time_minutes, segments_data, natural_results, 
@@ -1083,8 +1117,15 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
     Strategy:
     1. Start with natural pacing (what athlete would do on autopilot)
     2. Calculate ΔT = T_natural - T_target
-    3. Distribute ΔT across segments within terrain-specific bounds
-    4. Ability affects ceilings (what's possible), not obligations (what's required)
+    3. Calculate effort costs for each segment (climbing ability, technical skill)
+    4. Apply global effort budget (fitness level)
+    5. Distribute ΔT prioritizing lowest-cost segments
+    6. Apply cumulative fatigue multiplier (prefer early effort)
+    
+    Abilities affect COST, CAPACITY, and LIMITS:
+    - Climbing ability: climbs cheaper for elite (cost multiplier)
+    - Technical skill: descents expensive for novice (risk pricing)
+    - Fitness level: total deviation budget (global constraint)
     
     Args:
         target_time_minutes: Target total moving time
@@ -1094,7 +1135,7 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         climbing_ability: Athlete ability level
         fatigue_enabled: Whether fatigue is enabled
         fitness_level: Athlete fitness level
-        skill_level: Technical skill level
+        skill_level: Technical skill level (0.0-1.0)
     
     Returns:
         List of dicts with 'segment_time', 'required_pace', 'effort_level' for each segment
@@ -1118,8 +1159,21 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
             })
         return results
     
-    # Calculate how much each segment can contribute to closing the gap
+    # Fitness-based global effort budget (how much total deviation is allowed)
+    fitness_budget_map = {
+        'untrained': 0.15,      # Can only deviate 15% from natural
+        'recreational': 0.25,   # 25% deviation
+        'trained': 0.35,        # 35% deviation
+        'elite': 0.50          # 50% deviation
+    }
+    global_effort_budget = fitness_budget_map.get(fitness_level, 0.25)
+    max_total_deviation = natural_total_time * global_effort_budget
+    
+    log_message(f"Fitness level: {fitness_level}, global budget: {global_effort_budget:.1%} = {max_total_deviation:.2f} min")
+    
+    # Calculate how much each segment can contribute with cost weighting
     segment_adjustments = []
+    cumulative_effort_km = 0.0
     
     for i, seg_data in enumerate(segments_data):
         distance_km = seg_data['distance']
@@ -1128,18 +1182,46 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         natural_time = natural_results[i]['natural_time']
         natural_pace = natural_results[i]['natural_pace']
         
-        # Get terrain-specific bounds
-        min_mult, max_mult = get_terrain_effort_bounds(
-            elev_gain, elev_loss, distance_km, climbing_ability
+        # Get terrain-specific bounds and effort cost
+        min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+            elev_gain, elev_loss, distance_km, climbing_ability, skill_level
         )
         
-        # Calculate time adjustment range
+        # Apply fatigue multiplier if enabled (cost increases with cumulative effort)
+        if fatigue_enabled:
+            # Fatigue makes later segments more expensive
+            # Fitness affects how steep the cost curve is
+            fitness_fatigue_map = {
+                'untrained': 1.5,
+                'recreational': 1.3,
+                'trained': 1.15,
+                'elite': 1.05
+            }
+            fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+            
+            # Calculate cumulative effort (km-effort: distance + ascent/100 + descent/200)
+            segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+            
+            # Fatigue multiplier grows with cumulative effort
+            # Early segments: ~1.0, late segments: up to fatigue_factor
+            fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+            fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)  # Cap at fatigue_factor
+            
+            cumulative_effort_km += segment_effort
+        else:
+            fatigue_multiplier = 1.0
+        
+        # Total effort cost = base_cost × fatigue_multiplier
+        total_effort_cost = base_effort_cost * fatigue_multiplier
+        
+        # Calculate time adjustment range with cost
         if delta_t > 0:  # Need to go faster
             # Can reduce time by speeding up (min_mult < 1.0)
             max_time_saved = natural_time * (1.0 - min_mult)
             segment_adjustments.append({
                 'index': i,
                 'max_adjustment': max_time_saved,
+                'effort_cost': total_effort_cost,
                 'multiplier': min_mult,
                 'direction': 'faster'
             })
@@ -1149,6 +1231,7 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
             segment_adjustments.append({
                 'index': i,
                 'max_adjustment': max_time_added,
+                'effort_cost': total_effort_cost,
                 'multiplier': max_mult,
                 'direction': 'slower'
             })
@@ -1167,9 +1250,18 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
             })
         return results
     
-    # Distribute delta_t proportionally to each segment's capacity
-    results = []
+    # Check if target is achievable within global effort budget
     abs_delta_t = abs(delta_t)
+    if abs_delta_t > max_total_deviation:
+        log_message(f"Warning: Target requires {abs_delta_t:.2f} min deviation, but budget is {max_total_deviation:.2f} min")
+        log_message(f"Target time is too aggressive for {fitness_level} fitness level - using maximum feasible effort")
+        # Cap delta_t to budget
+        abs_delta_t = max_total_deviation
+    
+    # Distribute delta_t using cost-weighted allocation
+    # Lower cost segments get prioritized for adjustment
+    results = []
+    total_cost_weighted_capacity = sum(adj['max_adjustment'] / adj['effort_cost'] for adj in segment_adjustments)
     
     for i, seg_data in enumerate(segments_data):
         natural_time = natural_results[i]['natural_time']
@@ -1177,13 +1269,16 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         adj = segment_adjustments[i]
         distance_km = seg_data['distance']
         
-        # Calculate this segment's share of the adjustment
-        if abs_delta_t <= total_capacity:
-            # Can achieve target within bounds
-            segment_adjustment = (adj['max_adjustment'] / total_capacity) * abs_delta_t
+        # Calculate this segment's share based on cost-weighted capacity
+        # Lower cost = gets more of the adjustment (more efficient use of effort)
+        if total_cost_weighted_capacity > 0:
+            cost_weighted_share = (adj['max_adjustment'] / adj['effort_cost']) / total_cost_weighted_capacity
+            segment_adjustment = cost_weighted_share * abs_delta_t
+            
+            # Respect segment's max capacity
+            segment_adjustment = min(segment_adjustment, adj['max_adjustment'])
         else:
-            # Target is too aggressive - use max capacity
-            segment_adjustment = adj['max_adjustment']
+            segment_adjustment = 0
         
         # Apply adjustment
         if delta_t > 0:  # Going faster
@@ -1201,7 +1296,7 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
             'effort_level': effort_level
         })
         
-        log_message(f"  Segment {i}: {effort_level} - pace {adjusted_pace:.2f} min/km (natural: {natural_pace:.2f})")
+        log_message(f"  Segment {i}: {effort_level} - pace {adjusted_pace:.2f} min/km (natural: {natural_pace:.2f}, cost: {adj['effort_cost']:.2f})")
     
     return results
 
