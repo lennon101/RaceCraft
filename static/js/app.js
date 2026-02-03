@@ -32,7 +32,11 @@ let currentPlan = {
     elevation_profile: null,
     dropbag_contents: null,  // Calculated dropbag contents for each CP
     loadedFilename: null,  // Track the currently loaded plan filename
-    planName: null  // Track the currently loaded plan name for UI display
+    loadedSource: null,  // Track the source of the loaded plan ('local' or 'supabase')
+    planName: null,  // Track the currently loaded plan name for UI display
+    total_distance: null,  // Total distance of the route
+    is_known_race: false,  // Whether this is a known race
+    race_start_time: null  // Race start time for time-of-day calculations
 };
 
 let elevationChart = null;
@@ -519,7 +523,10 @@ function resetPlanState() {
         dropbag_contents: null,
         loadedFilename: null,
         loadedSource: null,
-        planName: null
+        planName: null,
+        total_distance: null,
+        is_known_race: false,
+        race_start_time: null
     };
     
     // Reset the race plan title to default
