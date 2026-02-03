@@ -1019,6 +1019,10 @@ def calculate():
             if not filename:
                 return jsonify({'error': 'No GPX file specified'}), 400
             
+            # Sanitize filename to prevent path traversal
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(filename)
+            
             # Check if this is a known race or user-uploaded file
             is_known_race = data.get('is_known_race', False)
             
