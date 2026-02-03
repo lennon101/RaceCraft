@@ -2262,6 +2262,7 @@ async function loadKnownRace(filename) {
         console.log('Before - currentPlan.is_known_race:', currentPlan.is_known_race);
         currentPlan.gpx_filename = data.filename;
         currentPlan.is_known_race = data.is_known_race || false;
+        currentPlan.total_distance = data.total_distance;
         console.log('After - currentPlan.gpx_filename:', currentPlan.gpx_filename);
         console.log('After - currentPlan.is_known_race:', currentPlan.is_known_race);
         
@@ -2269,6 +2270,53 @@ async function loadKnownRace(filename) {
         console.log('Clearing checkpoint distances and regenerating inputs...');
         currentPlan.checkpoint_distances = [];
         generateCheckpointInputs();
+        
+        // Update summary cards for distance and elevation gain immediately
+        document.getElementById('summary-distance').textContent = `${data.total_distance} km`;
+        document.getElementById('summary-elev-gain').textContent = `+${data.total_elev_gain} m`;
+        
+        // Fetch elevation profile for vertical plot (basic, no segments yet)
+        console.log('Fetching elevation profile...');
+        try {
+            const profileResponse = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    gpx_filename: data.filename,
+                    is_known_race: data.is_known_race || false,
+                    checkpoint_distances: [],
+                    checkpoint_dropbags: [],
+                    segment_terrain_types: ['smooth_trail'],
+                    avg_cp_time: 5,
+                    z2_pace: 6.5,
+                    climbing_ability: 'moderate',
+                    carbs_per_hour: 60,
+                    water_per_hour: 500,
+                    fatigue_enabled: true,
+                    fitness_level: 'recreational',
+                    skill_level: 0.5
+                })
+            });
+            const profileData = await profileResponse.json();
+            console.log('Elevation profile response:', profileResponse.ok, profileData);
+            
+            if (profileResponse.ok && profileData.elevation_profile && profileData.elevation_profile.length > 0) {
+                console.log('Rendering elevation chart...');
+                // Render the vertical profile with a dummy segments array (just Start→Finish)
+                renderElevationChart(profileData.elevation_profile, [
+                    { from: 'Start', to: 'Finish', distance: data.total_distance }
+                ]);
+                // Show the results container and hide the placeholder
+                resultsContainer.style.display = 'block';
+                noResults.style.display = 'none';
+                console.log('Elevation chart rendered successfully');
+            } else {
+                console.error('Failed to get elevation profile:', profileData);
+            }
+        } catch (e) {
+            console.error('Error fetching elevation profile:', e);
+            // Fail silently if profile can't be rendered
+        }
         
         // Clear search
         console.log('Clearing search field...');
