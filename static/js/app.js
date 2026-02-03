@@ -2081,31 +2081,48 @@ async function performLocalMigration() {
 let allKnownRaces = [];
 
 async function showKnownRaceModal() {
+    console.log('=== showKnownRaceModal called ===');
     try {
+        console.log('Fetching known races list from API...');
         // Fetch known races from API
         const response = await fetch('/api/list-known-races');
+        console.log('Response status:', response.status, response.ok);
+        
         const data = await response.json();
+        console.log('Known races data:', data);
         
         if (!response.ok) {
+            console.error('Response not OK:', data);
             alert('Error loading known races: ' + (data.error || 'Unknown error'));
             return;
         }
         
         allKnownRaces = data.races || [];
+        console.log('Number of known races loaded:', allKnownRaces.length);
         renderKnownRaces(allKnownRaces);
         
         // Show modal
+        console.log('Adding active class to modal...');
         knownRaceModal.classList.add('active');
+        console.log('Modal classes:', knownRaceModal.className);
+        console.log('=== showKnownRaceModal completed ===');
     } catch (error) {
-        console.error('Error loading known races:', error);
+        console.error('=== ERROR in showKnownRaceModal ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
         alert('Failed to load known races. Please try again.');
     }
 }
 
 function renderKnownRaces(races) {
+    console.log('=== renderKnownRaces called ===');
+    console.log('Number of races to render:', races.length);
+    console.log('knownRacesList element:', knownRacesList);
+    
     knownRacesList.innerHTML = '';
     
     if (races.length === 0) {
+        console.log('No races to display');
         knownRacesList.innerHTML = '<p style="text-align: center; color: #666;">No known races found.</p>';
         return;
     }
@@ -2119,8 +2136,12 @@ function renderKnownRaces(races) {
         grouped[race.organiser].push(race);
     });
     
+    console.log('Grouped races by organiser:', Object.keys(grouped));
+    
     // Render grouped races
     Object.keys(grouped).sort().forEach(organiser => {
+        console.log(`Rendering organiser: ${organiser} with ${grouped[organiser].length} races`);
+        
         const organiserDiv = document.createElement('div');
         organiserDiv.className = 'known-race-organiser';
         organiserDiv.style.marginBottom = '20px';
@@ -2133,6 +2154,8 @@ function renderKnownRaces(races) {
         organiserDiv.appendChild(organiserHeader);
         
         grouped[organiser].forEach(race => {
+            console.log(`  - Rendering race: ${race.race_name} (${race.year})`);
+            
             const raceDiv = document.createElement('div');
             raceDiv.className = 'known-race-item';
             raceDiv.style.padding = '10px';
@@ -2162,6 +2185,7 @@ function renderKnownRaces(races) {
             
             const loadButton = raceDiv.querySelector('button');
             loadButton.addEventListener('click', (e) => {
+                console.log(`Load button clicked for: ${race.filename}`);
                 e.stopPropagation();
                 loadKnownRace(race.filename);
             });
@@ -2191,46 +2215,77 @@ function filterKnownRaces() {
 }
 
 async function loadKnownRace(filename) {
+    console.log('=== loadKnownRace called ===');
+    console.log('Filename:', filename);
+    
     try {
+        console.log('Fetching known race from API...');
         const response = await fetch(`/api/load-known-race/${filename}`);
+        console.log('Response status:', response.status, response.ok);
+        
         const data = await response.json();
+        console.log('API response data:', data);
         
         if (!response.ok) {
+            console.error('Response not OK:', data);
             alert('Error loading race: ' + (data.error || 'Unknown error'));
             return;
         }
         
+        console.log('Checking DOM elements...');
+        console.log('fileNameDisplay element:', fileNameDisplay);
+        console.log('gpxInfoBox element:', gpxInfoBox);
+        
         // Update UI with race info
-        fileNameDisplay.textContent = data.metadata ? 
+        const displayText = data.metadata ? 
             `${data.metadata.organiser} - ${data.metadata.race_name} (${data.metadata.year})` : 
             filename;
+        console.log('Setting fileNameDisplay.textContent to:', displayText);
+        fileNameDisplay.textContent = displayText;
+        console.log('fileNameDisplay.textContent is now:', fileNameDisplay.textContent);
         
-        gpxInfoBox.innerHTML = `
+        const infoHtml = `
             <strong>Distance:</strong> ${data.total_distance} km (${data.total_distance_miles} miles)<br>
             <strong>Elevation Gain:</strong> ${data.total_elev_gain} m<br>
             <strong>Elevation Loss:</strong> ${data.total_elev_loss} m<br>
             <strong>Trackpoints:</strong> ${data.num_trackpoints}
         `;
+        console.log('Setting gpxInfoBox.innerHTML to:', infoHtml);
+        gpxInfoBox.innerHTML = infoHtml;
+        console.log('Setting gpxInfoBox.style.display to block');
         gpxInfoBox.style.display = 'block';
+        console.log('gpxInfoBox.style.display is now:', gpxInfoBox.style.display);
         
         // Store the filename and flag for calculations
+        console.log('Storing in currentPlan...');
+        console.log('Before - currentPlan.gpx_filename:', currentPlan.gpx_filename);
+        console.log('Before - currentPlan.is_known_race:', currentPlan.is_known_race);
         currentPlan.gpx_filename = data.filename;
         currentPlan.is_known_race = data.is_known_race || false;
+        console.log('After - currentPlan.gpx_filename:', currentPlan.gpx_filename);
+        console.log('After - currentPlan.is_known_race:', currentPlan.is_known_race);
         
         // Clear checkpoint distances and reset inputs
+        console.log('Clearing checkpoint distances and regenerating inputs...');
         currentPlan.checkpoint_distances = [];
         generateCheckpointInputs();
         
         // Clear search
+        console.log('Clearing search field...');
         knownRaceSearch.value = '';
         
         // Show success message first, then close modal after user acknowledges
+        console.log('Showing success alert...');
         alert('Known race loaded successfully! You can now configure checkpoints and calculate your race plan.');
         
         // Hide modal after alert is acknowledged
+        console.log('Hiding modal...');
         hideModal(knownRaceModal);
+        console.log('=== loadKnownRace completed successfully ===');
     } catch (error) {
-        console.error('Error loading known race:', error);
+        console.error('=== ERROR in loadKnownRace ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
         alert('Failed to load known race. Please try again.');
     }
 }
