@@ -32,7 +32,11 @@ let currentPlan = {
     elevation_profile: null,
     dropbag_contents: null,  // Calculated dropbag contents for each CP
     loadedFilename: null,  // Track the currently loaded plan filename
-    planName: null  // Track the currently loaded plan name for UI display
+    loadedSource: null,  // Track the source of the loaded plan ('local' or 'supabase')
+    planName: null,  // Track the currently loaded plan name for UI display
+    total_distance: null,  // Total distance of the route
+    is_known_race: false,  // Whether this is a known race
+    race_start_time: null  // Race start time for time-of-day calculations
 };
 
 let elevationChart = null;
@@ -519,7 +523,10 @@ function resetPlanState() {
         dropbag_contents: null,
         loadedFilename: null,
         loadedSource: null,
-        planName: null
+        planName: null,
+        total_distance: null,
+        is_known_race: false,
+        race_start_time: null
     };
     
     // Reset the race plan title to default
@@ -1543,6 +1550,16 @@ async function loadPlan(filename, source = 'local') {
             currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
             currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
+            // Set total_distance early (before validation) to avoid showing stale distance in error messages
+            if (data.summary && data.summary.total_distance !== undefined && data.summary.total_distance !== null) {
+                currentPlan.total_distance = data.summary.total_distance;
+            }
+            
+            // Update the GPX file display to show the loaded GPX filename
+            if (data.gpx_filename) {
+                fileNameDisplay.textContent = data.gpx_filename;
+            }
+            
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
@@ -2251,6 +2268,10 @@ function filterKnownRaces() {
 async function loadKnownRace(filename) {
     console.log('=== loadKnownRace called ===');
     console.log('Filename:', filename);
+    
+    // Clear all inputs and reset state before loading the known race
+    // This ensures any previously loaded plan name is cleared from the UI
+    clearAllInputs();
     
     try {
         console.log('Fetching known race from API...');
