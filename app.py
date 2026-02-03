@@ -986,15 +986,20 @@ def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_abil
     """
     Calculate relative difficulty weight for each segment based on terrain, elevation, and fatigue.
     
-    This computes a 'difficulty score' for each segment using the same models as forward calculation,
-    allowing proportional time distribution in target time mode.
+    In target time mode, weights represent OBJECTIVE terrain difficulty, not athlete-specific ability.
+    This ensures all athletes get the same time distribution strategy:
+    - Elite climbers: Can hit target time with faster paces everywhere (not forced to slow on flats)
+    - Conservative climbers: Need slower paces everywhere to hit same target time
+    
+    Weights are calculated using baseline 'moderate' climbing ability and 'recreational' fitness level,
+    ensuring terrain difficulty is measured consistently regardless of athlete capability.
     
     Args:
         segments_data: List of dicts with 'distance', 'elev_gain', 'elev_loss', 'terrain_type'
         base_pace: Flat pace in min/km
-        climbing_ability: Athlete climbing ability key
+        climbing_ability: Athlete climbing ability (not used for weights, only for display)
         fatigue_enabled: Whether to apply fatigue
-        fitness_level: Athlete fitness level
+        fitness_level: Athlete fitness level (not used for weights, only for display)
         skill_level: Technical skill (0.0-1.0)
     
     Returns:
@@ -1003,32 +1008,40 @@ def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_abil
     weights = []
     cumulative_effort = 0.0
     
+    # Use baseline abilities to calculate objective terrain difficulty
+    # This ensures weights represent the terrain itself, not the athlete's capability
+    baseline_climbing = 'moderate'
+    baseline_fitness = 'recreational'
+    
+    log_message(f"Calculating difficulty weights for {climbing_ability} climber using baseline ({baseline_climbing}) abilities")
+    
     for i, seg_data in enumerate(segments_data):
         distance_km = seg_data['distance']
         elev_gain = seg_data['elev_gain']
         elev_loss = seg_data['elev_loss']
         terrain_type = seg_data.get('terrain_type', 'smooth_trail')
         
-        # Calculate adjusted pace using existing model (BEFORE adding segment effort)
+        # Calculate adjusted pace using BASELINE abilities (not athlete's actual ability)
+        # This creates objective difficulty scores independent of athlete capability
         adjusted_pace, _, _, _, _ = adjust_pace_for_elevation(
             base_pace, elev_gain, elev_loss, distance_km, cumulative_effort,
-            climbing_ability, fatigue_enabled, fitness_level, terrain_type, skill_level
+            baseline_climbing, fatigue_enabled, baseline_fitness, terrain_type, skill_level
         )
         
         # Segment difficulty weight = adjusted_pace × distance
-        # This represents the "effective time" this segment would take relative to others
+        # This represents objective terrain difficulty
         segment_weight = adjusted_pace * distance_km
         weights.append(segment_weight)
         
         # Debug logging
         log_message(f"  Segment {i}: dist={distance_km:.1f}km, +{elev_gain:.0f}m/-{elev_loss:.0f}m, " +
-                   f"pace={adjusted_pace:.2f} min/km, weight={segment_weight:.2f}")
+                   f"baseline_pace={adjusted_pace:.2f} min/km, weight={segment_weight:.2f}")
         
         # Update cumulative effort for next segment
         segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
         cumulative_effort += segment_effort
     
-    log_message(f"Total weight for {climbing_ability}: {sum(weights):.2f}")
+    log_message(f"Total weight (baseline): {sum(weights):.2f} - same for all athletes")
     return weights
 
 
