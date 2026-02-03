@@ -76,10 +76,7 @@ class AuthManager {
     }
 
     async handleAuthStateChange() {
-        if (this.currentUser) {
-            // User logged in - check for local plans on disk (not anonymous Supabase plans)
-            await this.checkForLocalPlans();
-        }
+        // Removed automatic local plans migration popup - users can manually import via Load Plan button
         this.renderAuthUI();
     }
 

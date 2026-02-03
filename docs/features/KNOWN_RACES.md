@@ -7,8 +7,10 @@ The "Load Known Race" feature allows users to quickly load predefined race route
 ## Directory Structure
 
 Known race GPX files are stored in:
-- **Docker/Production**: `/app/data/known_races/`
-- **Local Development**: `FuelPlanData/known_races/`
+- **Docker/Production**: `/app/static_data/known_races/` (read-only, bundled in the image)
+- **Local Development**: `data/known_races/` (primary) or `FuelPlanData/known_races/` (fallback)
+
+**Note**: In Docker deployments, known races are stored outside the `/app/data` directory to ensure they remain accessible even when users mount volumes for persistent data storage.
 
 ## GPX File Naming Convention
 
@@ -61,9 +63,10 @@ The search supports partial matching:
 
 ### For Local Development
 
-1. Add GPX file to `FuelPlanData/known_races/` directory
-2. Restart the Flask application
-3. The race will appear in the known races modal
+1. Add GPX file to `data/known_races/` directory (or `FuelPlanData/known_races/` for legacy setups)
+2. Follow the naming convention: `Organiser-race_name-year.gpx`
+3. Restart the Flask application
+4. The race will appear in the known races modal
 
 ## API Endpoints
 

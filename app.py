@@ -1,7 +1,11 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.5.0-load-known-races
+Version: v1.5.3
 Release Date: Feb 02, 2026
+
+Major Changes in v1.5.3:
+- Move all docs to folder and organise 
+- Update Readme with new links
 
 Major Changes in v1.5.0-load-known-races:
 - Display loaded plan name in UI title #64 
@@ -136,12 +140,17 @@ if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
     # Docker/production environment
     app.config['UPLOAD_FOLDER'] = '/app/data/uploads'
     app.config['SAVED_PLANS_FOLDER'] = '/app/data/saved_plans'
-    app.config['KNOWN_RACES_FOLDER'] = '/app/data/known_races'
+    # Known races are in a static location not affected by volume mounts
+    app.config['KNOWN_RACES_FOLDER'] = '/app/static_data/known_races'
 else:
     # Local development environment
     app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'uploads')
     app.config['SAVED_PLANS_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'saved_plans')
-    app.config['KNOWN_RACES_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'known_races')
+    # For local dev, check both data/ (source of truth) and FuelPlanData/ (legacy)
+    if os.path.exists(os.path.join(os.getcwd(), 'data', 'known_races')):
+        app.config['KNOWN_RACES_FOLDER'] = os.path.join(os.getcwd(), 'data', 'known_races')
+    else:
+        app.config['KNOWN_RACES_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'known_races')
 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
