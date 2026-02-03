@@ -1237,6 +1237,12 @@ async function savePlan(forceSaveAs = false) {
             // Always update to the filename returned by the server
             currentPlan.loadedFilename = data.filename;
             
+            // Update the plan name to match what was saved
+            currentPlan.planName = planName;
+            
+            // Update the UI title to reflect the new plan name
+            updateRacePlanTitle(currentPlan.planName);
+            
             // Mark that user has saved plans (for anonymous notice)
             localStorage.setItem('has_saved_plans', 'true');
             
