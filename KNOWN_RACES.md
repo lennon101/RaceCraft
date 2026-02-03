@@ -15,7 +15,7 @@ Known race GPX files are stored in:
 GPX files must follow this specific naming format:
 
 ```
-Race_Organiser-race_name-year.gpx
+Organiser-race_name-year.gpx
 ```
 
 ### Examples
@@ -26,7 +26,7 @@ Race_Organiser-race_name-year.gpx
 
 ### Naming Rules
 
-1. **Race Organiser**: Text before the first `-` (e.g., `UTMB`, `Ironman`, `Salomon`)
+1. **Organiser**: Text before the first `-` (e.g., `UTMB`, `Ironman`, `Salomon`)
 2. **Race Name**: Text between first `-` and last `-` (e.g., `Mont_Blanc_100`, `Taupo`)
    - Use underscores `_` instead of spaces in race names
    - Underscores are automatically converted to spaces in the UI

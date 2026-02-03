@@ -857,7 +857,7 @@ def upload_gpx():
 
 def parse_known_race_filename(filename):
     """
-    Parse known race filename according to format: Race_Organiser-race_name-year.gpx
+    Parse known race filename according to format: Organiser-race_name-year.gpx
     Returns dict with organiser, race_name, year, or None if invalid format.
     """
     if not filename.endswith('.gpx'):

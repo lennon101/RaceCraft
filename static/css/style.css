@@ -968,6 +968,6 @@ tbody tr:last-child td {
 }
 
 .btn-sm {
-    padding: 5px 15px !important;
-    font-size: 14px !important;
+    padding: 5px 15px;
+    font-size: 14px;
 }

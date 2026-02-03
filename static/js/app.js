@@ -2173,7 +2173,7 @@ function filterKnownRaces() {
     const filtered = allKnownRaces.filter(race => {
         return race.race_name.toLowerCase().includes(searchTerm) ||
                race.organiser.toLowerCase().includes(searchTerm) ||
-               race.year.toString().includes(searchTerm);
+               (race.year && race.year.toString().includes(searchTerm));
     });
     
     renderKnownRaces(filtered);
@@ -2202,9 +2202,9 @@ async function loadKnownRace(filename) {
         `;
         gpxInfoBox.style.display = 'block';
         
-        // Store the filename for calculations
+        // Store the filename and flag for calculations
         currentPlan.gpx_filename = data.filename;
-        currentPlan.is_known_race = true;
+        currentPlan.is_known_race = data.is_known_race || false;
         
         // Clear checkpoint distances and reset inputs
         currentPlan.checkpoint_distances = [];
