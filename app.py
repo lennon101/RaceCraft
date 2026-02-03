@@ -130,16 +130,19 @@ if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
     # Docker/production environment
     app.config['UPLOAD_FOLDER'] = '/app/data/uploads'
     app.config['SAVED_PLANS_FOLDER'] = '/app/data/saved_plans'
+    app.config['KNOWN_RACES_FOLDER'] = '/app/data/known_races'
 else:
     # Local development environment
     app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'uploads')
     app.config['SAVED_PLANS_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'saved_plans')
+    app.config['KNOWN_RACES_FOLDER'] = os.path.join(os.getcwd(), 'FuelPlanData', 'known_races')
 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['SAVED_PLANS_FOLDER'], exist_ok=True)
+os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
@@ -851,6 +854,116 @@ def upload_gpx():
         })
     except Exception as e:
         return jsonify({'error': f'Error parsing GPX file: {str(e)}'}), 400
+
+def parse_known_race_filename(filename):
+    """
+    Parse known race filename according to format: Race_Organiser-race_name-year.gpx
+    Returns dict with organiser, race_name, year, or None if invalid format.
+    """
+    if not filename.endswith('.gpx'):
+        return None
+    
+    # Remove .gpx extension
+    name_without_ext = filename[:-4]
+    
+    # Split by '-' and expect at least 3 parts
+    parts = name_without_ext.split('-')
+    if len(parts) < 3:
+        return None
+    
+    # Last part should be a 4-digit year
+    year_str = parts[-1]
+    if not (year_str.isdigit() and len(year_str) == 4):
+        return None
+    
+    # First part is organiser, everything in between is race name
+    organiser = parts[0]
+    race_name = '-'.join(parts[1:-1])  # Join middle parts back together
+    year = int(year_str)
+    
+    return {
+        'organiser': organiser,
+        'race_name': race_name.replace('_', ' '),  # Convert underscores to spaces
+        'year': year,
+        'filename': filename
+    }
+
+@app.route('/api/list-known-races', methods=['GET'])
+def list_known_races():
+    """List all known races from the known_races directory."""
+    try:
+        known_races_folder = app.config['KNOWN_RACES_FOLDER']
+        
+        if not os.path.exists(known_races_folder):
+            return jsonify({'races': [], 'error': 'Known races folder not found'})
+        
+        races = []
+        for filename in os.listdir(known_races_folder):
+            if filename.endswith('.gpx'):
+                parsed = parse_known_race_filename(filename)
+                if parsed:
+                    # Add full path for internal use
+                    parsed['filepath'] = os.path.join(known_races_folder, filename)
+                    races.append(parsed)
+        
+        # Sort by year (descending), then by organiser, then by race name
+        races.sort(key=lambda x: (-x['year'], x['organiser'], x['race_name']))
+        
+        # Group by organiser
+        grouped = {}
+        for race in races:
+            organiser = race['organiser']
+            if organiser not in grouped:
+                grouped[organiser] = []
+            grouped[organiser].append(race)
+        
+        return jsonify({
+            'races': races,
+            'grouped': grouped
+        })
+    except Exception as e:
+        return jsonify({'error': f'Error listing known races: {str(e)}'}), 500
+
+@app.route('/api/load-known-race/<filename>', methods=['GET'])
+def load_known_race(filename):
+    """Load a known race GPX file."""
+    try:
+        from werkzeug.utils import secure_filename
+        secure_name = secure_filename(filename)
+        filepath = os.path.join(app.config['KNOWN_RACES_FOLDER'], secure_name)
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Known race file not found'}), 404
+        
+        # Parse the GPX file
+        trackpoints = parse_gpx_file(filepath)
+        total_distance = calculate_total_distance(trackpoints)
+        
+        # Calculate total elevation
+        total_elev_gain = 0.0
+        total_elev_loss = 0.0
+        for i in range(len(trackpoints) - 1):
+            elev_change = trackpoints[i + 1][2] - trackpoints[i][2]
+            if elev_change > 0:
+                total_elev_gain += elev_change
+            else:
+                total_elev_loss += abs(elev_change)
+        
+        # Parse metadata from filename
+        metadata = parse_known_race_filename(filename)
+        
+        return jsonify({
+            'filename': secure_name,
+            'total_distance': round(total_distance, 2),
+            'total_distance_miles': round(total_distance * 0.621371, 2),
+            'total_elev_gain': round(total_elev_gain, 0),
+            'total_elev_loss': round(total_elev_loss, 0),
+            'num_trackpoints': len(trackpoints),
+            'metadata': metadata,
+            'is_known_race': True
+        })
+    except Exception as e:
+        return jsonify({'error': f'Error loading known race: {str(e)}'}), 500
 
 @app.route('/api/calculate', methods=['POST'])
 def calculate():

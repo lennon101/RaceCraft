@@ -935,3 +935,39 @@ tbody tr:last-child td {
 .migration-prompt-content a:hover {
     color: #f0f0f0;
 }
+
+/* Known Race modal styles */
+.secondary-btn {
+    padding: 10px 20px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease;
+}
+
+.secondary-btn:hover {
+    background-color: #5a6268;
+}
+
+.secondary-btn .mdi {
+    font-size: 18px;
+}
+
+.known-race-item {
+    transition: all 0.2s ease;
+}
+
+.known-race-item:hover {
+    transform: translateX(5px);
+}
+
+.btn-sm {
+    padding: 5px 15px !important;
+    font-size: 14px !important;
+}
