@@ -66,7 +66,7 @@ The search supports partial matching:
 1. Add GPX file to `data/known_races/` directory (or `FuelPlanData/known_races/` for legacy setups)
 2. Follow the naming convention: `Organiser-race_name-year.gpx`
 3. Restart the Flask application
-3. The race will appear in the known races modal
+4. The race will appear in the known races modal
 
 ## API Endpoints
 
