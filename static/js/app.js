@@ -1725,8 +1725,8 @@ async function handleImportPlan(event) {
             // Clear current plan tracking
             currentPlan.loadedFilename = null;
             
-            // Store plan name (from data or use a default name)
-            currentPlan.planName = data.plan_name || 'Imported Plan';
+            // Store plan name (from data or use a timestamped default)
+            currentPlan.planName = data.plan_name || `Imported Plan ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
             
             // Update the race plan title to show the imported plan name
             updateRacePlanTitle(currentPlan.planName);
