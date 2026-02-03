@@ -1,7 +1,13 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.4.1
+Version: v1.5.0-load-known-races
 Release Date: Feb 02, 2026
+
+Major Changes in v1.5.0-load-known-races:
+- Display loaded plan name in UI title #64 
+- Clear form inputs and state on user sign-out #60 
+- Add manual import for local and unowned plans #59 
+- Support anonymous user plans in list/load/delete endpoints #56 
 
 Major Changes in v1.4.1:
 - Fix Supabase client initialization to be lazy and handle invalid credentials gracefully
