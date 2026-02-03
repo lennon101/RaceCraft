@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RaceCraft Sample">
+  <trk>
+    <name>UTMB CCC 2023</name>
+    <trkseg>
+      <trkpt lat="45.8787" lon="6.9528">
+        <ele>1100</ele>
+      </trkpt>
+      <trkpt lat="45.8800" lon="6.9540">
+        <ele>1150</ele>
+      </trkpt>
+      <trkpt lat="45.8820" lon="6.9560">
+        <ele>1220</ele>
+      </trkpt>
+      <trkpt lat="45.8840" lon="6.9580">
+        <ele>1300</ele>
+      </trkpt>
+      <trkpt lat="45.8860" lon="6.9600">
+        <ele>1400</ele>
+      </trkpt>
+      <trkpt lat="45.8880" lon="6.9620">
+        <ele>1520</ele>
+      </trkpt>
+      <trkpt lat="45.8900" lon="6.9640">
+        <ele>1650</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

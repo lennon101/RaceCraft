@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RaceCraft Sample">
+  <trk>
+    <name>Salomon Kosci Miler 2022</name>
+    <trkseg>
+      <trkpt lat="-36.4557" lon="148.2773">
+        <ele>1380</ele>
+      </trkpt>
+      <trkpt lat="-36.4560" lon="148.2780">
+        <ele>1400</ele>
+      </trkpt>
+      <trkpt lat="-36.4570" lon="148.2790">
+        <ele>1450</ele>
+      </trkpt>
+      <trkpt lat="-36.4580" lon="148.2800">
+        <ele>1520</ele>
+      </trkpt>
+      <trkpt lat="-36.4590" lon="148.2810">
+        <ele>1600</ele>
+      </trkpt>
+      <trkpt lat="-36.4600" lon="148.2820">
+        <ele>1700</ele>
+      </trkpt>
+      <trkpt lat="-36.4610" lon="148.2830">
+        <ele>1820</ele>
+      </trkpt>
+      <trkpt lat="-36.4620" lon="148.2840">
+        <ele>1950</ele>
+      </trkpt>
+      <trkpt lat="-36.4630" lon="148.2850">
+        <ele>2050</ele>
+      </trkpt>
+      <trkpt lat="-36.4640" lon="148.2860">
+        <ele>2100</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

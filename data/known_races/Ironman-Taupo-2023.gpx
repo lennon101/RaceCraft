@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RaceCraft Sample">
+  <trk>
+    <name>Ironman Taupo 2023</name>
+    <trkseg>
+      <trkpt lat="-38.6857" lon="176.0702">
+        <ele>380</ele>
+      </trkpt>
+      <trkpt lat="-38.6860" lon="176.0710">
+        <ele>382</ele>
+      </trkpt>
+      <trkpt lat="-38.6870" lon="176.0720">
+        <ele>385</ele>
+      </trkpt>
+      <trkpt lat="-38.6880" lon="176.0730">
+        <ele>390</ele>
+      </trkpt>
+      <trkpt lat="-38.6890" lon="176.0740">
+        <ele>395</ele>
+      </trkpt>
+      <trkpt lat="-38.6900" lon="176.0750">
+        <ele>400</ele>
+      </trkpt>
+      <trkpt lat="-38.6910" lon="176.0760">
+        <ele>405</ele>
+      </trkpt>
+      <trkpt lat="-38.6920" lon="176.0770">
+        <ele>410</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
