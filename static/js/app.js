@@ -1148,7 +1148,7 @@ function displayResults(data) {
             paceStyle = 'color: #ef4444; font-weight: bold;';
             paceWarning = ' ⚠️';
         } else if (seg.pace_aggressive) {
-            // In target time mode, highlight aggressive paces
+            // Highlight aggressive paces (faster than typical for the segment)
             paceStyle = 'color: #f59e0b; font-weight: bold;';
             paceWarning = ' ⚡';
         }

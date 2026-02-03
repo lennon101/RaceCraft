@@ -1191,7 +1191,7 @@ def calculate():
                     target_moving_time = target_total_minutes - total_cp_time
                     
                     if target_moving_time <= 0:
-                        return jsonify({'error': 'Target time is too short - not enough time for checkpoint stops'}), 400
+                        return jsonify({'error': f'Target time ({target_time_str}) is too short - checkpoint stops alone require {total_cp_time:.1f} minutes'}), 400
                     
                     # Calculate difficulty weights for each segment
                     difficulty_weights = calculate_segment_difficulty_weights(
@@ -1235,7 +1235,7 @@ def calculate():
                 )
                 
                 # Check if required pace is aggressive (faster than base pace)
-                pace_aggressive = required_pace < z2_pace * 0.85  # More than 15% faster than base
+                pace_aggressive = required_pace < z2_pace * 0.85  # At least 15% faster than base
                 adjusted_pace = required_pace
                 pace_capped = False
             else:
@@ -1298,6 +1298,7 @@ def calculate():
                 'pace_str': f"{int(adjusted_pace)}:{int((adjusted_pace % 1) * 60):02d}",
                 'pace_capped': pace_capped,
                 'pace_aggressive': pace_aggressive if use_target_time else False,
+                # Note: In target time mode, fatigue is incorporated into difficulty weights, not displayed separately
                 'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
                 'terrain_type': terrain_type,
