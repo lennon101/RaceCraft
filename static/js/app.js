@@ -2084,7 +2084,7 @@ async function showKnownRaceModal() {
         renderKnownRaces(allKnownRaces);
         
         // Show modal
-        knownRaceModal.style.display = 'flex';
+        knownRaceModal.classList.add('active');
     } catch (error) {
         console.error('Error loading known races:', error);
         alert('Failed to load known races. Please try again.');
@@ -2210,13 +2210,14 @@ async function loadKnownRace(filename) {
         currentPlan.checkpoint_distances = [];
         generateCheckpointInputs();
         
-        // Hide modal
-        hideModal(knownRaceModal);
-        
         // Clear search
         knownRaceSearch.value = '';
         
+        // Show success message first, then close modal after user acknowledges
         alert('Known race loaded successfully! You can now configure checkpoints and calculate your race plan.');
+        
+        // Hide modal after alert is acknowledged
+        hideModal(knownRaceModal);
     } catch (error) {
         console.error('Error loading known race:', error);
         alert('Failed to load known race. Please try again.');
