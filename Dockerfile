@@ -11,9 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY templates/ templates/
 COPY static/ static/
+COPY data/ data/
 
 # Create default data directories (can be overridden by env)
-RUN mkdir -p /app/data/uploads /app/data/saved_plans
+RUN mkdir -p /app/data/uploads /app/data/saved_plans /app/data/known_races
 
 # Expose port
 EXPOSE 5000

@@ -47,6 +47,11 @@
                             <span id="file-name">Choose GPX file...</span>
                         </label>
                     </div>
+                    <div style="text-align: center; margin-top: 10px;">
+                        <button id="load-known-race-btn" class="secondary-btn">
+                            <span class="mdi mdi-map-marker-multiple"></span> Load Known Race
+                        </button>
+                    </div>
                     <div id="gpx-info" class="info-box" style="display: none;"></div>
                 </section>
 
@@ -331,6 +336,23 @@
             <div class="modal-actions">
                 <button id="import-unowned-plans-btn" class="btn btn-primary">Import Local & Unowned Plans</button>
                 <button id="load-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Known Race Modal -->
+    <div id="known-race-modal" class="modal">
+        <div class="modal-content">
+            <h2>Load Known Race</h2>
+            <div class="input-group">
+                <label for="known-race-search">Search:</label>
+                <input type="text" id="known-race-search" placeholder="Search by race name, organiser, or year..." />
+            </div>
+            <div id="known-races-list" style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                <!-- Known races will be populated here -->
+            </div>
+            <div class="modal-actions">
+                <button id="known-race-cancel-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>

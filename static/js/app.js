@@ -64,6 +64,13 @@ const exportPlanBtn = document.getElementById('export-plan-btn');
 const importPlanBtn = document.getElementById('import-plan-btn');
 const importPlanFileInput = document.getElementById('import-plan-file-input');
 
+// Known Race modal elements
+const loadKnownRaceBtn = document.getElementById('load-known-race-btn');
+const knownRaceModal = document.getElementById('known-race-modal');
+const knownRaceSearch = document.getElementById('known-race-search');
+const knownRacesList = document.getElementById('known-races-list');
+const knownRaceCancelBtn = document.getElementById('known-race-cancel-btn');
+
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
 numCheckpointsInput.addEventListener('input', () => {
@@ -85,6 +92,11 @@ exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModa
 exportPlanBtn.addEventListener('click', exportCurrentPlan);
 importPlanBtn.addEventListener('click', () => importPlanFileInput.click());
 importPlanFileInput.addEventListener('change', handleImportPlan);
+
+// Known Race listeners
+loadKnownRaceBtn.addEventListener('click', showKnownRaceModal);
+knownRaceCancelBtn.addEventListener('click', () => hideModal(knownRaceModal));
+knownRaceSearch.addEventListener('input', filterKnownRaces);
 
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
@@ -212,6 +224,16 @@ function setupDecimalInput(input) {
 
 // Functions
 function renderElevationChart(elevationProfile, segments) {
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not available - elevation chart will not be rendered');
+        const chartContainer = document.getElementById('elevation-chart');
+        if (chartContainer && chartContainer.parentElement) {
+            chartContainer.parentElement.innerHTML = '<p style="text-align: center; padding: 20px; color: #666;">Elevation chart unavailable (Chart.js library not loaded)</p>';
+        }
+        return;
+    }
+    
     const ctx = document.getElementById('elevation-chart');
     
     // Destroy existing chart
@@ -944,6 +966,7 @@ async function calculateRacePlan() {
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
+        is_known_race: currentPlan.is_known_race || false,
         checkpoint_distances: currentPlan.checkpoint_distances,
         checkpoint_dropbags: currentPlan.checkpoint_dropbags,
         segment_terrain_types: currentPlan.segment_terrain_types,
@@ -2051,6 +2074,267 @@ async function performLocalMigration() {
     } catch (error) {
         console.error('Migration error:', error);
         authManager.showNotification('Failed to import plans. Please try again.', 'error');
+    }
+}
+
+// Known Races functionality
+let allKnownRaces = [];
+
+async function showKnownRaceModal() {
+    console.log('=== showKnownRaceModal called ===');
+    try {
+        console.log('Fetching known races list from API...');
+        // Fetch known races from API
+        const response = await fetch('/api/list-known-races');
+        console.log('Response status:', response.status, response.ok);
+        
+        const data = await response.json();
+        console.log('Known races data:', data);
+        
+        if (!response.ok) {
+            console.error('Response not OK:', data);
+            alert('Error loading known races: ' + (data.error || 'Unknown error'));
+            return;
+        }
+        
+        allKnownRaces = data.races || [];
+        console.log('Number of known races loaded:', allKnownRaces.length);
+        renderKnownRaces(allKnownRaces);
+        
+        // Show modal
+        console.log('Adding active class to modal...');
+        knownRaceModal.classList.add('active');
+        console.log('Modal classes:', knownRaceModal.className);
+        console.log('=== showKnownRaceModal completed ===');
+    } catch (error) {
+        console.error('=== ERROR in showKnownRaceModal ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        alert('Failed to load known races. Please try again.');
+    }
+}
+
+function renderKnownRaces(races) {
+    console.log('=== renderKnownRaces called ===');
+    console.log('Number of races to render:', races.length);
+    console.log('knownRacesList element:', knownRacesList);
+    
+    knownRacesList.innerHTML = '';
+    
+    if (races.length === 0) {
+        console.log('No races to display');
+        knownRacesList.innerHTML = '<p style="text-align: center; color: #666;">No known races found.</p>';
+        return;
+    }
+    
+    // Group races by organiser
+    const grouped = {};
+    races.forEach(race => {
+        if (!grouped[race.organiser]) {
+            grouped[race.organiser] = [];
+        }
+        grouped[race.organiser].push(race);
+    });
+    
+    console.log('Grouped races by organiser:', Object.keys(grouped));
+    
+    // Render grouped races
+    Object.keys(grouped).sort().forEach(organiser => {
+        console.log(`Rendering organiser: ${organiser} with ${grouped[organiser].length} races`);
+        
+        const organiserDiv = document.createElement('div');
+        organiserDiv.className = 'known-race-organiser';
+        organiserDiv.style.marginBottom = '20px';
+        
+        const organiserHeader = document.createElement('h3');
+        organiserHeader.textContent = organiser;
+        organiserHeader.style.borderBottom = '2px solid #2563eb';
+        organiserHeader.style.paddingBottom = '5px';
+        organiserHeader.style.marginBottom = '10px';
+        organiserDiv.appendChild(organiserHeader);
+        
+        grouped[organiser].forEach(race => {
+            console.log(`  - Rendering race: ${race.race_name} (${race.year})`);
+            
+            const raceDiv = document.createElement('div');
+            raceDiv.className = 'known-race-item';
+            raceDiv.style.padding = '10px';
+            raceDiv.style.marginBottom = '5px';
+            raceDiv.style.backgroundColor = '#f8f9fa';
+            raceDiv.style.borderRadius = '5px';
+            raceDiv.style.cursor = 'pointer';
+            raceDiv.style.transition = 'background-color 0.2s';
+            
+            raceDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${race.race_name}</strong>
+                        <span style="color: #666; margin-left: 10px;">${race.year}</span>
+                    </div>
+                    <button class="btn btn-sm btn-primary" style="padding: 5px 15px; font-size: 14px;">Load</button>
+                </div>
+            `;
+            
+            raceDiv.addEventListener('mouseenter', () => {
+                raceDiv.style.backgroundColor = '#e9ecef';
+            });
+            
+            raceDiv.addEventListener('mouseleave', () => {
+                raceDiv.style.backgroundColor = '#f8f9fa';
+            });
+            
+            const loadButton = raceDiv.querySelector('button');
+            loadButton.addEventListener('click', (e) => {
+                console.log(`Load button clicked for: ${race.filename}`);
+                e.stopPropagation();
+                loadKnownRace(race.filename);
+            });
+            
+            organiserDiv.appendChild(raceDiv);
+        });
+        
+        knownRacesList.appendChild(organiserDiv);
+    });
+}
+
+function filterKnownRaces() {
+    const searchTerm = knownRaceSearch.value.toLowerCase();
+    
+    if (!searchTerm) {
+        renderKnownRaces(allKnownRaces);
+        return;
+    }
+    
+    const filtered = allKnownRaces.filter(race => {
+        return race.race_name.toLowerCase().includes(searchTerm) ||
+               race.organiser.toLowerCase().includes(searchTerm) ||
+               (race.year && race.year.toString().includes(searchTerm));
+    });
+    
+    renderKnownRaces(filtered);
+}
+
+async function loadKnownRace(filename) {
+    console.log('=== loadKnownRace called ===');
+    console.log('Filename:', filename);
+    
+    try {
+        console.log('Fetching known race from API...');
+        const response = await fetch(`/api/load-known-race/${filename}`);
+        console.log('Response status:', response.status, response.ok);
+        
+        const data = await response.json();
+        console.log('API response data:', data);
+        
+        if (!response.ok) {
+            console.error('Response not OK:', data);
+            alert('Error loading race: ' + (data.error || 'Unknown error'));
+            return;
+        }
+        
+        console.log('Checking DOM elements...');
+        console.log('fileNameDisplay element:', fileNameDisplay);
+        console.log('gpxInfoBox element:', gpxInfoBox);
+        
+        // Update UI with race info
+        const displayText = data.metadata ? 
+            `${data.metadata.organiser} - ${data.metadata.race_name} (${data.metadata.year})` : 
+            filename;
+        console.log('Setting fileNameDisplay.textContent to:', displayText);
+        fileNameDisplay.textContent = displayText;
+        console.log('fileNameDisplay.textContent is now:', fileNameDisplay.textContent);
+        
+        const infoHtml = `
+            <strong>Distance:</strong> ${data.total_distance} km (${data.total_distance_miles} miles)<br>
+            <strong>Elevation Gain:</strong> ${data.total_elev_gain} m<br>
+            <strong>Elevation Loss:</strong> ${data.total_elev_loss} m<br>
+            <strong>Trackpoints:</strong> ${data.num_trackpoints}
+        `;
+        console.log('Setting gpxInfoBox.innerHTML to:', infoHtml);
+        gpxInfoBox.innerHTML = infoHtml;
+        console.log('Setting gpxInfoBox.style.display to block');
+        gpxInfoBox.style.display = 'block';
+        console.log('gpxInfoBox.style.display is now:', gpxInfoBox.style.display);
+        
+        // Store the filename and flag for calculations
+        console.log('Storing in currentPlan...');
+        console.log('Before - currentPlan.gpx_filename:', currentPlan.gpx_filename);
+        console.log('Before - currentPlan.is_known_race:', currentPlan.is_known_race);
+        currentPlan.gpx_filename = data.filename;
+        currentPlan.is_known_race = data.is_known_race || false;
+        currentPlan.total_distance = data.total_distance;
+        console.log('After - currentPlan.gpx_filename:', currentPlan.gpx_filename);
+        console.log('After - currentPlan.is_known_race:', currentPlan.is_known_race);
+        
+        // Clear checkpoint distances and reset inputs
+        console.log('Clearing checkpoint distances and regenerating inputs...');
+        currentPlan.checkpoint_distances = [];
+        generateCheckpointInputs();
+        
+        // Update summary cards for distance and elevation gain immediately
+        document.getElementById('summary-distance').textContent = `${data.total_distance} km`;
+        document.getElementById('summary-elev-gain').textContent = `+${data.total_elev_gain} m`;
+        
+        // Fetch elevation profile for vertical plot (basic, no segments yet)
+        console.log('Fetching elevation profile...');
+        try {
+            const profileResponse = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    gpx_filename: data.filename,
+                    is_known_race: data.is_known_race || false,
+                    checkpoint_distances: [],
+                    checkpoint_dropbags: [],
+                    segment_terrain_types: ['smooth_trail'],
+                    avg_cp_time: 5,
+                    z2_pace: 6.5,
+                    climbing_ability: 'moderate',
+                    carbs_per_hour: 60,
+                    water_per_hour: 500,
+                    fatigue_enabled: true,
+                    fitness_level: 'recreational',
+                    skill_level: 0.5
+                })
+            });
+            const profileData = await profileResponse.json();
+            console.log('Elevation profile response:', profileResponse.ok, profileData);
+            
+            if (profileResponse.ok && profileData.elevation_profile && profileData.elevation_profile.length > 0) {
+                console.log('Rendering elevation chart...');
+                // Render the vertical profile with a dummy segments array (just Start→Finish)
+                renderElevationChart(profileData.elevation_profile, [
+                    { from: 'Start', to: 'Finish', distance: data.total_distance }
+                ]);
+                // Show the results container and hide the placeholder
+                resultsContainer.style.display = 'block';
+                noResults.style.display = 'none';
+                console.log('Elevation chart rendered successfully');
+            } else {
+                console.error('Failed to get elevation profile:', profileData);
+            }
+        } catch (e) {
+            console.error('Error fetching elevation profile:', e);
+            // Fail silently if profile can't be rendered
+        }
+        
+        // Clear search
+        console.log('Clearing search field...');
+        knownRaceSearch.value = '';
+        
+        // Show success message first, then close modal after user acknowledges
+        console.log('Showing success alert...');
+        alert('Known race loaded successfully! You can now configure checkpoints and calculate your race plan.');
+        
+        // Hide modal after alert is acknowledged
+        console.log('Hiding modal...');
+        hideModal(knownRaceModal);
+        console.log('=== loadKnownRace completed successfully ===');
+    } catch (error) {
+        console.error('=== ERROR in loadKnownRace ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        alert('Failed to load known race. Please try again.');
     }
 }
 
