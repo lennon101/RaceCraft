@@ -1020,3 +1020,33 @@ tbody tr:last-child td {
     padding: 5px 15px;
     font-size: 14px;
 }
+
+/* Effort level badges for target time mode */
+.effort-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.effort-push {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.effort-steady {
+    background: #e0f2fe;
+    color: #075985;
+    border: 1px solid #7dd3fc;
+}
+
+.effort-protect {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}

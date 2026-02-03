@@ -980,40 +980,29 @@ def load_known_race(filename):
     except Exception as e:
         return jsonify({'error': f'Error loading known race: {str(e)}'}), 500
 
-def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_ability='moderate',
-                                        fatigue_enabled=True, fitness_level='recreational',
-                                        skill_level=0.5):
+def calculate_natural_pacing(segments_data, base_pace, climbing_ability='moderate',
+                            fatigue_enabled=True, fitness_level='recreational',
+                            skill_level=0.5):
     """
-    Calculate relative difficulty weight for each segment based on terrain, elevation, and fatigue.
+    Calculate what the athlete would naturally do "on autopilot" (forward model).
     
-    In target time mode, weights represent OBJECTIVE terrain difficulty, not athlete-specific ability.
-    This ensures all athletes get the same time distribution strategy:
-    - Elite climbers: Can hit target time with faster paces everywhere (not forced to slow on flats)
-    - Conservative climbers: Need slower paces everywhere to hit same target time
-    
-    Weights are calculated using baseline 'moderate' climbing ability and 'recreational' fitness level,
-    ensuring terrain difficulty is measured consistently regardless of athlete capability.
+    This is the prediction model: ability → pace → finish time
     
     Args:
         segments_data: List of dicts with 'distance', 'elev_gain', 'elev_loss', 'terrain_type'
         base_pace: Flat pace in min/km
-        climbing_ability: Athlete climbing ability (not used for weights, only for display)
+        climbing_ability: Athlete climbing ability
         fatigue_enabled: Whether to apply fatigue
-        fitness_level: Athlete fitness level (not used for weights, only for display)
+        fitness_level: Athlete fitness level
         skill_level: Technical skill (0.0-1.0)
     
     Returns:
-        List of difficulty weights (one per segment)
+        List of dicts with 'natural_time' (minutes), 'natural_pace' (min/km) for each segment
     """
-    weights = []
+    results = []
     cumulative_effort = 0.0
     
-    # Use baseline abilities to calculate objective terrain difficulty
-    # This ensures weights represent the terrain itself, not the athlete's capability
-    baseline_climbing = 'moderate'
-    baseline_fitness = 'recreational'
-    
-    log_message(f"Calculating difficulty weights for {climbing_ability} climber using baseline ({baseline_climbing}) abilities")
+    log_message(f"Computing natural pacing for {climbing_ability} climber")
     
     for i, seg_data in enumerate(segments_data):
         distance_km = seg_data['distance']
@@ -1021,65 +1010,198 @@ def calculate_segment_difficulty_weights(segments_data, base_pace, climbing_abil
         elev_loss = seg_data['elev_loss']
         terrain_type = seg_data.get('terrain_type', 'smooth_trail')
         
-        # Calculate adjusted pace using BASELINE abilities (not athlete's actual ability)
-        # This creates objective difficulty scores independent of athlete capability
-        adjusted_pace, _, _, _, _ = adjust_pace_for_elevation(
+        # Use athlete's actual ability to predict natural pace
+        natural_pace, _, _, _, _ = adjust_pace_for_elevation(
             base_pace, elev_gain, elev_loss, distance_km, cumulative_effort,
-            baseline_climbing, fatigue_enabled, baseline_fitness, terrain_type, skill_level
+            climbing_ability, fatigue_enabled, fitness_level, terrain_type, skill_level
         )
         
-        # Segment difficulty weight = adjusted_pace × distance
-        # This represents objective terrain difficulty
-        segment_weight = adjusted_pace * distance_km
-        weights.append(segment_weight)
+        natural_time = natural_pace * distance_km
         
-        # Debug logging
-        log_message(f"  Segment {i}: dist={distance_km:.1f}km, +{elev_gain:.0f}m/-{elev_loss:.0f}m, " +
-                   f"baseline_pace={adjusted_pace:.2f} min/km, weight={segment_weight:.2f}")
+        results.append({
+            'natural_time': natural_time,
+            'natural_pace': natural_pace
+        })
+        
+        log_message(f"  Segment {i}: natural pace = {natural_pace:.2f} min/km, time = {natural_time:.2f} min")
         
         # Update cumulative effort for next segment
         segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
         cumulative_effort += segment_effort
     
-    log_message(f"Total weight (baseline): {sum(weights):.2f} - same for all athletes")
-    return weights
-
-
-def reverse_calculate_pacing(target_time_minutes, segments_data, difficulty_weights):
-    """
-    Reverse-engineer segment times and paces from a target finish time.
+    total_natural_time = sum(r['natural_time'] for r in results)
+    log_message(f"Total natural time: {total_natural_time:.2f} min")
     
-    Distributes the target time across segments proportionally to their difficulty weights,
-    then calculates the required pace for each segment.
+    return results
+
+
+def get_terrain_effort_bounds(elev_gain, elev_loss, distance_km, climbing_ability):
+    """
+    Define how much a segment's pace can be adjusted based on terrain type and athlete ability.
+    
+    Returns bounds as multipliers: (min_multiplier, max_multiplier)
+    - min_multiplier < 1.0: can speed up
+    - max_multiplier > 1.0: can slow down
+    
+    Ability affects the bounds:
+    - Elite climbers: wider speed-up range on climbs
+    - Conservative climbers: narrower speed-up range on climbs
+    """
+    gradient = (elev_gain - elev_loss) / (distance_km * 1000.0) if distance_km > 0 else 0.0
+    
+    # Classify terrain by gradient
+    if gradient > 0.08:  # Steep climb (>8%)
+        # Climbing is where ability matters most
+        if climbing_ability == 'elite':
+            return (0.70, 1.15)  # Can push much harder, less slowdown
+        elif climbing_ability == 'very_strong':
+            return (0.75, 1.20)
+        elif climbing_ability == 'strong':
+            return (0.80, 1.25)
+        elif climbing_ability == 'moderate':
+            return (0.85, 1.30)
+        else:  # conservative
+            return (0.90, 1.35)  # Limited improvement, more slowdown
+    
+    elif gradient < -0.05:  # Descent (< -5%)
+        # Less ability variation on descents (limited by safety/technique)
+        return (0.85, 1.20)  # Moderate adjustment range for all
+    
+    else:  # Flat or rolling (between -5% and +8%)
+        # Medium adjustment range, less ability-dependent
+        return (0.80, 1.25)
+
+
+def allocate_effort_to_target(target_time_minutes, segments_data, natural_results, 
+                               base_pace, climbing_ability, fatigue_enabled,
+                               fitness_level, skill_level):
+    """
+    Effort allocation optimizer for target time mode.
+    
+    This is constrained optimization, NOT pace inversion.
+    
+    Strategy:
+    1. Start with natural pacing (what athlete would do on autopilot)
+    2. Calculate ΔT = T_natural - T_target
+    3. Distribute ΔT across segments within terrain-specific bounds
+    4. Ability affects ceilings (what's possible), not obligations (what's required)
     
     Args:
-        target_time_minutes: Target total moving time in minutes (excludes CP stop time)
-        segments_data: List of dicts with 'distance' for each segment
-        difficulty_weights: List of difficulty weights from calculate_segment_difficulty_weights()
+        target_time_minutes: Target total moving time
+        segments_data: Segment info (distance, elevation, terrain)
+        natural_results: Natural pacing from calculate_natural_pacing()
+        base_pace: Flat terrain pace
+        climbing_ability: Athlete ability level
+        fatigue_enabled: Whether fatigue is enabled
+        fitness_level: Athlete fitness level
+        skill_level: Technical skill level
     
     Returns:
-        List of dicts with 'segment_time' (minutes) and 'required_pace' (min/km) for each segment
+        List of dicts with 'segment_time', 'required_pace', 'effort_level' for each segment
     """
-    if not difficulty_weights or sum(difficulty_weights) == 0:
+    if not natural_results:
         return []
     
-    # Normalize weights so they sum to the target time
-    total_weight = sum(difficulty_weights)
-    normalized_weights = [w / total_weight for w in difficulty_weights]
+    natural_total_time = sum(r['natural_time'] for r in natural_results)
+    delta_t = natural_total_time - target_time_minutes
     
-    results = []
+    log_message(f"Effort allocation: natural={natural_total_time:.2f} min, target={target_time_minutes:.2f} min, ΔT={delta_t:.2f} min")
+    
+    # If target matches natural, no adjustment needed
+    if abs(delta_t) < 0.5:  # Within 30 seconds
+        results = []
+        for i, seg_data in enumerate(segments_data):
+            results.append({
+                'segment_time': natural_results[i]['natural_time'],
+                'required_pace': natural_results[i]['natural_pace'],
+                'effort_level': 'steady'
+            })
+        return results
+    
+    # Calculate how much each segment can contribute to closing the gap
+    segment_adjustments = []
+    
     for i, seg_data in enumerate(segments_data):
-        # Allocate time proportionally
-        allocated_time = target_time_minutes * normalized_weights[i]
-        
-        # Calculate required pace
         distance_km = seg_data['distance']
-        required_pace = allocated_time / distance_km if distance_km > 0 else 0.0
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        natural_time = natural_results[i]['natural_time']
+        natural_pace = natural_results[i]['natural_pace']
+        
+        # Get terrain-specific bounds
+        min_mult, max_mult = get_terrain_effort_bounds(
+            elev_gain, elev_loss, distance_km, climbing_ability
+        )
+        
+        # Calculate time adjustment range
+        if delta_t > 0:  # Need to go faster
+            # Can reduce time by speeding up (min_mult < 1.0)
+            max_time_saved = natural_time * (1.0 - min_mult)
+            segment_adjustments.append({
+                'index': i,
+                'max_adjustment': max_time_saved,
+                'multiplier': min_mult,
+                'direction': 'faster'
+            })
+        else:  # Need to go slower
+            # Can add time by slowing down (max_mult > 1.0)
+            max_time_added = natural_time * (max_mult - 1.0)
+            segment_adjustments.append({
+                'index': i,
+                'max_adjustment': max_time_added,
+                'multiplier': max_mult,
+                'direction': 'slower'
+            })
+    
+    # Calculate total capacity
+    total_capacity = sum(adj['max_adjustment'] for adj in segment_adjustments)
+    
+    if total_capacity == 0:
+        log_message("Warning: Zero adjustment capacity - using natural pacing")
+        results = []
+        for i, seg_data in enumerate(segments_data):
+            results.append({
+                'segment_time': natural_results[i]['natural_time'],
+                'required_pace': natural_results[i]['natural_pace'],
+                'effort_level': 'steady'
+            })
+        return results
+    
+    # Distribute delta_t proportionally to each segment's capacity
+    results = []
+    abs_delta_t = abs(delta_t)
+    
+    for i, seg_data in enumerate(segments_data):
+        natural_time = natural_results[i]['natural_time']
+        natural_pace = natural_results[i]['natural_pace']
+        adj = segment_adjustments[i]
+        distance_km = seg_data['distance']
+        
+        # Calculate this segment's share of the adjustment
+        if abs_delta_t <= total_capacity:
+            # Can achieve target within bounds
+            segment_adjustment = (adj['max_adjustment'] / total_capacity) * abs_delta_t
+        else:
+            # Target is too aggressive - use max capacity
+            segment_adjustment = adj['max_adjustment']
+        
+        # Apply adjustment
+        if delta_t > 0:  # Going faster
+            adjusted_time = natural_time - segment_adjustment
+            effort_level = 'push' if segment_adjustment / natural_time > 0.10 else 'steady'
+        else:  # Going slower
+            adjusted_time = natural_time + segment_adjustment
+            effort_level = 'protect' if segment_adjustment / natural_time > 0.10 else 'steady'
+        
+        adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
         
         results.append({
-            'segment_time': allocated_time,
-            'required_pace': required_pace
+            'segment_time': adjusted_time,
+            'required_pace': adjusted_pace,
+            'effort_level': effort_level
         })
+        
+        log_message(f"  Segment {i}: {effort_level} - pace {adjusted_pace:.2f} min/km (natural: {natural_pace:.2f})")
     
     return results
 
@@ -1211,15 +1333,19 @@ def calculate():
                     if target_moving_time <= 0:
                         return jsonify({'error': f'Target time ({target_time_str}) is too short - checkpoint stops alone require {total_cp_time:.1f} minutes'}), 400
                     
-                    # Calculate difficulty weights for each segment
-                    difficulty_weights = calculate_segment_difficulty_weights(
+                    log_message(f"\n=== TARGET TIME MODE: Effort Allocation Optimization ===")
+                    log_message(f"Target time: {target_time_str} (moving time: {target_moving_time:.2f} min)")
+                    
+                    # Step 1: Calculate natural pacing (what athlete would do on autopilot)
+                    natural_results = calculate_natural_pacing(
                         segments_basic_data, z2_pace, climbing_ability,
                         fatigue_enabled, fitness_level, skill_level
                     )
                     
-                    # Reverse-calculate required paces
-                    reverse_results = reverse_calculate_pacing(
-                        target_moving_time, segments_basic_data, difficulty_weights
+                    # Step 2: Apply effort allocation optimization
+                    reverse_results = allocate_effort_to_target(
+                        target_moving_time, segments_basic_data, natural_results,
+                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
                     )
                 else:
                     return jsonify({'error': 'Invalid target time format. Use HH:MM:SS'}), 400
@@ -1242,28 +1368,30 @@ def calculate():
             
             # === Calculate segment time and pace ===
             if use_target_time:
-                # Target Time Mode: Use reverse-calculated pace
+                # Target Time Mode: Use effort allocation optimizer
                 segment_time = reverse_results[i]['segment_time']
                 required_pace = reverse_results[i]['required_pace']
+                effort_level = reverse_results[i].get('effort_level', 'steady')
                 
-                # For display: still calculate what the base pace adjustments would be
+                # For display: still calculate what the natural pace would be
                 _, elev_adjusted_pace, fatigue_seconds, terrain_factor, _ = adjust_pace_for_elevation(
                     z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
                     fatigue_enabled, fitness_level, terrain_type, skill_level
                 )
                 
-                # Check if required pace is aggressive (faster than base pace)
-                pace_aggressive = required_pace < z2_pace * 0.85  # At least 15% faster than base
+                # Mark as aggressive if pushing significantly harder than natural
+                pace_aggressive = effort_level == 'push'
                 adjusted_pace = required_pace
                 pace_capped = False
             else:
-                # Base Pace Mode: Use forward-calculated pace
+                # Base Pace Mode: Use forward-calculated pace (prediction)
                 adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
                     z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
                     fatigue_enabled, fitness_level, terrain_type, skill_level
                 )
                 segment_time = segment_dist * adjusted_pace
                 pace_aggressive = False
+                effort_level = 'steady'
                 
                 # Log when pace is capped
                 if pace_capped:
@@ -1316,7 +1444,8 @@ def calculate():
                 'pace_str': f"{int(adjusted_pace)}:{int((adjusted_pace % 1) * 60):02d}",
                 'pace_capped': pace_capped,
                 'pace_aggressive': pace_aggressive if use_target_time else False,
-                # Note: In target time mode, fatigue is incorporated into difficulty weights, not displayed separately
+                'effort_level': effort_level if use_target_time else 'steady',  # New: effort allocation
+                # Note: In target time mode, fatigue is incorporated into natural pacing, not displayed separately
                 'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
                 'terrain_type': terrain_type,

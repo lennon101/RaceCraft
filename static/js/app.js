@@ -1152,6 +1152,7 @@ function displayResults(data) {
         // Determine pace styling based on mode
         let paceStyle = 'font-weight: bold;';
         let paceWarning = '';
+        let effortBadge = '';
         
         if (seg.pace_capped) {
             paceStyle = 'color: #ef4444; font-weight: bold;';
@@ -1160,6 +1161,16 @@ function displayResults(data) {
             // Highlight aggressive paces (faster than typical for the segment)
             paceStyle = 'color: #f59e0b; font-weight: bold;';
             paceWarning = ' ⚡';
+        }
+        
+        // Add effort level badge in target time mode
+        if (seg.effort_level) {
+            const effortLabels = {
+                'push': '<span class="effort-badge effort-push">PUSH</span>',
+                'steady': '<span class="effort-badge effort-steady">Steady</span>',
+                'protect': '<span class="effort-badge effort-protect">Protect</span>'
+            };
+            effortBadge = effortLabels[seg.effort_level] || '';
         }
         
         const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
@@ -1176,7 +1187,7 @@ function displayResults(data) {
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
             <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong></td>
+            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong> ${effortBadge}</td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
             <td>${seg.target_water}</td>
