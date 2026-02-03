@@ -1551,7 +1551,7 @@ async function loadPlan(filename, source = 'local') {
             currentPlan.segment_terrain_types = data.segment_terrain_types || [];
             
             // Set total_distance early (before validation) to avoid showing stale distance in error messages
-            if (data.summary && data.summary.total_distance) {
+            if (data.summary && data.summary.total_distance !== undefined && data.summary.total_distance !== null) {
                 currentPlan.total_distance = data.summary.total_distance;
             }
             
