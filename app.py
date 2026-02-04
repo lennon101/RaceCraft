@@ -1263,6 +1263,9 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
     results = []
     total_cost_weighted_capacity = sum(adj['max_adjustment'] / adj['effort_cost'] for adj in segment_adjustments)
     
+    log_message(f"DEBUG: total_cost_weighted_capacity={total_cost_weighted_capacity:.2f}")
+    log_message(f"DEBUG: abs_delta_t after budget cap={abs_delta_t:.2f} min")
+    
     for i, seg_data in enumerate(segments_data):
         natural_time = natural_results[i]['natural_time']
         natural_pace = natural_results[i]['natural_pace']
@@ -1280,13 +1283,17 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         else:
             segment_adjustment = 0
         
+        adjustment_pct = (segment_adjustment / natural_time * 100) if natural_time > 0 else 0
+        
         # Apply adjustment
-        if delta_t > 0:  # Going faster
+        if delta_t > 0:  # Going faster (natural > target, need to speed up)
             adjusted_time = natural_time - segment_adjustment
             effort_level = 'push' if segment_adjustment / natural_time >= 0.10 else 'steady'
-        else:  # Going slower
+            log_message(f"DEBUG seg{i}: delta_t>0 (faster), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
+        else:  # Going slower (natural < target, need to slow down)
             adjusted_time = natural_time + segment_adjustment
             effort_level = 'protect' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            log_message(f"DEBUG seg{i}: delta_t<0 (slower), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         
         adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
         
