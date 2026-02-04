@@ -1182,8 +1182,8 @@ function displayResults(data) {
             paceWarning = ' ⚡';
         }
         
-        // Add effort level badge in target time mode
-        if (seg.effort_level) {
+        // Add effort level badge in target time mode only
+        if (effort_thresholds && seg.effort_level) {
             const effortLabels = {
                 'push': '<span class="effort-badge effort-push">PUSH</span>',
                 'steady': '<span class="effort-badge effort-steady">Steady</span>',
