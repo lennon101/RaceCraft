@@ -1,3 +1,6 @@
+// Constants
+const MAX_CHECKPOINTS = 30;
+
 // Helper to convert a string to Unicode bold (for tooltips)
 function toUnicodeBold(str) {
     const map = {
@@ -84,6 +87,7 @@ const fileNameDisplay = document.getElementById('file-name');
 const gpxInfoBox = document.getElementById('gpx-info');
 const numCheckpointsInput = document.getElementById('num-checkpoints');
 const checkpointDistancesContainer = document.getElementById('checkpoint-distances');
+const checkpointCounter = document.getElementById('checkpoint-counter');
 const calculateBtn = document.getElementById('calculate-btn');
 const saveBtn = document.getElementById('save-btn');
 const loadBtn = document.getElementById('load-btn');
@@ -136,6 +140,17 @@ const targetTimeSecondsInput = document.getElementById('target-time-seconds');
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
 numCheckpointsInput.addEventListener('input', () => {
+    let value = parseInt(numCheckpointsInput.value) || 0;
+    
+    // Enforce maximum limit
+    if (value > MAX_CHECKPOINTS) {
+        value = MAX_CHECKPOINTS;
+        numCheckpointsInput.value = MAX_CHECKPOINTS;
+    }
+    
+    // Update checkpoint counter
+    updateCheckpointCounter(value, MAX_CHECKPOINTS);
+    
     generateCheckpointInputs();
     validateCheckpointDistances();
 });
@@ -815,9 +830,18 @@ function validateCheckpointDistances() {
     return !hasErrors;
 }
 
+function updateCheckpointCounter(current, max) {
+    if (checkpointCounter) {
+        checkpointCounter.textContent = `(${current} / ${max})`;
+    }
+}
+
 function generateCheckpointInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
+    
+    // Update checkpoint counter
+    updateCheckpointCounter(numCheckpoints, MAX_CHECKPOINTS);
 
     // Create checkpoint distance inputs with dropbag checkbox
     for (let i = 0; i < numCheckpoints; i++) {

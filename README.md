@@ -256,7 +256,7 @@ ports:
    - Route information displays automatically
 
 2. **Configure Checkpoints**
-   - Set number of checkpoints
+   - Set number of checkpoints (maximum 30)
    - Enter average stop time at each checkpoint
    - Specify distance to each checkpoint in kilometers
 
