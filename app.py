@@ -1328,6 +1328,15 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
         
         abs_delta_t = abs(delta_t)
         
+        # Apply global fitness budget constraint (CRITICAL: matches allocate_effort_to_target)
+        fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
+        fitness_budget = fitness_budgets.get(fitness_level, 0.25)
+        max_total_deviation = natural_total_time * fitness_budget
+        
+        # Cap delta_t to budget (THIS WAS MISSING!)
+        if abs_delta_t > max_total_deviation:
+            abs_delta_t = max_total_deviation
+        
         # Build adjustment data (simplified version of allocate_effort_to_target)
         adjustments = []
         total_weighted_capacity = 0.0
@@ -1348,11 +1357,6 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 capacity = natural_time * (1.0 - min_mult)
             else:  # Going slower
                 capacity = natural_time * (max_mult - 1.0)
-            
-            # Apply fitness budget constraint (simplified - no cumulative fatigue)
-            fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
-            fitness_budget = fitness_budgets.get(fitness_level, 0.25)
-            capacity = min(capacity, natural_time * fitness_budget)
             
             # Total cost (simplified - using base cost without cumulative fatigue)
             total_cost = base_effort_cost
@@ -1378,6 +1382,12 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
                 adjustment_ratio = segment_adjustment / adj['natural_time']
                 max_adjustment_ratio = max(max_adjustment_ratio, adjustment_ratio)
+                
+                # Debug logging
+                if iteration == 0 and target_time_minutes > natural_total_time:  # protect search
+                    print(f"  Seg {adj['index']}: delta_t={abs_delta_t:.2f}, share={weighted_share:.4f}, "
+                          f"seg_adj={segment_adjustment:.2f}, natural={adj['natural_time']:.2f}, "
+                          f"ratio={adjustment_ratio:.4f}, capacity={adj['capacity']:.2f}")
         
         return max_adjustment_ratio
     
@@ -1405,18 +1415,24 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     low, high = natural_total_time, natural_total_time * 1.5
     protect_threshold = natural_total_time * 1.10  # fallback
     
-    for _ in range(20):  # Binary search iterations
+    for iteration in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
         max_ratio = simulate_max_segment_adjustment(mid)
         
+        # Debug on first calculation
+        if iteration == 0:
+            print(f"DEBUG protect search: natural={natural_total_time:.2f}, range={low:.2f}-{high:.2f}")
+        
         if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
             protect_threshold = mid
+            print(f"DEBUG: Converged at {mid:.2f} min with max_ratio={max_ratio:.4f}")
             break
         elif max_ratio < 0.10:
             low = mid  # Need to go slower (higher target time)
         else:
             high = mid  # Too slow, decrease target time
     
+    print(f"DEBUG: Final protect={protect_threshold:.2f}, from range {low:.2f}-{high:.2f}")
     protect_threshold = (low + high) / 2.0
     
     return {
