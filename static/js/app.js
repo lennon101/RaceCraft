@@ -1200,7 +1200,7 @@ function displayResults(data) {
         
         row.innerHTML = `
             <td><strong>${seg.from} → ${seg.to}</strong></td>
-            <td>${seg.distance}</td>
+            <td>${seg.cumulative_distance}</td>
             <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
             <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
             <td>${seg.elev_pace_str}</td>
