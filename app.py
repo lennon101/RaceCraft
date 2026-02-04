@@ -1358,8 +1358,26 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
             else:  # Going slower
                 capacity = natural_time * (max_mult - 1.0)
             
-            # Total cost (simplified - using base cost without cumulative fatigue)
-            total_cost = base_effort_cost
+            # Total cost (MUST match real allocation - includes cumulative fatigue)
+            cumulative_effort_km = sum(
+                s['distance'] + (s['elev_gain'] / 100.0) + (s['elev_loss'] / 200.0)
+                for s in segments_data[:i]
+            )
+            
+            if fatigue:
+                fitness_fatigue_map = {'untrained': 1.5, 'recreational': 1.3, 'trained': 1.15, 'elite': 1.05}
+                fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+                
+                # Calculate segment effort
+                segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+                
+                # Fatigue multiplier grows with cumulative effort
+                fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+                fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)
+            else:
+                fatigue_multiplier = 1.0
+            
+            total_cost = base_effort_cost * fatigue_multiplier
             
             adjustments.append({
                 'natural_time': natural_time,
@@ -1383,6 +1401,9 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 adjustment_ratio = segment_adjustment / adj['natural_time']
                 max_adjustment_ratio = max(max_adjustment_ratio, adjustment_ratio)
         
+        return max_adjustment_ratio
+        
+        print(f"[SIM] max_adjustment_ratio={max_adjustment_ratio:.4f}")
         return max_adjustment_ratio
     
     # Binary search for push threshold (where max segment hits 10% faster)
@@ -1409,24 +1430,18 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     low, high = natural_total_time, natural_total_time * 1.5
     protect_threshold = natural_total_time * 1.10  # fallback
     
-    for iteration in range(20):  # Binary search iterations
+    for _ in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
         max_ratio = simulate_max_segment_adjustment(mid)
         
-        # Debug on first calculation
-        if iteration == 0:
-            print(f"DEBUG protect search: natural={natural_total_time:.2f}, range={low:.2f}-{high:.2f}")
-        
         if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
             protect_threshold = mid
-            print(f"DEBUG: Converged at {mid:.2f} min with max_ratio={max_ratio:.4f}")
             break
         elif max_ratio < 0.10:
             low = mid  # Need to go slower (higher target time)
         else:
             high = mid  # Too slow, decrease target time
     
-    print(f"DEBUG: Final protect={protect_threshold:.2f}, from range {low:.2f}-{high:.2f}")
     protect_threshold = (low + high) / 2.0
     
     return {
