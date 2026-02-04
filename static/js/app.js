@@ -1129,9 +1129,9 @@ function displayResults(data) {
             return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         };
         
-        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time);
-        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold);
-        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold);
+        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time_minutes);
+        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold_minutes);
+        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold_minutes);
     } else if (thresholdsContainer) {
         thresholdsContainer.style.display = 'none';
     }
