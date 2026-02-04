@@ -1306,6 +1306,9 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     """
     Calculate target time thresholds where effort levels transition.
     
+    Simulates the actual allocation logic to find target times where at least one
+    segment reaches the 10% adjustment threshold for effort labeling.
+    
     Returns:
         dict with 'natural_time', 'push_threshold', 'protect_threshold' in minutes
     """
@@ -1314,50 +1317,112 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
     
-    # The 10% threshold is per-segment, so we need to estimate what target time
-    # would cause most segments to be at the threshold
-    
-    # For "Push" (going faster): segments need >10% adjustment
-    # Approximate: if we want segments at 10% faster, target ~ 90% of natural time
-    # But this varies based on cost-weighting, so we calculate more precisely
-    
-    # Calculate the effective capacity considering cost weighting
-    total_weighted_capacity = 0.0
-    
-    for i, seg_data in enumerate(segments_data):
-        distance_km = seg_data['distance']
-        elev_gain = seg_data['elev_gain']
-        elev_loss = seg_data['elev_loss']
-        natural_time = natural_results[i]['natural_time']
+    def simulate_max_segment_adjustment(target_time_minutes):
+        """
+        Simulate the allocation and return the maximum adjustment ratio across all segments.
+        Returns the maximum value of (segment_adjustment / natural_time).
+        """
+        delta_t = natural_total_time - target_time_minutes
+        if abs(delta_t) < 0.01:  # Target equals natural
+            return 0.0
         
-        # Get bounds and cost
-        min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
-            elev_gain, elev_loss, distance_km, climbing_ability, skill_level
-        )
+        abs_delta_t = abs(delta_t)
         
-        # Max time we can save on this segment (without fatigue for simplicity)
-        max_time_saved = natural_time * (1.0 - min_mult)
+        # Build adjustment data (simplified version of allocate_effort_to_target)
+        adjustments = []
+        total_weighted_capacity = 0.0
         
-        # Weighted capacity (lower cost = more capacity effectively)
-        if base_effort_cost > 0:
-            total_weighted_capacity += max_time_saved / base_effort_cost
+        for i, seg_data in enumerate(segments_data):
+            distance_km = seg_data['distance']
+            elev_gain = seg_data['elev_gain']
+            elev_loss = seg_data['elev_loss']
+            natural_time = natural_results[i]['natural_time']
+            
+            # Get bounds and cost
+            min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+                elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+            )
+            
+            # Capacity for adjustment
+            if delta_t > 0:  # Going faster
+                capacity = natural_time * (1.0 - min_mult)
+            else:  # Going slower
+                capacity = natural_time * (max_mult - 1.0)
+            
+            # Apply fitness budget constraint (simplified - no cumulative fatigue)
+            fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
+            fitness_budget = fitness_budgets.get(fitness_level, 0.25)
+            capacity = min(capacity, natural_time * fitness_budget)
+            
+            # Total cost (simplified - using base cost without cumulative fatigue)
+            total_cost = base_effort_cost
+            
+            adjustments.append({
+                'natural_time': natural_time,
+                'capacity': capacity,
+                'total_cost': total_cost,
+                'index': i
+            })
+            
+            if total_cost > 0 and capacity > 0:
+                total_weighted_capacity += capacity / total_cost
+        
+        if total_weighted_capacity == 0:
+            return 0.0
+        
+        # Allocate time based on cost weighting
+        max_adjustment_ratio = 0.0
+        for adj in adjustments:
+            if adj['total_cost'] > 0 and adj['capacity'] > 0:
+                weighted_share = (adj['capacity'] / adj['total_cost']) / total_weighted_capacity
+                segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
+                adjustment_ratio = segment_adjustment / adj['natural_time']
+                max_adjustment_ratio = max(max_adjustment_ratio, adjustment_ratio)
+        
+        return max_adjustment_ratio
     
-    # To get segments to ~10% faster (push threshold)
-    # We want segment_adjustment / natural_time ≈ 0.10
-    # This means we need delta_t such that allocations average to 10%
+    # Binary search for push threshold (where max segment hits 10% faster)
+    # Search range: 50% to 100% of natural time
+    low, high = natural_total_time * 0.5, natural_total_time
+    push_threshold = natural_total_time * 0.90  # fallback
     
-    # Simplified estimate: 10% faster overall means target ≈ 90% of natural
-    # But account for the fact that not all segments can push equally
-    push_target_estimate = natural_total_time * 0.90
+    for _ in range(20):  # Binary search iterations
+        mid = (low + high) / 2.0
+        max_ratio = simulate_max_segment_adjustment(mid)
+        
+        if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
+            push_threshold = mid
+            break
+        elif max_ratio < 0.10:
+            high = mid  # Need to go faster (lower target time)
+        else:
+            low = mid  # Too fast, increase target time
     
-    # For "Protect" (going slower): segments need >10% slower
-    # Approximate: 10% slower overall means target ≈ 110% of natural
-    protect_target_estimate = natural_total_time * 1.10
+    push_threshold = (low + high) / 2.0
+    
+    # Binary search for protect threshold (where max segment hits 10% slower)
+    # Search range: 100% to 150% of natural time
+    low, high = natural_total_time, natural_total_time * 1.5
+    protect_threshold = natural_total_time * 1.10  # fallback
+    
+    for _ in range(20):  # Binary search iterations
+        mid = (low + high) / 2.0
+        max_ratio = simulate_max_segment_adjustment(mid)
+        
+        if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
+            protect_threshold = mid
+            break
+        elif max_ratio < 0.10:
+            low = mid  # Need to go slower (higher target time)
+        else:
+            high = mid  # Too slow, decrease target time
+    
+    protect_threshold = (low + high) / 2.0
     
     return {
         'natural_time': natural_total_time,
-        'push_threshold': push_target_estimate,
-        'protect_threshold': protect_target_estimate
+        'push_threshold': push_threshold,
+        'protect_threshold': protect_threshold
     }
 
 
