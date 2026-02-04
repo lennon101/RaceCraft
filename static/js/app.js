@@ -27,8 +27,8 @@ function formatTimestampToLocal(timestampStr) {
     if (timestampStr.includes('T')) {
         date = new Date(timestampStr);
     } else {
-        // Space-separated format - assume UTC and append 'Z' to indicate UTC
-        date = new Date(timestampStr + 'Z');
+        // Space-separated format - assume UTC, convert to ISO format with 'Z'
+        date = new Date(timestampStr.replace(' ', 'T') + 'Z');
     }
     
     // Check if date is valid
