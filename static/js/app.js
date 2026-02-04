@@ -12,6 +12,9 @@ function toUnicodeBold(str) {
     return str.split('').map(c => map[c] || c).join('');
 }
 
+// Constants
+const MAX_CHECKPOINTS = 30;
+
 // Helper to update the race plan title
 function updateRacePlanTitle(planName = null) {
     if (planName) {
@@ -101,14 +104,12 @@ const targetTimeSecondsInput = document.getElementById('target-time-seconds');
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
 numCheckpointsInput.addEventListener('input', () => {
-    const MAX_CHECKPOINTS = 30;
     let value = parseInt(numCheckpointsInput.value) || 0;
     
     // Enforce maximum limit
     if (value > MAX_CHECKPOINTS) {
         value = MAX_CHECKPOINTS;
         numCheckpointsInput.value = MAX_CHECKPOINTS;
-        // Note: User will see the value automatically capped at 30
     }
     
     // Update checkpoint counter
@@ -800,7 +801,6 @@ function updateCheckpointCounter(current, max) {
 }
 
 function generateCheckpointInputs() {
-    const MAX_CHECKPOINTS = 30;
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
     
