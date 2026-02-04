@@ -298,6 +298,39 @@
                         </div>
                     </div>
 
+                    <!-- Target Time Thresholds (shown only in target time mode) -->
+                    <div id="effort-thresholds-container" style="display: none; margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <h3 style="margin-top: 0; margin-bottom: 15px; color: #1e293b; font-size: 1.1rem;">
+                            <span class="mdi mdi-information-outline"></span> Target Time Guidance
+                        </h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">Natural Pace Baseline</div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #0f172a;" id="threshold-natural">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Your natural pacing</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">
+                                    <span class="effort-badge effort-push" style="font-size: 0.7rem; padding: 2px 6px;">PUSH</span> Threshold
+                                </div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #dc2626;" id="threshold-push">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Most segments require pushing</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">
+                                    <span class="effort-badge effort-protect" style="font-size: 0.7rem; padding: 2px 6px;">Protect</span> Threshold
+                                </div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #16a34a;" id="threshold-protect">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Most segments are protecting</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; padding: 10px; background: #eff6ff; border-radius: 4px; font-size: 0.85rem; color: #1e40af;">
+                            <strong>💡 How to use:</strong> Target times faster than the Push threshold require aggressive pacing. 
+                            Target times between Natural and Push will be mostly steady with some pushing. 
+                            Target times slower than Protect threshold allow for conservative pacing with recovery segments.
+                        </div>
+                    </div>
+
                     <!-- Segments Table -->
                     <div class="table-container">
                         <table id="segments-table">

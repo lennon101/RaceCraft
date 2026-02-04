@@ -1301,6 +1301,66 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
     return results
 
 
+def calculate_effort_thresholds(natural_results, segments_data, base_pace, climbing_ability,
+                                fatigue_enabled, fitness_level, skill_level):
+    """
+    Calculate target time thresholds where effort levels transition.
+    
+    Returns:
+        dict with 'natural_time', 'push_threshold', 'protect_threshold' in minutes
+    """
+    if not natural_results:
+        return None
+    
+    natural_total_time = sum(r['natural_time'] for r in natural_results)
+    
+    # The 10% threshold is per-segment, so we need to estimate what target time
+    # would cause most segments to be at the threshold
+    
+    # For "Push" (going faster): segments need >10% adjustment
+    # Approximate: if we want segments at 10% faster, target ~ 90% of natural time
+    # But this varies based on cost-weighting, so we calculate more precisely
+    
+    # Calculate the effective capacity considering cost weighting
+    total_weighted_capacity = 0.0
+    
+    for i, seg_data in enumerate(segments_data):
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        natural_time = natural_results[i]['natural_time']
+        
+        # Get bounds and cost
+        min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+            elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+        )
+        
+        # Max time we can save on this segment (without fatigue for simplicity)
+        max_time_saved = natural_time * (1.0 - min_mult)
+        
+        # Weighted capacity (lower cost = more capacity effectively)
+        if base_effort_cost > 0:
+            total_weighted_capacity += max_time_saved / base_effort_cost
+    
+    # To get segments to ~10% faster (push threshold)
+    # We want segment_adjustment / natural_time ≈ 0.10
+    # This means we need delta_t such that allocations average to 10%
+    
+    # Simplified estimate: 10% faster overall means target ≈ 90% of natural
+    # But account for the fact that not all segments can push equally
+    push_target_estimate = natural_total_time * 0.90
+    
+    # For "Protect" (going slower): segments need >10% slower
+    # Approximate: 10% slower overall means target ≈ 110% of natural
+    protect_target_estimate = natural_total_time * 1.10
+    
+    return {
+        'natural_time': natural_total_time,
+        'push_threshold': push_target_estimate,
+        'protect_threshold': protect_target_estimate
+    }
+
+
 @app.route('/api/calculate', methods=['POST'])
 def calculate():
     """Calculate race plan."""
@@ -1593,7 +1653,15 @@ def calculate():
         # Calculate dropbag contents
         dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
         
-        return jsonify({
+        # Calculate effort thresholds for target time mode
+        effort_thresholds = None
+        if use_target_time and natural_results:
+            effort_thresholds = calculate_effort_thresholds(
+                natural_results, segments_basic_data, z2_pace,
+                climbing_ability, fatigue_enabled, fitness_level, skill_level
+            )
+        
+        response_data = {
             'segments': segments,
             'elevation_profile': elevation_profile,
             'dropbag_contents': dropbag_contents,
@@ -1609,7 +1677,13 @@ def calculate():
                 'total_carbs': total_carbs,
                 'total_water': round(total_water, 1)
             }
-        })
+        }
+        
+        # Add effort thresholds if in target time mode
+        if effort_thresholds:
+            response_data['effort_thresholds'] = effort_thresholds
+        
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 

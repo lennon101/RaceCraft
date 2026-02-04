@@ -1096,7 +1096,7 @@ async function calculateRacePlan() {
 }
 
 function displayResults(data) {
-    const { segments, summary, elevation_profile, dropbag_contents } = data;
+    const { segments, summary, elevation_profile, dropbag_contents, effort_thresholds } = data;
 
     // Store elevation profile and dropbag contents
     currentPlan.elevation_profile = elevation_profile;
@@ -1115,6 +1115,26 @@ function displayResults(data) {
     document.getElementById('summary-elev-gain').textContent = `${summary.total_elev_gain} m`;
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
     document.getElementById('summary-water').textContent = `${summary.total_water} L`;
+    
+    // Display effort thresholds if in target time mode
+    const thresholdsContainer = document.getElementById('effort-thresholds-container');
+    if (effort_thresholds && thresholdsContainer) {
+        thresholdsContainer.style.display = 'block';
+        
+        // Format times as HH:MM:SS
+        const formatMinutesToTime = (minutes) => {
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.floor(minutes % 60);
+            const secs = Math.floor((minutes % 1) * 60);
+            return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        };
+        
+        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time);
+        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold);
+        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold);
+    } else if (thresholdsContainer) {
+        thresholdsContainer.style.display = 'none';
+    }
 
     // Update segments table
     const tbody = document.getElementById('segments-tbody');
