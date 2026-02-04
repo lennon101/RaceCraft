@@ -1364,7 +1364,7 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 for s in segments_data[:i]
             )
             
-            if fatigue:
+            if fatigue_enabled:
                 fitness_fatigue_map = {'untrained': 1.5, 'recreational': 1.3, 'trained': 1.15, 'elite': 1.05}
                 fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
                 
