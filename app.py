@@ -1317,10 +1317,13 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
     
-    def simulate_max_segment_adjustment(target_time_minutes):
+    def simulate_segment_adjustments(target_time_minutes):
         """
-        Simulate the allocation and return the maximum adjustment ratio across all segments.
-        Returns the maximum value of (segment_adjustment / natural_time).
+        Simulate the allocation and return percentage of segments that hit >=10% adjustment.
+        This matches the UI text "Most segments require pushing/protecting".
+        
+        Returns:
+            float: Percentage of segments (0.0 to 1.0) that have >=10% adjustment ratio
         """
         delta_t = natural_total_time - target_time_minutes
         if abs(delta_t) < 0.01:  # Target equals natural
@@ -1333,7 +1336,7 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
         fitness_budget = fitness_budgets.get(fitness_level, 0.25)
         max_total_deviation = natural_total_time * fitness_budget
         
-        # Cap delta_t to budget (THIS WAS MISSING!)
+        # Cap delta_t to budget
         if abs_delta_t > max_total_deviation:
             abs_delta_t = max_total_deviation
         
@@ -1392,55 +1395,57 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
         if total_weighted_capacity == 0:
             return 0.0
         
-        # Allocate time based on cost weighting
-        max_adjustment_ratio = 0.0
+        # Allocate time based on cost weighting and count segments that hit >= 10%
+        segments_at_threshold = 0
+        total_segments = len(adjustments)
+        
         for adj in adjustments:
             if adj['total_cost'] > 0 and adj['capacity'] > 0:
                 weighted_share = (adj['capacity'] / adj['total_cost']) / total_weighted_capacity
                 segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
                 adjustment_ratio = segment_adjustment / adj['natural_time']
-                max_adjustment_ratio = max(max_adjustment_ratio, adjustment_ratio)
+                
+                if adjustment_ratio >= 0.10:
+                    segments_at_threshold += 1
         
-        return max_adjustment_ratio
-        
-        print(f"[SIM] max_adjustment_ratio={max_adjustment_ratio:.4f}")
-        return max_adjustment_ratio
+        # Return percentage of segments at threshold
+        return segments_at_threshold / total_segments if total_segments > 0 else 0.0
     
-    # Binary search for push threshold (where max segment hits 10% faster)
+    # Binary search for push threshold (where >50% of segments hit 10% faster)
     # Search range: 50% to 100% of natural time
     low, high = natural_total_time * 0.5, natural_total_time
     push_threshold = natural_total_time * 0.90  # fallback
     
     for _ in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
-        max_ratio = simulate_max_segment_adjustment(mid)
+        pct_at_threshold = simulate_segment_adjustments(mid)
         
-        if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
+        if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
             push_threshold = mid
             break
-        elif max_ratio < 0.10:
-            high = mid  # Need to go faster (lower target time)
+        elif pct_at_threshold < 0.50:
+            high = mid  # Need to go faster (lower target time) to hit more segments
         else:
-            low = mid  # Too fast, increase target time
+            low = mid  # Too fast, too many segments affected
     
     push_threshold = (low + high) / 2.0
     
-    # Binary search for protect threshold (where max segment hits 10% slower)
+    # Binary search for protect threshold (where >50% of segments hit 10% slower)
     # Search range: 100% to 150% of natural time
     low, high = natural_total_time, natural_total_time * 1.5
     protect_threshold = natural_total_time * 1.10  # fallback
     
     for _ in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
-        max_ratio = simulate_max_segment_adjustment(mid)
+        pct_at_threshold = simulate_segment_adjustments(mid)
         
-        if abs(max_ratio - 0.10) < 0.01:  # Close enough to 10%
+        if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
             protect_threshold = mid
             break
-        elif max_ratio < 0.10:
-            low = mid  # Need to go slower (higher target time)
+        elif pct_at_threshold < 0.50:
+            low = mid  # Need to go slower (higher target time) to hit more segments
         else:
-            high = mid  # Too slow, decrease target time
+            high = mid  # Too slow, too many segments affected
     
     protect_threshold = (low + high) / 2.0
     
