@@ -1324,16 +1324,16 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
     
-    def simulate_segment_adjustments(target_time_minutes):
+    def simulate_push_segments(target_time_minutes):
         """
-        Simulate the allocation and return percentage of segments that hit >=10% adjustment.
-        This matches the UI text "Most segments require pushing/protecting".
+        Simulate allocation for PUSH threshold (going faster).
+        Returns percentage of segments that would get "push" labels.
         
         Returns:
-            float: Percentage of segments (0.0 to 1.0) that have >=10% adjustment ratio
+            float: Percentage of segments (0.0 to 1.0) that have >=10% faster adjustment
         """
         delta_t = natural_total_time - target_time_minutes
-        if abs(delta_t) < 0.01:  # Target equals natural
+        if delta_t <= 0:  # Not going faster, can't have push labels
             return 0.0
         
         abs_delta_t = abs(delta_t)
@@ -1362,11 +1362,8 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 elev_gain, elev_loss, distance_km, climbing_ability, skill_level
             )
             
-            # Capacity for adjustment
-            if delta_t > 0:  # Going faster
-                capacity = natural_time * (1.0 - min_mult)
-            else:  # Going slower
-                capacity = natural_time * (max_mult - 1.0)
+            # Capacity for adjustment (only faster direction for push)
+            capacity = natural_time * (1.0 - min_mult)
             
             # Total cost (MUST match real allocation - includes cumulative fatigue)
             cumulative_effort_km = sum(
@@ -1412,6 +1409,99 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
                 adjustment_ratio = segment_adjustment / adj['natural_time']
                 
+                # Only count if going faster AND >=10% adjustment
+                if adjustment_ratio >= 0.10:
+                    segments_at_threshold += 1
+        
+        # Return percentage of segments at threshold
+        return segments_at_threshold / total_segments if total_segments > 0 else 0.0
+    
+    def simulate_protect_segments(target_time_minutes):
+        """
+        Simulate allocation for PROTECT threshold (going slower).
+        Returns percentage of segments that would get "protect" labels.
+        
+        Returns:
+            float: Percentage of segments (0.0 to 1.0) that have >=10% slower adjustment
+        """
+        delta_t = natural_total_time - target_time_minutes
+        if delta_t >= 0:  # Not going slower, can't have protect labels
+            return 0.0
+        
+        abs_delta_t = abs(delta_t)
+        
+        # Apply global fitness budget constraint (CRITICAL: matches allocate_effort_to_target)
+        fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
+        fitness_budget = fitness_budgets.get(fitness_level, 0.25)
+        max_total_deviation = natural_total_time * fitness_budget
+        
+        # Cap delta_t to budget
+        if abs_delta_t > max_total_deviation:
+            abs_delta_t = max_total_deviation
+        
+        # Build adjustment data (simplified version of allocate_effort_to_target)
+        adjustments = []
+        total_weighted_capacity = 0.0
+        
+        for i, seg_data in enumerate(segments_data):
+            distance_km = seg_data['distance']
+            elev_gain = seg_data['elev_gain']
+            elev_loss = seg_data['elev_loss']
+            natural_time = natural_results[i]['natural_time']
+            
+            # Get bounds and cost
+            min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+                elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+            )
+            
+            # Capacity for adjustment (only slower direction for protect)
+            capacity = natural_time * (max_mult - 1.0)
+            
+            # Total cost (MUST match real allocation - includes cumulative fatigue)
+            cumulative_effort_km = sum(
+                s['distance'] + (s['elev_gain'] / 100.0) + (s['elev_loss'] / 200.0)
+                for s in segments_data[:i]
+            )
+            
+            if fatigue_enabled:
+                fitness_fatigue_map = {'untrained': 1.5, 'recreational': 1.3, 'trained': 1.15, 'elite': 1.05}
+                fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+                
+                # Calculate segment effort
+                segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+                
+                # Fatigue multiplier grows with cumulative effort
+                fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+                fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)
+            else:
+                fatigue_multiplier = 1.0
+            
+            total_cost = base_effort_cost * fatigue_multiplier
+            
+            adjustments.append({
+                'natural_time': natural_time,
+                'capacity': capacity,
+                'total_cost': total_cost,
+                'index': i
+            })
+            
+            if total_cost > 0 and capacity > 0:
+                total_weighted_capacity += capacity / total_cost
+        
+        if total_weighted_capacity == 0:
+            return 0.0
+        
+        # Allocate time based on cost weighting and count segments that hit >= 10%
+        segments_at_threshold = 0
+        total_segments = len(adjustments)
+        
+        for adj in adjustments:
+            if adj['total_cost'] > 0 and adj['capacity'] > 0:
+                weighted_share = (adj['capacity'] / adj['total_cost']) / total_weighted_capacity
+                segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
+                adjustment_ratio = segment_adjustment / adj['natural_time']
+                
+                # Only count if going slower AND >=10% adjustment
                 if adjustment_ratio >= 0.10:
                     segments_at_threshold += 1
         
@@ -1425,7 +1515,7 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     for _ in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
-        pct_at_threshold = simulate_segment_adjustments(mid)
+        pct_at_threshold = simulate_push_segments(mid)
         
         if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
             push_threshold = mid
@@ -1445,7 +1535,7 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     for _ in range(20):  # Binary search iterations
         mid = (low + high) / 2.0
-        pct_at_threshold = simulate_segment_adjustments(mid)
+        pct_at_threshold = simulate_protect_segments(mid)
         
         if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
             protect_threshold = mid
