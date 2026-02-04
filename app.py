@@ -1382,12 +1382,6 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
                 segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
                 adjustment_ratio = segment_adjustment / adj['natural_time']
                 max_adjustment_ratio = max(max_adjustment_ratio, adjustment_ratio)
-                
-                # Debug logging
-                if iteration == 0 and target_time_minutes > natural_total_time:  # protect search
-                    print(f"  Seg {adj['index']}: delta_t={abs_delta_t:.2f}, share={weighted_share:.4f}, "
-                          f"seg_adj={segment_adjustment:.2f}, natural={adj['natural_time']:.2f}, "
-                          f"ratio={adjustment_ratio:.4f}, capacity={adj['capacity']:.2f}")
         
         return max_adjustment_ratio
     
