@@ -1434,8 +1434,9 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
             high = mid  # Need to go faster (lower target time) to hit more segments
         else:
             low = mid  # Too fast, too many segments affected
-    
-    push_threshold = (low + high) / 2.0
+    else:
+        # Loop completed without break - use midpoint of final range
+        push_threshold = (low + high) / 2.0
     
     # Binary search for protect threshold (where >50% of segments hit 10% slower)
     # Search range: 100% to 150% of natural time
@@ -1453,8 +1454,9 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
             low = mid  # Need to go slower (higher target time) to hit more segments
         else:
             high = mid  # Too slow, too many segments affected
-    
-    protect_threshold = (low + high) / 2.0
+    else:
+        # Loop completed without break - use midpoint of final range
+        protect_threshold = (low + high) / 2.0
     
     return {
         'natural_time': natural_total_time,
