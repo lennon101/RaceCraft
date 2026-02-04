@@ -1571,7 +1571,9 @@ async function loadPlan(filename, source = 'local') {
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
-            // Handle seconds overflow (e.g., 4.999 rounds to 4:60, should be 5:00)
+            // Handle seconds overflow due to floating-point rounding
+            // When converting decimal minutes back to MM:SS format, values like 4.999
+            // can round to 60 seconds (4:60), which should be normalized to 5:00
             if (paceSec >= 60) {
                 paceMin += 1;
                 paceSec = 0;
@@ -1803,7 +1805,9 @@ async function handleImportPlan(event) {
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
-            // Handle seconds overflow (e.g., 4.999 rounds to 4:60, should be 5:00)
+            // Handle seconds overflow due to floating-point rounding
+            // When converting decimal minutes back to MM:SS format, values like 4.999
+            // can round to 60 seconds (4:60), which should be normalized to 5:00
             if (paceSec >= 60) {
                 paceMin += 1;
                 paceSec = 0;
