@@ -1739,6 +1739,7 @@ def calculate():
         cumulative_time = 0.0
         total_moving_time = 0.0
         cumulative_effort = 0.0  # Track effort in km-effort
+        cumulative_distance = 0.0  # Track cumulative distance
         
         for i in range(len(segments_basic_data)):
             seg_basic = segments_basic_data[i]
@@ -1783,6 +1784,7 @@ def calculate():
             # Update cumulative effort: effort_km = distance_km + ascent_m/100 + descent_m/200
             segment_effort = segment_dist + (elev_gain / 100.0) + (elev_loss / 200.0)
             cumulative_effort += segment_effort
+            cumulative_distance += segment_dist
             
             total_moving_time += segment_time
             
@@ -1815,6 +1817,7 @@ def calculate():
                 'from': seg_basic['from'],
                 'to': seg_basic['to'],
                 'distance': round(segment_dist, 2),
+                'cumulative_distance': round(cumulative_distance, 2),
                 'elev_gain': round(elev_gain, 0),
                 'elev_loss': round(elev_loss, 0),
                 'net_elev': round(net_elev_change, 0),
@@ -2345,7 +2348,7 @@ def export_csv():
         writer = csv.writer(output)
         
         # Header
-        header = ['Segment', 'Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
+        header = ['Segment', 'Cumulative Distance (km)', 'Elev Gain (m)', 'Elev Loss (m)', 'Net Elev (m)', 
                  'Elev Pace (min/km)', 'Fatigue (mm:ss)', 'Terrain Type', 'Terrain Factor', 'Final Pace (min/km)', 
                  'Segment Time', 'Carbs (g)', 'Water (L)', 'Cumulative Time']
         if race_start_time:
@@ -2358,7 +2361,7 @@ def export_csv():
             checkpoint_name = seg['to']
             row = [
                 f"{seg['from']} to {seg['to']}",
-                seg['distance'],
+                seg['cumulative_distance'],
                 seg['elev_gain'],
                 seg['elev_loss'],
                 seg['net_elev'],
