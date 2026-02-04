@@ -1,3 +1,6 @@
+// Constants
+const MAX_CHECKPOINTS = 30;
+
 // Helper to convert a string to Unicode bold (for tooltips)
 function toUnicodeBold(str) {
     const map = {
@@ -12,8 +15,41 @@ function toUnicodeBold(str) {
     return str.split('').map(c => map[c] || c).join('');
 }
 
-// Constants
-const MAX_CHECKPOINTS = 30;
+// Helper to format timestamps in local timezone
+// Accepts timestamps in various formats and converts to local timezone display
+function formatTimestampToLocal(timestampStr) {
+    if (!timestampStr) return '';
+    
+    // Handle different timestamp formats from backend:
+    // 1. ISO format from Supabase: "2024-01-15T14:30:45+00:00" or "2024-01-15T14:30:45.123Z"
+    // 2. Space-separated format: "2024-01-15 14:30:45" (assumed UTC)
+    
+    let date;
+    
+    // Try parsing as ISO format first (includes timezone info)
+    if (timestampStr.includes('T')) {
+        date = new Date(timestampStr);
+    } else {
+        // Space-separated format - assume UTC, convert to ISO format with 'Z'
+        date = new Date(timestampStr.replace(' ', 'T') + 'Z');
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+        console.warn('Invalid timestamp:', timestampStr);
+        return timestampStr; // Return original if parsing fails
+    }
+    
+    // Format to local timezone: YYYY-MM-DD HH:MM:SS
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
 
 // Helper to update the race plan title
 function updateRacePlanTitle(planName = null) {
@@ -1483,7 +1519,7 @@ async function loadSavedPlans() {
                             ${plan.name}
                             ${sourceBadge}
                         </div>
-                        <div class="plan-date">${plan.modified}</div>
+                        <div class="plan-date">${formatTimestampToLocal(plan.modified)}</div>
                     </div>
                     <button class="plan-delete" data-filename="${plan.filename}" data-source="${plan.source}">Delete</button>
                 `;
@@ -1560,7 +1596,7 @@ async function importUnownedPlans() {
                             ${plan.name}
                             ${sourceBadge}
                         </div>
-                        <div class="plan-date">${plan.modified}</div>
+                        <div class="plan-date">${formatTimestampToLocal(plan.modified)}</div>
                     </div>
                     ${actionButtons}
                 `;
@@ -2160,7 +2196,7 @@ async function showLocalMigrationModal() {
                 <input type="checkbox" class="migration-plan-checkbox" data-filename="${plan.id}" checked />
                 <div class="migration-plan-info">
                     <div class="migration-plan-name">${plan.name}</div>
-                    <div class="migration-plan-date">Last updated: ${plan.updated_at}</div>
+                    <div class="migration-plan-date">Last updated: ${formatTimestampToLocal(plan.updated_at)}</div>
                 </div>
             `;
             plansList.appendChild(planDiv);
