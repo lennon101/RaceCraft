@@ -1329,6 +1329,11 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
     
+    # Validate natural_total_time to prevent NaN
+    if natural_total_time <= 0 or not isinstance(natural_total_time, (int, float)):
+        print(f"ERROR: Invalid natural_total_time: {natural_total_time}")
+        return None
+    
     # Validate inputs to prevent NaN
     if num_checkpoints is None:
         num_checkpoints = 0
@@ -1337,6 +1342,8 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     # Calculate total checkpoint time (checkpoint after each segment except first)
     total_cp_time = num_checkpoints * avg_cp_time
+    
+    print(f"DEBUG threshold calc: natural={natural_total_time}, cp_time={total_cp_time}, num_cp={num_checkpoints}, avg={avg_cp_time}")
     
     def simulate_push_segments(target_time_minutes):
         """
@@ -1564,11 +1571,21 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     # Add checkpoint time to all values so thresholds represent TOTAL race time
     # (Users enter target as total time including stops, so thresholds should too)
-    return {
+    result = {
         'natural_time_minutes': natural_total_time + total_cp_time,
         'push_threshold_minutes': push_threshold + total_cp_time,
         'protect_threshold_minutes': protect_threshold + total_cp_time
     }
+    
+    # Validate result values to prevent NaN from reaching the UI
+    import math
+    for key, value in result.items():
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            print(f"ERROR: NaN detected in {key}: natural={natural_total_time}, push={push_threshold}, protect={protect_threshold}, cp_time={total_cp_time}")
+            return None
+    
+    print(f"DEBUG threshold result: {result}")
+    return result
 
 
 @app.route('/api/calculate', methods=['POST'])
