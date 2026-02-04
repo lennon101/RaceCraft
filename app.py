@@ -1599,6 +1599,12 @@ def calculate():
         # Parse inputs
         checkpoint_distances = data.get('checkpoint_distances', [])
         checkpoint_dropbags = data.get('checkpoint_dropbags', [])  # New: dropbag status
+        
+        # Validate maximum number of checkpoints
+        MAX_CHECKPOINTS = 30
+        if len(checkpoint_distances) > MAX_CHECKPOINTS:
+            return jsonify({'error': f'Maximum number of checkpoints is {MAX_CHECKPOINTS}. You provided {len(checkpoint_distances)} checkpoints.'}), 400
+        
         segment_terrain_types = data.get('segment_terrain_types', [])
         avg_cp_time = float(data.get('avg_cp_time', 5))
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
