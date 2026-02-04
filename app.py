@@ -1309,20 +1309,28 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
 
 
 def calculate_effort_thresholds(natural_results, segments_data, base_pace, climbing_ability,
-                                fatigue_enabled, fitness_level, skill_level):
+                                fatigue_enabled, fitness_level, skill_level, num_checkpoints, avg_cp_time):
     """
     Calculate target time thresholds where effort levels transition.
     
     Simulates the actual allocation logic to find target times where at least one
     segment reaches the 10% adjustment threshold for effort labeling.
     
+    Args:
+        num_checkpoints: Number of checkpoints (includes finish but not start)
+        avg_cp_time: Average time spent at each checkpoint in minutes
+    
     Returns:
         dict with 'natural_time', 'push_threshold', 'protect_threshold' in minutes
+        (all values include checkpoint time for total race time)
     """
     if not natural_results:
         return None
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
+    
+    # Calculate total checkpoint time (checkpoint after each segment except first)
+    total_cp_time = num_checkpoints * avg_cp_time
     
     def simulate_push_segments(target_time_minutes):
         """
@@ -1548,10 +1556,12 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
         # Loop completed without break - use midpoint of final range
         protect_threshold = (low + high) / 2.0
     
+    # Add checkpoint time to all values so thresholds represent TOTAL race time
+    # (Users enter target as total time including stops, so thresholds should too)
     return {
-        'natural_time': natural_total_time,
-        'push_threshold': push_threshold,
-        'protect_threshold': protect_threshold
+        'natural_time_minutes': natural_total_time + total_cp_time,
+        'push_threshold_minutes': push_threshold + total_cp_time,
+        'protect_threshold_minutes': protect_threshold + total_cp_time
     }
 
 
@@ -1850,9 +1860,11 @@ def calculate():
         # Calculate effort thresholds for target time mode
         effort_thresholds = None
         if use_target_time and natural_results:
+            num_checkpoints = len(checkpoint_distances)  # Includes finish but not start
             effort_thresholds = calculate_effort_thresholds(
                 natural_results, segments_basic_data, z2_pace,
-                climbing_ability, fatigue_enabled, fitness_level, skill_level
+                climbing_ability, fatigue_enabled, fitness_level, skill_level,
+                num_checkpoints, avg_cp_time
             )
         
         response_data = {
