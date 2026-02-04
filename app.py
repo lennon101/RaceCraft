@@ -980,6 +980,614 @@ def load_known_race(filename):
     except Exception as e:
         return jsonify({'error': f'Error loading known race: {str(e)}'}), 500
 
+def calculate_natural_pacing(segments_data, base_pace, climbing_ability='moderate',
+                            fatigue_enabled=True, fitness_level='recreational',
+                            skill_level=0.5):
+    """
+    Calculate what the athlete would naturally do "on autopilot" (forward model).
+    
+    This is the prediction model: ability → pace → finish time
+    
+    Args:
+        segments_data: List of dicts with 'distance', 'elev_gain', 'elev_loss', 'terrain_type'
+        base_pace: Flat pace in min/km
+        climbing_ability: Athlete climbing ability
+        fatigue_enabled: Whether to apply fatigue
+        fitness_level: Athlete fitness level
+        skill_level: Technical skill (0.0-1.0)
+    
+    Returns:
+        List of dicts with 'natural_time' (minutes), 'natural_pace' (min/km) for each segment
+    """
+    results = []
+    cumulative_effort = 0.0
+    
+    log_message(f"Computing natural pacing for {climbing_ability} climber")
+    
+    for i, seg_data in enumerate(segments_data):
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        terrain_type = seg_data.get('terrain_type', 'smooth_trail')
+        
+        # Use athlete's actual ability to predict natural pace
+        natural_pace, _, _, _, _ = adjust_pace_for_elevation(
+            base_pace, elev_gain, elev_loss, distance_km, cumulative_effort,
+            climbing_ability, fatigue_enabled, fitness_level, terrain_type, skill_level
+        )
+        
+        natural_time = natural_pace * distance_km
+        
+        results.append({
+            'natural_time': natural_time,
+            'natural_pace': natural_pace
+        })
+        
+        log_message(f"  Segment {i}: natural pace = {natural_pace:.2f} min/km, time = {natural_time:.2f} min")
+        
+        # Update cumulative effort for next segment
+        segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+        cumulative_effort += segment_effort
+    
+    total_natural_time = sum(r['natural_time'] for r in results)
+    log_message(f"Total natural time: {total_natural_time:.2f} min")
+    
+    return results
+
+
+def get_terrain_effort_bounds(elev_gain, elev_loss, distance_km, climbing_ability, skill_level):
+    """
+    Define how much a segment's pace can be adjusted based on terrain type and athlete ability.
+    
+    This is where abilities affect COST, CAPACITY, and LIMITS.
+    
+    Returns: (min_multiplier, max_multiplier, effort_cost_multiplier)
+    - min_multiplier < 1.0: can speed up
+    - max_multiplier > 1.0: can slow down
+    - effort_cost_multiplier: how "expensive" it is to buy time here (lower = cheaper)
+    
+    Abilities affect:
+    - Climbing ability: cost of buying time on climbs (elite = cheaper)
+    - Technical skill: cost and limits on descents (high skill = less expensive, still constrained)
+    - Bounds: already implemented (capacity limits)
+    """
+    gradient = (elev_gain - elev_loss) / (distance_km * 1000.0) if distance_km > 0 else 0.0
+    
+    # Climbing ability cost multipliers (lower = cheaper to buy time)
+    climbing_cost_map = {
+        'elite': 0.75,         # Climbs are very cheap for elite
+        'very_strong': 0.85,
+        'strong': 0.95,
+        'moderate': 1.0,       # Baseline
+        'conservative': 1.2    # Climbs are expensive for conservative
+    }
+    climbing_cost = climbing_cost_map.get(climbing_ability, 1.0)
+    
+    # Technical skill affects downhill cost (0.0 = novice, 1.0 = expert)
+    # Even experts pay a cost on descents (safety/risk factor)
+    skill_cost_factor = 1.0 + (1.0 - skill_level) * 0.8  # Range: 1.0 (expert) to 1.8 (novice)
+    
+    # Classify terrain by gradient
+    if gradient > 0.08:  # Steep climb (>8%)
+        # Climbing is where ability matters most
+        # Cost is heavily affected by climbing ability
+        effort_cost = climbing_cost
+        
+        if climbing_ability == 'elite':
+            return (0.70, 1.15, effort_cost)  # Can push much harder, less slowdown
+        elif climbing_ability == 'very_strong':
+            return (0.75, 1.20, effort_cost)
+        elif climbing_ability == 'strong':
+            return (0.80, 1.25, effort_cost)
+        elif climbing_ability == 'moderate':
+            return (0.85, 1.30, effort_cost)
+        else:  # conservative
+            return (0.90, 1.35, effort_cost)  # Limited improvement, more slowdown
+    
+    elif gradient < -0.05:  # Descent (< -5%)
+        # Descents are constrained by technical skill
+        # Cost affected by skill level (risk pricing)
+        effort_cost = skill_cost_factor
+        
+        # Hard caps on descents - even skilled athletes have limits
+        if skill_level >= 0.8:  # Expert (0.8-1.0)
+            return (0.80, 1.20, effort_cost)  # Moderate adjustment, still constrained
+        elif skill_level >= 0.6:  # Proficient (0.6-0.8)
+            return (0.85, 1.20, effort_cost)  # Less speed-up range
+        elif skill_level >= 0.4:  # Intermediate (0.4-0.6)
+            return (0.90, 1.25, effort_cost)  # Limited speed-up
+        else:  # Novice (0.0-0.4)
+            return (0.95, 1.30, effort_cost)  # Very limited, expensive
+    
+    else:  # Flat or rolling (between -5% and +8%)
+        # Medium adjustment range, less ability-dependent
+        # Baseline cost (not affected much by abilities)
+        effort_cost = 1.0
+        return (0.80, 1.25, effort_cost)
+
+
+def allocate_effort_to_target(target_time_minutes, segments_data, natural_results, 
+                               base_pace, climbing_ability, fatigue_enabled,
+                               fitness_level, skill_level):
+    """
+    Effort allocation optimizer for target time mode.
+    
+    This is constrained optimization, NOT pace inversion.
+    
+    Strategy:
+    1. Start with natural pacing (what athlete would do on autopilot)
+    2. Calculate ΔT = T_natural - T_target
+    3. Calculate effort costs for each segment (climbing ability, technical skill)
+    4. Apply global effort budget (fitness level)
+    5. Distribute ΔT prioritizing lowest-cost segments
+    6. Apply cumulative fatigue multiplier (prefer early effort)
+    
+    Abilities affect COST, CAPACITY, and LIMITS:
+    - Climbing ability: climbs cheaper for elite (cost multiplier)
+    - Technical skill: descents expensive for novice (risk pricing)
+    - Fitness level: total deviation budget (global constraint)
+    
+    Args:
+        target_time_minutes: Target total moving time
+        segments_data: Segment info (distance, elevation, terrain)
+        natural_results: Natural pacing from calculate_natural_pacing()
+        base_pace: Flat terrain pace
+        climbing_ability: Athlete ability level
+        fatigue_enabled: Whether fatigue is enabled
+        fitness_level: Athlete fitness level
+        skill_level: Technical skill level (0.0-1.0)
+    
+    Returns:
+        List of dicts with 'segment_time', 'required_pace', 'effort_level' for each segment
+    """
+    if not natural_results:
+        return []
+    
+    natural_total_time = sum(r['natural_time'] for r in natural_results)
+    delta_t = natural_total_time - target_time_minutes
+    
+    log_message(f"Effort allocation: natural={natural_total_time:.2f} min, target={target_time_minutes:.2f} min, ΔT={delta_t:.2f} min")
+    
+    # If target matches natural, no adjustment needed
+    if abs(delta_t) < 0.5:  # Within 30 seconds
+        results = []
+        for i, seg_data in enumerate(segments_data):
+            results.append({
+                'segment_time': natural_results[i]['natural_time'],
+                'required_pace': natural_results[i]['natural_pace'],
+                'effort_level': 'steady'
+            })
+        return results
+    
+    # Fitness-based global effort budget (how much total deviation is allowed)
+    fitness_budget_map = {
+        'untrained': 0.15,      # Can only deviate 15% from natural
+        'recreational': 0.25,   # 25% deviation
+        'trained': 0.35,        # 35% deviation
+        'elite': 0.50          # 50% deviation
+    }
+    global_effort_budget = fitness_budget_map.get(fitness_level, 0.25)
+    max_total_deviation = natural_total_time * global_effort_budget
+    
+    log_message(f"Fitness level: {fitness_level}, global budget: {global_effort_budget:.1%} = {max_total_deviation:.2f} min")
+    
+    # Calculate how much each segment can contribute with cost weighting
+    segment_adjustments = []
+    cumulative_effort_km = 0.0
+    
+    for i, seg_data in enumerate(segments_data):
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        natural_time = natural_results[i]['natural_time']
+        natural_pace = natural_results[i]['natural_pace']
+        
+        # Get terrain-specific bounds and effort cost
+        min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+            elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+        )
+        
+        # Apply fatigue multiplier if enabled (cost increases with cumulative effort)
+        if fatigue_enabled:
+            # Fatigue makes later segments more expensive
+            # Fitness affects how steep the cost curve is
+            fitness_fatigue_map = {
+                'untrained': 1.5,
+                'recreational': 1.3,
+                'trained': 1.15,
+                'elite': 1.05
+            }
+            fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+            
+            # Calculate cumulative effort (km-effort: distance + ascent/100 + descent/200)
+            segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+            
+            # Fatigue multiplier grows with cumulative effort
+            # Early segments: ~1.0, late segments: up to fatigue_factor
+            fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+            fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)  # Cap at fatigue_factor
+            
+            cumulative_effort_km += segment_effort
+        else:
+            fatigue_multiplier = 1.0
+        
+        # Total effort cost = base_cost × fatigue_multiplier
+        total_effort_cost = base_effort_cost * fatigue_multiplier
+        
+        # Calculate time adjustment range with cost
+        if delta_t > 0:  # Need to go faster
+            # Can reduce time by speeding up (min_mult < 1.0)
+            max_time_saved = natural_time * (1.0 - min_mult)
+            segment_adjustments.append({
+                'index': i,
+                'max_adjustment': max_time_saved,
+                'effort_cost': total_effort_cost,
+                'multiplier': min_mult,
+                'direction': 'faster'
+            })
+        else:  # Need to go slower
+            # Can add time by slowing down (max_mult > 1.0)
+            max_time_added = natural_time * (max_mult - 1.0)
+            segment_adjustments.append({
+                'index': i,
+                'max_adjustment': max_time_added,
+                'effort_cost': total_effort_cost,
+                'multiplier': max_mult,
+                'direction': 'slower'
+            })
+    
+    # Calculate total capacity
+    total_capacity = sum(adj['max_adjustment'] for adj in segment_adjustments)
+    
+    if total_capacity == 0:
+        log_message("Warning: Zero adjustment capacity - using natural pacing")
+        results = []
+        for i, seg_data in enumerate(segments_data):
+            results.append({
+                'segment_time': natural_results[i]['natural_time'],
+                'required_pace': natural_results[i]['natural_pace'],
+                'effort_level': 'steady'
+            })
+        return results
+    
+    # Check if target is achievable within global effort budget
+    abs_delta_t = abs(delta_t)
+    if abs_delta_t > max_total_deviation:
+        log_message(f"Warning: Target requires {abs_delta_t:.2f} min deviation, but budget is {max_total_deviation:.2f} min")
+        log_message(f"Target time is too aggressive for {fitness_level} fitness level - using maximum feasible effort")
+        # Cap delta_t to budget
+        abs_delta_t = max_total_deviation
+    
+    # Distribute delta_t using cost-weighted allocation
+    # Lower cost segments get prioritized for adjustment
+    results = []
+    total_cost_weighted_capacity = sum(adj['max_adjustment'] / adj['effort_cost'] for adj in segment_adjustments)
+    
+    log_message(f"DEBUG: total_cost_weighted_capacity={total_cost_weighted_capacity:.2f}")
+    log_message(f"DEBUG: abs_delta_t after budget cap={abs_delta_t:.2f} min")
+    
+    for i, seg_data in enumerate(segments_data):
+        natural_time = natural_results[i]['natural_time']
+        natural_pace = natural_results[i]['natural_pace']
+        adj = segment_adjustments[i]
+        distance_km = seg_data['distance']
+        
+        # Calculate this segment's share based on cost-weighted capacity
+        # Lower cost = gets more of the adjustment (more efficient use of effort)
+        if total_cost_weighted_capacity > 0:
+            cost_weighted_share = (adj['max_adjustment'] / adj['effort_cost']) / total_cost_weighted_capacity
+            segment_adjustment = cost_weighted_share * abs_delta_t
+            
+            # Respect segment's max capacity
+            segment_adjustment = min(segment_adjustment, adj['max_adjustment'])
+        else:
+            segment_adjustment = 0
+        
+        adjustment_pct = (segment_adjustment / natural_time * 100) if natural_time > 0 else 0
+        
+        # Apply adjustment
+        if delta_t > 0:  # Going faster (natural > target, need to speed up)
+            adjusted_time = natural_time - segment_adjustment
+            effort_level = 'push' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            log_message(f"DEBUG seg{i}: delta_t>0 (faster), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
+        else:  # Going slower (natural < target, need to slow down)
+            adjusted_time = natural_time + segment_adjustment
+            effort_level = 'protect' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            log_message(f"DEBUG seg{i}: delta_t<0 (slower), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
+        
+        adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
+        
+        results.append({
+            'segment_time': adjusted_time,
+            'required_pace': adjusted_pace,
+            'effort_level': effort_level
+        })
+        
+        log_message(f"  Segment {i}: {effort_level} - pace {adjusted_pace:.2f} min/km (natural: {natural_pace:.2f}, cost: {adj['effort_cost']:.2f})")
+    
+    return results
+
+
+def calculate_effort_thresholds(natural_results, segments_data, base_pace, climbing_ability,
+                                fatigue_enabled, fitness_level, skill_level, num_checkpoints, avg_cp_time):
+    """
+    Calculate target time thresholds where effort levels transition.
+    
+    Simulates the actual allocation logic to find target times where at least one
+    segment reaches the 10% adjustment threshold for effort labeling.
+    
+    Args:
+        num_checkpoints: Number of checkpoints (includes finish but not start)
+        avg_cp_time: Average time spent at each checkpoint in minutes
+    
+    Returns:
+        dict with 'natural_time', 'push_threshold', 'protect_threshold' in minutes
+        (all values include checkpoint time for total race time)
+    """
+    if not natural_results:
+        return None
+    
+    natural_total_time = sum(r['natural_time'] for r in natural_results)
+    
+    # Validate natural_total_time to prevent NaN
+    if natural_total_time <= 0 or not isinstance(natural_total_time, (int, float)):
+        print(f"ERROR: Invalid natural_total_time: {natural_total_time}")
+        return None
+    
+    # Validate inputs to prevent NaN
+    if num_checkpoints is None:
+        num_checkpoints = 0
+    if avg_cp_time is None:
+        avg_cp_time = 0
+    
+    # Calculate total checkpoint time (checkpoint after each segment except first)
+    total_cp_time = num_checkpoints * avg_cp_time
+    
+    print(f"DEBUG threshold calc: natural={natural_total_time}, cp_time={total_cp_time}, num_cp={num_checkpoints}, avg={avg_cp_time}")
+    
+    def simulate_push_segments(target_time_minutes):
+        """
+        Simulate allocation for PUSH threshold (going faster).
+        Returns percentage of segments that would get "push" labels.
+        
+        Returns:
+            float: Percentage of segments (0.0 to 1.0) that have >=10% faster adjustment
+        """
+        delta_t = natural_total_time - target_time_minutes
+        if delta_t <= 0:  # Not going faster, can't have push labels
+            return 0.0
+        
+        abs_delta_t = abs(delta_t)
+        
+        # Apply global fitness budget constraint (CRITICAL: matches allocate_effort_to_target)
+        fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
+        fitness_budget = fitness_budgets.get(fitness_level, 0.25)
+        max_total_deviation = natural_total_time * fitness_budget
+        
+        # Cap delta_t to budget
+        if abs_delta_t > max_total_deviation:
+            abs_delta_t = max_total_deviation
+        
+        # Build adjustment data (simplified version of allocate_effort_to_target)
+        adjustments = []
+        total_weighted_capacity = 0.0
+        
+        for i, seg_data in enumerate(segments_data):
+            distance_km = seg_data['distance']
+            elev_gain = seg_data['elev_gain']
+            elev_loss = seg_data['elev_loss']
+            natural_time = natural_results[i]['natural_time']
+            
+            # Get bounds and cost
+            min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+                elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+            )
+            
+            # Capacity for adjustment (only faster direction for push)
+            capacity = natural_time * (1.0 - min_mult)
+            
+            # Total cost (MUST match real allocation - includes cumulative fatigue)
+            cumulative_effort_km = sum(
+                s['distance'] + (s['elev_gain'] / 100.0) + (s['elev_loss'] / 200.0)
+                for s in segments_data[:i]
+            )
+            
+            if fatigue_enabled:
+                fitness_fatigue_map = {'untrained': 1.5, 'recreational': 1.3, 'trained': 1.15, 'elite': 1.05}
+                fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+                
+                # Calculate segment effort
+                segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+                
+                # Fatigue multiplier grows with cumulative effort
+                fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+                fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)
+            else:
+                fatigue_multiplier = 1.0
+            
+            total_cost = base_effort_cost * fatigue_multiplier
+            
+            adjustments.append({
+                'natural_time': natural_time,
+                'capacity': capacity,
+                'total_cost': total_cost,
+                'index': i
+            })
+            
+            if total_cost > 0 and capacity > 0:
+                total_weighted_capacity += capacity / total_cost
+        
+        if total_weighted_capacity == 0:
+            return 0.0
+        
+        # Allocate time based on cost weighting and count segments that hit >= 10%
+        segments_at_threshold = 0
+        total_segments = len(adjustments)
+        
+        for adj in adjustments:
+            if adj['total_cost'] > 0 and adj['capacity'] > 0:
+                weighted_share = (adj['capacity'] / adj['total_cost']) / total_weighted_capacity
+                segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
+                adjustment_ratio = segment_adjustment / adj['natural_time']
+                
+                # Only count if going faster AND >=10% adjustment
+                if adjustment_ratio >= 0.10:
+                    segments_at_threshold += 1
+        
+        # Return percentage of segments at threshold
+        return segments_at_threshold / total_segments if total_segments > 0 else 0.0
+    
+    def simulate_protect_segments(target_time_minutes):
+        """
+        Simulate allocation for PROTECT threshold (going slower).
+        Returns percentage of segments that would get "protect" labels.
+        
+        Returns:
+            float: Percentage of segments (0.0 to 1.0) that have >=10% slower adjustment
+        """
+        delta_t = natural_total_time - target_time_minutes
+        if delta_t >= 0:  # Not going slower, can't have protect labels
+            return 0.0
+        
+        abs_delta_t = abs(delta_t)
+        
+        # Apply global fitness budget constraint (CRITICAL: matches allocate_effort_to_target)
+        fitness_budgets = {'untrained': 0.15, 'recreational': 0.25, 'trained': 0.35, 'elite': 0.50}
+        fitness_budget = fitness_budgets.get(fitness_level, 0.25)
+        max_total_deviation = natural_total_time * fitness_budget
+        
+        # Cap delta_t to budget
+        if abs_delta_t > max_total_deviation:
+            abs_delta_t = max_total_deviation
+        
+        # Build adjustment data (simplified version of allocate_effort_to_target)
+        adjustments = []
+        total_weighted_capacity = 0.0
+        
+        for i, seg_data in enumerate(segments_data):
+            distance_km = seg_data['distance']
+            elev_gain = seg_data['elev_gain']
+            elev_loss = seg_data['elev_loss']
+            natural_time = natural_results[i]['natural_time']
+            
+            # Get bounds and cost
+            min_mult, max_mult, base_effort_cost = get_terrain_effort_bounds(
+                elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+            )
+            
+            # Capacity for adjustment (only slower direction for protect)
+            capacity = natural_time * (max_mult - 1.0)
+            
+            # Total cost (MUST match real allocation - includes cumulative fatigue)
+            cumulative_effort_km = sum(
+                s['distance'] + (s['elev_gain'] / 100.0) + (s['elev_loss'] / 200.0)
+                for s in segments_data[:i]
+            )
+            
+            if fatigue_enabled:
+                fitness_fatigue_map = {'untrained': 1.5, 'recreational': 1.3, 'trained': 1.15, 'elite': 1.05}
+                fatigue_factor = fitness_fatigue_map.get(fitness_level, 1.3)
+                
+                # Calculate segment effort
+                segment_effort = distance_km + (elev_gain / 100.0) + (elev_loss / 200.0)
+                
+                # Fatigue multiplier grows with cumulative effort
+                fatigue_multiplier = 1.0 + (cumulative_effort_km / 100.0) * (fatigue_factor - 1.0)
+                fatigue_multiplier = min(fatigue_multiplier, fatigue_factor)
+            else:
+                fatigue_multiplier = 1.0
+            
+            total_cost = base_effort_cost * fatigue_multiplier
+            
+            adjustments.append({
+                'natural_time': natural_time,
+                'capacity': capacity,
+                'total_cost': total_cost,
+                'index': i
+            })
+            
+            if total_cost > 0 and capacity > 0:
+                total_weighted_capacity += capacity / total_cost
+        
+        if total_weighted_capacity == 0:
+            return 0.0
+        
+        # Allocate time based on cost weighting and count segments that hit >= 10%
+        segments_at_threshold = 0
+        total_segments = len(adjustments)
+        
+        for adj in adjustments:
+            if adj['total_cost'] > 0 and adj['capacity'] > 0:
+                weighted_share = (adj['capacity'] / adj['total_cost']) / total_weighted_capacity
+                segment_adjustment = min(abs_delta_t * weighted_share, adj['capacity'])
+                adjustment_ratio = segment_adjustment / adj['natural_time']
+                
+                # Only count if going slower AND >=10% adjustment
+                if adjustment_ratio >= 0.10:
+                    segments_at_threshold += 1
+        
+        # Return percentage of segments at threshold
+        return segments_at_threshold / total_segments if total_segments > 0 else 0.0
+    
+    # Binary search for push threshold (where >50% of segments hit 10% faster)
+    # Search range: 50% to 100% of natural time
+    low, high = natural_total_time * 0.5, natural_total_time
+    push_threshold = natural_total_time * 0.90  # fallback
+    
+    for _ in range(20):  # Binary search iterations
+        mid = (low + high) / 2.0
+        pct_at_threshold = simulate_push_segments(mid)
+        
+        if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
+            push_threshold = mid
+            break
+        elif pct_at_threshold < 0.50:
+            high = mid  # Need to go faster (lower target time) to hit more segments
+        else:
+            low = mid  # Too fast, too many segments affected
+    else:
+        # Loop completed without break - use midpoint of final range
+        push_threshold = (low + high) / 2.0
+    
+    # Binary search for protect threshold (where >50% of segments hit 10% slower)
+    # Search range: 100% to 150% of natural time
+    low, high = natural_total_time, natural_total_time * 1.5
+    protect_threshold = natural_total_time * 1.10  # fallback
+    
+    for _ in range(20):  # Binary search iterations
+        mid = (low + high) / 2.0
+        pct_at_threshold = simulate_protect_segments(mid)
+        
+        if abs(pct_at_threshold - 0.50) < 0.05:  # Close enough to 50% of segments
+            protect_threshold = mid
+            break
+        elif pct_at_threshold < 0.50:
+            low = mid  # Need to go slower (higher target time) to hit more segments
+        else:
+            high = mid  # Too slow, too many segments affected
+    else:
+        # Loop completed without break - use midpoint of final range
+        protect_threshold = (low + high) / 2.0
+    
+    # Add checkpoint time to all values so thresholds represent TOTAL race time
+    # (Users enter target as total time including stops, so thresholds should too)
+    result = {
+        'natural_time_minutes': natural_total_time + total_cp_time,
+        'push_threshold_minutes': push_threshold + total_cp_time,
+        'protect_threshold_minutes': protect_threshold + total_cp_time
+    }
+    
+    # Validate result values to prevent NaN from reaching the UI
+    import math
+    for key, value in result.items():
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            print(f"ERROR: NaN detected in {key}: natural={natural_total_time}, push={push_threshold}, protect={protect_threshold}, cp_time={total_cp_time}")
+            return None
+    
+    print(f"DEBUG threshold result: {result}")
+    return result
+
+
 @app.route('/api/calculate', methods=['POST'])
 def calculate():
     """Calculate race plan."""
@@ -1010,6 +1618,10 @@ def calculate():
         
         # Terrain settings
         skill_level = float(data.get('skill_level', 0.5))  # 0.0 = novice, 1.0 = expert
+        
+        # Target time mode (new feature)
+        pacing_mode = data.get('pacing_mode', 'base_pace')  # 'base_pace' or 'target_time'
+        target_time_str = data.get('target_time')  # "HH:MM:SS" or None
         
         # Check if elevation profile is provided (from loaded plan)
         elevation_profile_data = data.get('elevation_profile')
@@ -1058,46 +1670,120 @@ def calculate():
             # Find checkpoint indices using trackpoints
             checkpoint_indices, distances = find_checkpoint_indices(trackpoints, checkpoint_distances)
         
-        # Calculate segments with cumulative effort tracking
-        segments = []
-        cumulative_time = 0.0
-        total_moving_time = 0.0
-        cumulative_effort = 0.0  # Track effort in km-effort
-        
+        # === Prepare segment data for calculations ===
         num_checkpoints = len(checkpoint_distances)
         segment_labels = ["Start"]
         for i in range(num_checkpoints):
             segment_labels.append(f"CP{i + 1}")
         segment_labels.append("Finish")
         
+        # Build basic segment info (distance, elevation, terrain)
+        segments_basic_data = []
         for i in range(len(checkpoint_indices) - 1):
             start_idx = checkpoint_indices[i]
             end_idx = checkpoint_indices[i + 1]
             
             segment_dist = distances[end_idx] - distances[start_idx]
             elev_gain, elev_loss = calculate_elevation_change(trackpoints, start_idx, end_idx)
-            net_elev_change = elev_gain - elev_loss
-            
-            # Get terrain type for this segment (default to 'smooth_trail' if not provided)
             terrain_type = segment_terrain_types[i] if i < len(segment_terrain_types) else 'smooth_trail'
             
-            # Calculate pace using cumulative effort (BEFORE adding this segment's effort)
-            adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
-                z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
-                fatigue_enabled, fitness_level, terrain_type, skill_level
-            )
+            segments_basic_data.append({
+                'from': segment_labels[i],
+                'to': segment_labels[i + 1],
+                'distance': segment_dist,
+                'elev_gain': elev_gain,
+                'elev_loss': elev_loss,
+                'terrain_type': terrain_type
+            })
+        
+        # === Handle Target Time Mode ===
+        use_target_time = pacing_mode == 'target_time' and target_time_str
+        if use_target_time:
+            try:
+                # Parse target time (HH:MM:SS)
+                time_parts = target_time_str.split(':')
+                if len(time_parts) == 3:
+                    target_hours = int(time_parts[0])
+                    target_minutes = int(time_parts[1])
+                    target_seconds = int(time_parts[2])
+                    target_total_minutes = target_hours * 60 + target_minutes + target_seconds / 60.0
+                    
+                    # Subtract CP stop time to get target moving time
+                    total_cp_time = avg_cp_time * num_checkpoints
+                    target_moving_time = target_total_minutes - total_cp_time
+                    
+                    if target_moving_time <= 0:
+                        return jsonify({'error': f'Target time ({target_time_str}) is too short - checkpoint stops alone require {total_cp_time:.1f} minutes'}), 400
+                    
+                    log_message(f"\n=== TARGET TIME MODE: Effort Allocation Optimization ===")
+                    log_message(f"Target time: {target_time_str} (moving time: {target_moving_time:.2f} min)")
+                    
+                    # Step 1: Calculate natural pacing (what athlete would do on autopilot)
+                    natural_results = calculate_natural_pacing(
+                        segments_basic_data, z2_pace, climbing_ability,
+                        fatigue_enabled, fitness_level, skill_level
+                    )
+                    
+                    # Step 2: Apply effort allocation optimization
+                    reverse_results = allocate_effort_to_target(
+                        target_moving_time, segments_basic_data, natural_results,
+                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
+                    )
+                else:
+                    return jsonify({'error': 'Invalid target time format. Use HH:MM:SS'}), 400
+            except Exception as e:
+                return jsonify({'error': f'Error parsing target time: {str(e)}'}), 400
+        
+        # Calculate segments with cumulative effort tracking
+        segments = []
+        cumulative_time = 0.0
+        total_moving_time = 0.0
+        cumulative_effort = 0.0  # Track effort in km-effort
+        
+        for i in range(len(segments_basic_data)):
+            seg_basic = segments_basic_data[i]
+            segment_dist = seg_basic['distance']
+            elev_gain = seg_basic['elev_gain']
+            elev_loss = seg_basic['elev_loss']
+            terrain_type = seg_basic['terrain_type']
+            net_elev_change = elev_gain - elev_loss
+            
+            # === Calculate segment time and pace ===
+            if use_target_time:
+                # Target Time Mode: Use effort allocation optimizer
+                segment_time = reverse_results[i]['segment_time']
+                required_pace = reverse_results[i]['required_pace']
+                effort_level = reverse_results[i].get('effort_level', 'steady')
+                
+                # For display: still calculate what the natural pace would be
+                _, elev_adjusted_pace, fatigue_seconds, terrain_factor, _ = adjust_pace_for_elevation(
+                    z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
+                    fatigue_enabled, fitness_level, terrain_type, skill_level
+                )
+                
+                # Mark as aggressive if pushing significantly harder than natural
+                pace_aggressive = effort_level == 'push'
+                adjusted_pace = required_pace
+                pace_capped = False
+            else:
+                # Base Pace Mode: Use forward-calculated pace (prediction)
+                adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
+                    z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
+                    fatigue_enabled, fitness_level, terrain_type, skill_level
+                )
+                segment_time = segment_dist * adjusted_pace
+                pace_aggressive = False
+                effort_level = 'steady'
+                
+                # Log when pace is capped
+                if pace_capped:
+                    segment_label = f"{seg_basic['from']} → {seg_basic['to']}"
+                    print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2.5× base pace)")
             
             # Update cumulative effort: effort_km = distance_km + ascent_m/100 + descent_m/200
             segment_effort = segment_dist + (elev_gain / 100.0) + (elev_loss / 200.0)
             cumulative_effort += segment_effort
             
-            # Log when pace is capped
-            if pace_capped:
-                segment_label = f"{segment_labels[i]} → {segment_labels[i + 1]}"
-                print(f"⚠️  PACE CAPPED: {segment_label} - Pace limited to {adjusted_pace:.2f} min/km (2.5× base pace)")
-
-            
-            segment_time = segment_dist * adjusted_pace
             total_moving_time += segment_time
             
             if i > 0:
@@ -1126,8 +1812,8 @@ def calculate():
             terrain_penalty_pct = (terrain_factor - 1.0) * 100.0
             
             segment_data = {
-                'from': segment_labels[i],
-                'to': segment_labels[i + 1],
+                'from': seg_basic['from'],
+                'to': seg_basic['to'],
                 'distance': round(segment_dist, 2),
                 'elev_gain': round(elev_gain, 0),
                 'elev_loss': round(elev_loss, 0),
@@ -1139,8 +1825,11 @@ def calculate():
                 'pace': round(adjusted_pace, 2),
                 'pace_str': f"{int(adjusted_pace)}:{int((adjusted_pace % 1) * 60):02d}",
                 'pace_capped': pace_capped,
-                'fatigue_seconds': round(fatigue_seconds, 1),
-                'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}",
+                'pace_aggressive': pace_aggressive if use_target_time else False,
+                'effort_level': effort_level if use_target_time else 'steady',  # New: effort allocation
+                # Note: In target time mode, fatigue is incorporated into natural pacing, not displayed separately
+                'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
+                'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
                 'terrain_type': terrain_type,
                 'terrain_factor': round(terrain_factor, 3),
                 'terrain_penalty_pct': round(terrain_penalty_pct, 1),
@@ -1191,7 +1880,17 @@ def calculate():
         # Calculate dropbag contents
         dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
         
-        return jsonify({
+        # Calculate effort thresholds for target time mode
+        effort_thresholds = None
+        if use_target_time and natural_results:
+            num_checkpoints = len(checkpoint_distances)  # Includes finish but not start
+            effort_thresholds = calculate_effort_thresholds(
+                natural_results, segments_basic_data, z2_pace,
+                climbing_ability, fatigue_enabled, fitness_level, skill_level,
+                num_checkpoints, avg_cp_time
+            )
+        
+        response_data = {
             'segments': segments,
             'elevation_profile': elevation_profile,
             'dropbag_contents': dropbag_contents,
@@ -1207,7 +1906,13 @@ def calculate():
                 'total_carbs': total_carbs,
                 'total_water': round(total_water, 1)
             }
-        })
+        }
+        
+        # Add effort thresholds if in target time mode
+        if effort_thresholds:
+            response_data['effort_thresholds'] = effort_thresholds
+        
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
