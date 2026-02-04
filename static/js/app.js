@@ -972,8 +972,12 @@ async function calculateRacePlan() {
 
     // Gather other inputs
     const avgCpTime = parseFloat(document.getElementById('avg-cp-time').value) || 5;
-    const z2PaceMin = parseFloat(document.getElementById('z2-pace-min').value) || 6;
-    const z2PaceSec = parseFloat(document.getElementById('z2-pace-sec').value) || 30;
+    
+    // Parse pace components - handle zero values properly (0 is valid for seconds)
+    const z2PaceMinValue = document.getElementById('z2-pace-min').value;
+    const z2PaceSecValue = document.getElementById('z2-pace-sec').value;
+    const z2PaceMin = z2PaceMinValue === '' ? 6 : parseFloat(z2PaceMinValue);
+    const z2PaceSec = z2PaceSecValue === '' ? 30 : parseFloat(z2PaceSecValue);
     const z2Pace = z2PaceMin + z2PaceSec / 60;
     const climbingAbility = document.getElementById('climbing-ability').value || 'moderate';
     const carbsPerHour = parseFloat(document.getElementById('carbs-per-hour').value) || 60;
@@ -1564,8 +1568,17 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
             const z2Pace = data.z2_pace || 6.5;
-            document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
-            document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
+            let paceMin = Math.floor(z2Pace);
+            let paceSec = Math.round((z2Pace % 1) * 60);
+            
+            // Handle seconds overflow (e.g., 4.999 rounds to 4:60, should be 5:00)
+            if (paceSec >= 60) {
+                paceMin += 1;
+                paceSec = 0;
+            }
+            
+            document.getElementById('z2-pace-min').value = paceMin;
+            document.getElementById('z2-pace-sec').value = paceSec;
             
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
@@ -1787,8 +1800,17 @@ async function handleImportPlan(event) {
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
             const z2Pace = data.z2_pace || 6.5;
-            document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
-            document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
+            let paceMin = Math.floor(z2Pace);
+            let paceSec = Math.round((z2Pace % 1) * 60);
+            
+            // Handle seconds overflow (e.g., 4.999 rounds to 4:60, should be 5:00)
+            if (paceSec >= 60) {
+                paceMin += 1;
+                paceSec = 0;
+            }
+            
+            document.getElementById('z2-pace-min').value = paceMin;
+            document.getElementById('z2-pace-sec').value = paceSec;
             
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
