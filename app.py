@@ -1329,6 +1329,12 @@ def calculate_effort_thresholds(natural_results, segments_data, base_pace, climb
     
     natural_total_time = sum(r['natural_time'] for r in natural_results)
     
+    # Validate inputs to prevent NaN
+    if num_checkpoints is None:
+        num_checkpoints = 0
+    if avg_cp_time is None:
+        avg_cp_time = 0
+    
     # Calculate total checkpoint time (checkpoint after each segment except first)
     total_cp_time = num_checkpoints * avg_cp_time
     
