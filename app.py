@@ -1926,10 +1926,12 @@ def calculate():
                 
                 if target_below_minimum and not achieved_above_target:
                     # Case 1: Target is below theoretical minimum (impossible target)
+                    # But the algorithm got close to target (within tolerance)
+                    # Recommend the achieved time to ensure stability
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        f"The minimum achievable time is {min_achievable_str}. "
-                        f"Consider: (1) increasing your target time to {min_achievable_str} or more, (2) improving base pace, "
+                        f"The algorithm achieved {achieved_total_time_str}. "
+                        f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
                         f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                     )
                     
@@ -1948,10 +1950,15 @@ def calculate():
                     
                 elif target_below_minimum and achieved_above_target:
                     # Case 3: Both conditions true (target below minimum AND algorithm couldn't achieve it)
+                    # IMPORTANT: Recommend the ACHIEVED time, not the theoretical minimum
+                    # The theoretical minimum assumes all segments can simultaneously reach min_mult,
+                    # but the cost-weighted allocation may not achieve this in practice.
+                    # Recommending the achieved time prevents circular loops where users keep
+                    # updating to a suggested time that the algorithm still can't hit.
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive and could not be achieved. "
-                        f"The minimum achievable time is {min_achievable_str}, but the algorithm achieved {achieved_total_time_str}. "
-                        f"Consider: (1) increasing your target time to {min_achievable_str} or more, (2) improving base pace, "
+                        f"The algorithm achieved {achieved_total_time_str}. "
+                        f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
                         f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                     )
                     
