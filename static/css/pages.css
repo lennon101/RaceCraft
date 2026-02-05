@@ -4,7 +4,7 @@
 .menu-toggle {
     position: absolute;
     left: 20px;
-    top: 50%;
+    top: 10%;
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
