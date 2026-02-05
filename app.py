@@ -1887,6 +1887,11 @@ def calculate():
             # Calculate target total time for warning message
             target_total_time = target_moving_time + total_cp_time
             
+            # Calculate natural pacing total time (stable reference that never changes)
+            # Natural pacing represents steady-effort time without target optimization
+            natural_moving_time = sum(r['natural_time'] for r in natural_results)
+            natural_total_time = natural_moving_time + total_cp_time
+            
             # Check if achieved time exceeds target significantly
             # NOTE: We don't check if target is below theoretical minimum because:
             # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
@@ -1901,13 +1906,14 @@ def calculate():
             # Generate warning if target couldn't be achieved
             if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
-                achieved_total_time = total_moving_time + total_cp_time
-                achieved_total_time_str = format_time(achieved_total_time)
+                natural_total_time_str = format_time(natural_total_time)
                 
+                # Use natural pacing time as stable reference (doesn't change with target)
+                # This prevents the warning from appearing to "chase" as user adjusts target
                 target_time_warning = (
-                    f"⚠️ Target time {target_total_time_str} could not be achieved with current effort allocation. "
-                    f"The algorithm achieved {achieved_total_time_str}. "
-                    f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
+                    f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                    f"With steady effort, your natural pacing would take {natural_total_time_str}. "
+                    f"Consider: (1) increasing your target time closer to {natural_total_time_str}, (2) improving base pace, "
                     f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                 )
                 
