@@ -271,7 +271,7 @@ function setupNumericInputFiltering() {
     });
     
     // Decimal-allowed fields
-    const decimalFields = ['avg-cp-time', 'carbs-per-hour', 'water-per-hour', 'carbs-per-gel'];
+    const decimalFields = ['avg-cp-time', 'carbs-per-hour', 'water-per-hour', 'carbs-per-serving'];
     decimalFields.forEach(fieldId => {
         const input = document.getElementById(fieldId);
         if (input) {
@@ -499,15 +499,18 @@ function renderElevationChart(elevationProfile, segments) {
                                 }
                                 const sectionLabel = `${prevLabel} to ${nextLabel} Details:`;
                                 labels.push(toUnicodeBold(sectionLabel));
-                                // Show gels/sachets needed for next section (from segment data), else carbs
+                                // Show servings needed for next section (from segment data), else carbs
                                 let fuelLine = '';
                                 // Find the next segment (this CP -> next CP)
                                 let nextSegment = null;
                                 if (segments && nearCheckpoint.cpNumber < segments.length) {
                                     nextSegment = segments[nearCheckpoint.cpNumber];
                                 }
-                                if (nextSegment && nextSegment.num_gels !== undefined && nextSegment.num_gels !== null && nextSegment.num_gels > 0) {
-                                    fuelLine = `Fuel Needed: ${nextSegment.num_gels} gels/sachets`;
+                                if (nextSegment && (nextSegment.num_servings !== undefined || nextSegment.num_gels !== undefined) && 
+                                    ((nextSegment.num_servings !== null && nextSegment.num_servings > 0) || (nextSegment.num_gels !== null && nextSegment.num_gels > 0))) {
+                                    // Try new name first, fallback to old for backward compatibility
+                                    const servingCount = nextSegment.num_servings || nextSegment.num_gels;
+                                    fuelLine = `Fuel Needed: ${servingCount} servings`;
                                 } else if (nextSegment && nextSegment.target_carbs !== undefined && nextSegment.target_carbs !== null) {
                                     fuelLine = `Fuel Needed: ${nextSegment.target_carbs}g carbs`;
                                 } else {
@@ -526,8 +529,10 @@ function renderElevationChart(elevationProfile, segments) {
                                             const bolded = `${prevLabel} dropbag contents:`;
                                             labels.push(toUnicodeBold(bolded));
                                             let planLine = '';
-                                            if (dropbag.num_gels !== undefined) {
-                                                planLine = `Gels/Sachets: ${dropbag.num_gels}, Hydration: ${dropbag.hydration}L`;
+                                            if (dropbag.num_servings !== undefined || dropbag.num_gels !== undefined) {
+                                                // Try new name first, fallback to old for backward compatibility
+                                                const servingCount = dropbag.num_servings || dropbag.num_gels;
+                                                planLine = `Servings: ${servingCount}, Hydration: ${dropbag.hydration}L`;
                                             } else {
                                                 planLine = `Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
                                             }
@@ -663,7 +668,7 @@ function clearAllInputs() {
     document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
-    document.getElementById('carbs-per-gel').value = '';
+    document.getElementById('carbs-per-serving').value = '';
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
     document.getElementById('fitness-level').value = 'recreational';
@@ -1124,9 +1129,9 @@ async function calculateRacePlan() {
     const fitnessLevel = document.getElementById('fitness-level').value;
     const skillLevel = parseFloat(document.getElementById('skill-level').value) || 0.5;
     
-    // Get carbs per gel (optional)
-    const carbsPerGelInput = document.getElementById('carbs-per-gel').value;
-    const carbsPerGel = carbsPerGelInput && carbsPerGelInput.trim() !== '' ? parseFloat(carbsPerGelInput) : null;
+    // Get carbs per serving (optional)
+    const carbsPerServingInput = document.getElementById('carbs-per-serving').value;
+    const carbsPerServing = carbsPerServingInput && carbsPerServingInput.trim() !== '' ? parseFloat(carbsPerServingInput) : null;
     
     // Get pacing mode and target time
     const pacingMode = currentPlan.pacing_mode;
@@ -1155,7 +1160,7 @@ async function calculateRacePlan() {
         climbing_ability: climbingAbility,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
-        carbs_per_gel: carbsPerGel,
+        carbs_per_serving: carbsPerServing,
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
         fitness_level: fitnessLevel,
@@ -1336,15 +1341,15 @@ function displayResults(data) {
     if (dropbag_contents && dropbag_contents.length > 0) {
         dropbagTbody.innerHTML = '';
         
-        // Check if gel columns should be displayed (if any item has num_gels)
-        const hasGelData = dropbag_contents.some(item => item.num_gels !== undefined);
+        // Check if serving columns should be displayed (if any item has num_servings or num_gels for backward compatibility)
+        const hasServingData = dropbag_contents.some(item => item.num_servings !== undefined || item.num_gels !== undefined);
         
-        // Update table header based on whether gel data is present
-        if (hasGelData) {
+        // Update table header based on whether serving data is present
+        if (hasServingData) {
             dropbagTableHeader.innerHTML = `
                 <th>Checkpoint</th>
                 <th>Carb Target (g)</th>
-                <th>Number of Gels</th>
+                <th>Number of Servings</th>
                 <th>Actual Carbs (g)</th>
                 <th>Hydration Target (L)</th>
             `;
@@ -1360,12 +1365,15 @@ function displayResults(data) {
         dropbag_contents.forEach(item => {
             const row = document.createElement('tr');
             
-            if (hasGelData) {
+            if (hasServingData) {
+                // Try new name first, fallback to old for backward compatibility
+                const servingCount = item.num_servings || item.num_gels;
+                const actualCarbs = item.actual_carbs;
                 row.innerHTML = `
                     <td><strong>${item.checkpoint}</strong></td>
                     <td>${item.carbs}</td>
-                    <td>${item.num_gels}</td>
-                    <td>${item.actual_carbs}</td>
+                    <td>${servingCount}</td>
+                    <td>${actualCarbs}</td>
                     <td>${item.hydration}</td>
                 `;
             } else {
@@ -1450,7 +1458,7 @@ async function savePlan(forceSaveAs = false) {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
-        carbs_per_gel: document.getElementById('carbs-per-gel').value ? parseFloat(document.getElementById('carbs-per-gel').value) : null,
+        carbs_per_serving: document.getElementById('carbs-per-serving').value ? parseFloat(document.getElementById('carbs-per-serving').value) : null,
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -1794,7 +1802,7 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
+            document.getElementById('carbs-per-serving').value = data.carbs_per_serving || data.carbs_per_gel || '';
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
@@ -1887,8 +1895,8 @@ async function exportCurrentPlan() {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value) || 60,
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value) || 500,
-        carbs_per_gel: document.getElementById('carbs-per-gel').value ? 
-                       parseFloat(document.getElementById('carbs-per-gel').value) : null,
+        carbs_per_serving: document.getElementById('carbs-per-serving').value ? 
+                       parseFloat(document.getElementById('carbs-per-serving').value) : null,
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -2017,7 +2025,7 @@ async function handleImportPlan(event) {
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
+            document.getElementById('carbs-per-serving').value = data.carbs_per_serving || data.carbs_per_gel || '';
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
@@ -2263,7 +2271,7 @@ function setupNumericInputFiltering() {
         'avg-cp-time',
         'carbs-per-hour',
         'water-per-hour',
-        'carbs-per-gel'
+        'carbs-per-serving'
     ];
 
     // Setup integer inputs
