@@ -1896,6 +1896,25 @@ def calculate():
                 # Fallback if natural_results not available (shouldn't happen in target time mode)
                 natural_total_time = None
             
+            # Calculate TRUE minimum achievable time (independent of target)
+            # This represents the absolute fastest time possible with maximum effort
+            # By using an impossible target (1 minute), we force the algorithm to max out
+            minimum_achievable_total_time = None
+            if natural_results:
+                try:
+                    # Use impossibly aggressive target to force maximum effort allocation
+                    impossible_target = 1.0  # 1 minute moving time (impossible)
+                    min_effort_results = allocate_effort_to_target(
+                        impossible_target, segments_basic_data, natural_results,
+                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
+                    )
+                    if min_effort_results:
+                        min_moving_time = sum(r['segment_time'] for r in min_effort_results)
+                        minimum_achievable_total_time = min_moving_time + total_cp_time
+                except Exception as e:
+                    log_message(f"Could not calculate minimum achievable time: {e}")
+                    minimum_achievable_total_time = None
+            
             # Check if achieved time exceeds target significantly
             # NOTE: We don't check if target is below theoretical minimum because:
             # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
@@ -1911,9 +1930,19 @@ def calculate():
             if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
                 
-                # Use natural pacing time as stable reference (doesn't change with target)
-                # This prevents the warning from appearing to "chase" as user adjusts target
-                if natural_total_time is not None:
+                # Build warning message with stable references (independent of target)
+                if natural_total_time is not None and minimum_achievable_total_time is not None:
+                    natural_total_time_str = format_time(natural_total_time)
+                    minimum_achievable_time_str = format_time(minimum_achievable_total_time)
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"Minimum achievable time: {minimum_achievable_time_str} (max effort), "
+                        f"Natural pacing: {natural_total_time_str} (steady effort). "
+                        f"Consider: (1) increasing your target time (ideally to {minimum_achievable_time_str} or more), (2) improving base pace, "
+                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                    )
+                elif natural_total_time is not None:
+                    # Fallback: only natural pacing available
                     natural_total_time_str = format_time(natural_total_time)
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
@@ -1922,7 +1951,7 @@ def calculate():
                         f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                     )
                 else:
-                    # Fallback if natural pacing not available
+                    # Fallback if neither reference available
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
                         f"Consider: (1) increasing your target time, (2) improving base pace, "
