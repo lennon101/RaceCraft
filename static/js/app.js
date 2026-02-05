@@ -136,6 +136,7 @@ const targetTimeInputs = document.getElementById('target-time-inputs');
 const targetTimeHoursInput = document.getElementById('target-time-hours');
 const targetTimeMinutesInput = document.getElementById('target-time-minutes');
 const targetTimeSecondsInput = document.getElementById('target-time-seconds');
+const targetTimeWarning = document.getElementById('target-time-warning');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -1002,6 +1003,10 @@ function handlePacingModeChange() {
     if (selectedMode === 'base_pace') {
         basePaceInputs.style.display = 'block';
         targetTimeInputs.style.display = 'none';
+        // Clear target time warning when switching to base pace mode
+        if (targetTimeWarning) {
+            targetTimeWarning.style.display = 'none';
+        }
     } else {
         basePaceInputs.style.display = 'none';
         targetTimeInputs.style.display = 'block';
@@ -1148,6 +1153,16 @@ async function calculateRacePlan() {
             if (data.elevation_profile) {
                 currentPlan.elevation_profile = data.elevation_profile;
             }
+            
+            // Handle target time warning if present
+            const targetTimeWarning = document.getElementById('target-time-warning');
+            if (data.target_time_warning) {
+                targetTimeWarning.textContent = data.target_time_warning;
+                targetTimeWarning.style.display = 'block';
+            } else {
+                targetTimeWarning.style.display = 'none';
+            }
+            
             displayResults(data);
             saveBtn.disabled = false;
             exportBtn.disabled = false;

@@ -1873,6 +1873,7 @@ def calculate():
         total_cp_time = avg_cp_time * num_checkpoints
         
         # Validate target time achievement if in target time mode
+        target_time_warning = None
         if use_target_time:
             # Compare achieved moving time vs requested target moving time
             time_difference = total_moving_time - target_moving_time
@@ -1899,21 +1900,20 @@ def calculate():
                 min_achievable_total_time = min_achievable_moving_time + total_cp_time
                 achieved_total_time = total_moving_time + total_cp_time
                 
-                # Format times for error message
+                # Format times for warning message
                 target_total_time_str = format_time(target_moving_time + total_cp_time)
                 achieved_time_str = format_time(achieved_total_time)
                 min_achievable_str = format_time(min_achievable_total_time)
                 
-                error_msg = (
-                    f"Target time {target_total_time_str} is not achievable with current settings. "
+                target_time_warning = (
+                    f"⚠️ Target time {target_total_time_str} is not achievable with current settings. "
                     f"The closest achievable time is {achieved_time_str}. "
                     f"The absolute minimum time possible (maximum effort on all segments) is {min_achievable_str}. "
                     f"Consider: (1) increasing your target time, (2) improving base pace, "
                     f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                 )
                 
-                log_message(f"ERROR: Target time validation failed - {error_msg}")
-                return jsonify({'error': error_msg}), 400
+                log_message(f"WARNING: Target time validation - {target_time_warning}")
         
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
@@ -1973,6 +1973,10 @@ def calculate():
         # Add effort thresholds if in target time mode
         if effort_thresholds:
             response_data['effort_thresholds'] = effort_thresholds
+        
+        # Add target time warning if present
+        if target_time_warning:
+            response_data['target_time_warning'] = target_time_warning
         
         return jsonify(response_data)
     except Exception as e:
