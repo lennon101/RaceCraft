@@ -2863,6 +2863,9 @@ def documentation(doc_path=None):
             markdown_content = f.read()
         
         # Convert markdown to HTML with extras
+        # Security Note: Markdown files are part of the repository and controlled by repo owners.
+        # Only trusted documentation should be added to the /docs folder.
+        # If allowing user-uploaded markdown in the future, add HTML sanitization with bleach.
         html_content = markdown2.markdown(
             markdown_content,
             extras=[
@@ -2944,12 +2947,12 @@ def process_doc_links(html_content):
     
     def replace_link(match):
         link = match.group(1)
-        # Remove .md extension and ensure it starts with /docs/
+        # Remove .md extension
         clean_link = link[:-3] if link.endswith('.md') else link
         
-        # Handle relative paths
-        if not clean_link.startswith('/'):
-            clean_link = clean_link
+        # Remove leading slash if present to avoid double slashes
+        if clean_link.startswith('/'):
+            clean_link = clean_link[1:]
         
         return f'href="/docs/{clean_link}"'
     

@@ -27,6 +27,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add copy button to code blocks
     document.querySelectorAll('.markdown-content pre code').forEach(function(codeBlock) {
+        // Check if clipboard API is available
+        if (!navigator.clipboard) {
+            return; // Skip adding copy buttons if clipboard API is not available
+        }
+        
         const pre = codeBlock.parentElement;
         const button = document.createElement('button');
         button.className = 'copy-code-btn';
@@ -34,6 +39,12 @@ document.addEventListener('DOMContentLoaded', function() {
         button.onclick = function() {
             navigator.clipboard.writeText(codeBlock.textContent).then(function() {
                 button.textContent = 'Copied!';
+                setTimeout(function() {
+                    button.textContent = 'Copy';
+                }, 2000);
+            }).catch(function(err) {
+                console.error('Failed to copy code:', err);
+                button.textContent = 'Failed';
                 setTimeout(function() {
                     button.textContent = 'Copy';
                 }, 2000);
