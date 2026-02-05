@@ -1898,18 +1898,15 @@ def calculate():
                     min_achievable_moving_time += min_segment_time
                 
                 min_achievable_total_time = min_achievable_moving_time + total_cp_time
-                achieved_total_time = total_moving_time + total_cp_time
                 
                 # Format times for warning message
                 target_total_time_str = format_time(target_moving_time + total_cp_time)
-                achieved_time_str = format_time(achieved_total_time)
                 min_achievable_str = format_time(min_achievable_total_time)
                 
                 target_time_warning = (
                     f"⚠️ Target time {target_total_time_str} is not achievable with current settings. "
-                    f"The closest achievable time is {achieved_time_str}. "
-                    f"The absolute minimum time possible (maximum effort on all segments) is {min_achievable_str}. "
-                    f"Consider: (1) increasing your target time, (2) improving base pace, "
+                    f"The minimum achievable time is {min_achievable_str}. "
+                    f"Consider: (1) increasing your target time to {min_achievable_str} or more, (2) improving base pace, "
                     f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                 )
                 
