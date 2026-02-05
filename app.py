@@ -1871,6 +1871,49 @@ def calculate():
         total_water = sum(s['target_water'] for s in segments)
         total_cp_time = avg_cp_time * num_checkpoints
         
+        # Validate target time achievement if in target time mode
+        if use_target_time:
+            # Compare achieved moving time vs requested target moving time
+            time_difference = total_moving_time - target_moving_time
+            
+            # Allow 1 minute tolerance (60 seconds can accumulate from rounding)
+            if time_difference > 1.0:
+                # Target was not achievable - calculate minimum achievable time
+                # Minimum is achieved when all segments are at their maximum speed (min_mult)
+                min_achievable_moving_time = 0.0
+                for i, seg_data in enumerate(segments_basic_data):
+                    distance_km = seg_data['distance']
+                    elev_gain = seg_data['elev_gain']
+                    elev_loss = seg_data['elev_loss']
+                    
+                    min_mult, _, _ = get_terrain_effort_bounds(
+                        elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+                    )
+                    
+                    # Minimum segment time is natural time × min_mult
+                    natural_time = natural_results[i]['natural_time']
+                    min_segment_time = natural_time * min_mult
+                    min_achievable_moving_time += min_segment_time
+                
+                min_achievable_total_time = min_achievable_moving_time + total_cp_time
+                achieved_total_time = total_moving_time + total_cp_time
+                
+                # Format times for error message
+                target_total_time_str = format_time(target_moving_time + total_cp_time)
+                achieved_time_str = format_time(achieved_total_time)
+                min_achievable_str = format_time(min_achievable_total_time)
+                
+                error_msg = (
+                    f"Target time {target_total_time_str} is not achievable with current settings. "
+                    f"The closest achievable time is {achieved_time_str}. "
+                    f"The absolute minimum time possible (maximum effort on all segments) is {min_achievable_str}. "
+                    f"Consider: (1) increasing your target time, (2) improving base pace, "
+                    f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                )
+                
+                log_message(f"ERROR: Target time validation failed - {error_msg}")
+                return jsonify({'error': error_msg}), 400
+        
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
         if elevation_profile_data:
