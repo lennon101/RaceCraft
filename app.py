@@ -1898,12 +1898,13 @@ def calculate():
             
             # Calculate TRUE minimum achievable time (independent of target)
             # This represents the absolute fastest time possible with maximum effort
-            # By using an impossible target (1 minute), we force the algorithm to max out
+            # By using zero/negative target, we force the algorithm to max out effort everywhere
             minimum_achievable_total_time = None
             if natural_results:
                 try:
-                    # Use impossibly aggressive target to force maximum effort allocation
-                    impossible_target = 1.0  # 1 minute moving time (impossible)
+                    # Use impossible target (0 or negative) to force maximum effort allocation
+                    # This ensures algorithm maxes out all segments within fitness/ability constraints
+                    impossible_target = 0.0  # Moving time of 0 (physically impossible)
                     min_effort_results = allocate_effort_to_target(
                         impossible_target, segments_basic_data, natural_results,
                         z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
@@ -1930,32 +1931,38 @@ def calculate():
             if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
                 
+                # Common suggestion text
+                suggestions = (
+                    "Consider: (1) increasing your target time{target_hint}, (2) improving base pace, "
+                    "(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                )
+                
                 # Build warning message with stable references (independent of target)
                 if natural_total_time is not None and minimum_achievable_total_time is not None:
                     natural_total_time_str = format_time(natural_total_time)
                     minimum_achievable_time_str = format_time(minimum_achievable_total_time)
+                    target_hint = f" (ideally to {minimum_achievable_time_str} or more)"
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
                         f"Minimum achievable time: {minimum_achievable_time_str} (max effort), "
                         f"Natural pacing: {natural_total_time_str} (steady effort). "
-                        f"Consider: (1) increasing your target time (ideally to {minimum_achievable_time_str} or more), (2) improving base pace, "
-                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                        + suggestions.format(target_hint=target_hint)
                     )
                 elif natural_total_time is not None:
                     # Fallback: only natural pacing available
                     natural_total_time_str = format_time(natural_total_time)
+                    target_hint = f" (ideally to {natural_total_time_str} or more)"
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
                         f"With steady effort, your natural pacing would take {natural_total_time_str}. "
-                        f"Consider: (1) increasing your target time (ideally to {natural_total_time_str} or more), (2) improving base pace, "
-                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                        + suggestions.format(target_hint=target_hint)
                     )
                 else:
                     # Fallback if neither reference available
+                    target_hint = ""
                     target_time_warning = (
                         f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        f"Consider: (1) increasing your target time, (2) improving base pace, "
-                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                        + suggestions.format(target_hint=target_hint)
                     )
                 
                 log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
