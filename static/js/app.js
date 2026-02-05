@@ -1927,7 +1927,6 @@ async function exportCurrentPlan() {
             window.URL.revokeObjectURL(url);
             
             alert('Plan exported successfully!');
-            // No need to hide modal - let user choose more exports if they want
         } else {
             alert('Error exporting plan: ' + data.error);
         }
