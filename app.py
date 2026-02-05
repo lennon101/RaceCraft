@@ -2592,8 +2592,14 @@ def export_pdf():
         if include_elevation and elevation_profile_data:
             story.append(Paragraph("Elevation Profile", heading_style))
             try:
-                # Decode base64 image
-                image_data = elevation_profile_data.split(',')[1] if ',' in elevation_profile_data else elevation_profile_data
+                # Validate and decode base64 image
+                if elevation_profile_data.startswith('data:'):
+                    # Data URI format: data:image/png;base64,<data>
+                    image_data = elevation_profile_data.split(',', 1)[1] if ',' in elevation_profile_data else elevation_profile_data
+                else:
+                    # Raw base64 data
+                    image_data = elevation_profile_data
+                
                 image_bytes = base64.b64decode(image_data)
                 
                 # Load with PIL to get dimensions and convert if needed
@@ -2812,8 +2818,10 @@ def export_pdf():
         pdf_buffer.seek(0)
         pdf_content = pdf_buffer.getvalue()
         
-        # Generate filename
-        pdf_filename = f"{race_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        # Generate filename with proper sanitization
+        # Remove special characters that may be invalid in filenames
+        safe_race_name = re.sub(r'[^\w\-_.]', '_', race_name)
+        pdf_filename = f"{safe_race_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         
         return send_file(io.BytesIO(pdf_content), 
                         as_attachment=True, 

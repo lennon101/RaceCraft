@@ -2187,7 +2187,9 @@ async function generatePDF() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${raceName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+            // Sanitize filename to remove special characters that may be invalid
+            const safeRaceName = raceName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            a.download = `${safeRaceName}_${new Date().getTime()}.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -2202,38 +2204,6 @@ async function generatePDF() {
         }
     } catch (error) {
         alert('Error exporting PDF: ' + error.message);
-    }
-}
-
-        race_start_time: currentPlan.race_start_time,
-        dropbag_contents: currentPlan.dropbag_contents || []
-    };
-
-    try {
-        const response = await fetch('/api/export-csv', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(exportData)
-        });
-
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `race_plan_${new Date().getTime()}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } else {
-            const data = await response.json();
-            alert('Error exporting CSV: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error exporting CSV: ' + error.message);
     }
 }
 
