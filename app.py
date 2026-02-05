@@ -1884,85 +1884,34 @@ def calculate():
         # Validate target time achievement if in target time mode
         target_time_warning = None
         if use_target_time:
-            # Calculate minimum achievable time (maximum speed on all segments)
-            # This is needed for validation even if target was achieved
-            min_achievable_moving_time = 0.0
-            for i, seg_data in enumerate(segments_basic_data):
-                distance_km = seg_data['distance']
-                elev_gain = seg_data['elev_gain']
-                elev_loss = seg_data['elev_loss']
-                
-                min_mult, _, _ = get_terrain_effort_bounds(
-                    elev_gain, elev_loss, distance_km, climbing_ability, skill_level
-                )
-                
-                # Minimum segment time is natural time × min_mult
-                natural_time = natural_results[i]['natural_time']
-                min_segment_time = natural_time * min_mult
-                min_achievable_moving_time += min_segment_time
-            
-            min_achievable_total_time = min_achievable_moving_time + total_cp_time
+            # Calculate target total time for warning message
             target_total_time = target_moving_time + total_cp_time
             
-            # Check if target is less than minimum possible (very aggressive)
-            # OR if achieved time exceeds target (not aggressive enough to hit limits)
-            # Use different tolerances for each case:
-            # - When target < minimum: Use minimal tolerance (user wants impossible time)
-            # - When achieved > target: Use standard tolerance (rounding accumulation)
-            time_below_minimum = min_achievable_total_time - target_total_time
+            # Check if achieved time exceeds target significantly
+            # NOTE: We don't check if target is below theoretical minimum because:
+            # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
+            # - Cost-weighted allocation can't achieve this in practice
+            # - This created false "too aggressive" warnings causing circular behavior
+            # - Better to only warn if algorithm ACTUALLY can't achieve the target
             time_above_target = total_moving_time - target_moving_time
             
-            # Apply asymmetric tolerance: stricter when target is below minimum
-            target_below_minimum = time_below_minimum > TARGET_TIME_MINIMUM_TOLERANCE_MINUTES
+            # Only show warning if achieved time significantly exceeds target
             achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
             
-            # Generate appropriate warning based on the failure mode
-            # Pre-calculate common values to avoid duplication
-            if target_below_minimum or achieved_above_target:
+            # Generate warning if target couldn't be achieved
+            if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
-                min_achievable_str = format_time(min_achievable_total_time)
                 achieved_total_time = total_moving_time + total_cp_time
                 achieved_total_time_str = format_time(achieved_total_time)
                 
-                if target_below_minimum and not achieved_above_target:
-                    # Case 1: Target is below theoretical minimum (impossible target)
-                    # But the algorithm got close to target (within tolerance)
-                    # Recommend the achieved time to ensure stability
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        f"The algorithm achieved {achieved_total_time_str}. "
-                        f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
-                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
-                    )
-                    
-                    log_message(f"WARNING: Target time validation - Target below minimum - {target_time_warning}")
-                    
-                elif achieved_above_target and not target_below_minimum:
-                    # Case 2: Algorithm couldn't achieve the target (even though theoretically possible)
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} could not be achieved with current effort allocation. "
-                        f"The algorithm achieved {achieved_total_time_str}. "
-                        f"Consider: (1) improving base pace, (2) selecting higher fitness/ability levels, "
-                        f"(3) adjusting effort distribution, or (4) reviewing route/checkpoints."
-                    )
-                    
-                    log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
-                    
-                elif target_below_minimum and achieved_above_target:
-                    # Case 3: Both conditions true (target below minimum AND algorithm couldn't achieve it)
-                    # IMPORTANT: Recommend the ACHIEVED time, not the theoretical minimum
-                    # The theoretical minimum assumes all segments can simultaneously reach min_mult,
-                    # but the cost-weighted allocation may not achieve this in practice.
-                    # Recommending the achieved time prevents circular loops where users keep
-                    # updating to a suggested time that the algorithm still can't hit.
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} is too aggressive and could not be achieved. "
-                        f"The algorithm achieved {achieved_total_time_str}. "
-                        f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
-                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
-                    )
-                    
-                    log_message(f"WARNING: Target time validation - Both conditions true - {target_time_warning}")
+                target_time_warning = (
+                    f"⚠️ Target time {target_total_time_str} could not be achieved with current effort allocation. "
+                    f"The algorithm achieved {achieved_total_time_str}. "
+                    f"Consider: (1) increasing your target time to {achieved_total_time_str} or more, (2) improving base pace, "
+                    f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                )
+                
+                log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
         
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
