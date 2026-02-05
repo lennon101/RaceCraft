@@ -110,29 +110,6 @@
                                 </ul>
                             </div>
 
-                            <div class="docs-card">
-                                <h3><span class="mdi mdi-server"></span> Deployment</h3>
-                                <p>Learn how to deploy and configure RaceCraft.</p>
-                                <ul>
-                                    {% if doc_structure.get('deployment') %}
-                                        {% for file in doc_structure['deployment'].files %}
-                                            <li><a href="/docs/{{ file.path }}">{{ file.name }}</a></li>
-                                        {% endfor %}
-                                    {% endif %}
-                                </ul>
-                            </div>
-
-                            <div class="docs-card">
-                                <h3><span class="mdi mdi-shield-lock"></span> Authentication</h3>
-                                <p>Set up user authentication and manage user data.</p>
-                                <ul>
-                                    {% if doc_structure.get('auth') %}
-                                        {% for file in doc_structure['auth'].files %}
-                                            <li><a href="/docs/{{ file.path }}">{{ file.name }}</a></li>
-                                        {% endfor %}
-                                    {% endif %}
-                                </ul>
-                            </div>
                         </div>
                     </div>
                 {% endif %}
