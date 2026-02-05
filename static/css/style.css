@@ -337,18 +337,54 @@ header h2.subtitle {
     color: var(--text-secondary);
 }
 
-.checkpoint-input-row {
+.checkpoint-input-wrapper {
+    position: relative;
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: stretch;
 }
 
-.checkpoint-input input,
-.checkpoint-input select {
-    width: 100%;
-    padding: 8px;
+.checkpoint-input-wrapper input {
+    flex: 1;
+    padding: 8px 70px 8px 8px; /* Extra padding on right for toggle button */
     border: 1px solid var(--border-color);
     border-radius: 6px;
+    width: 100%;
+}
+
+.checkpoint-dropbag-toggle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 60px;
+    border: none;
+    border-left: 1px solid var(--border-color);
+    border-radius: 0 6px 6px 0;
+    background-color: #e5e7eb;
+    color: #6b7280;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.checkpoint-dropbag-toggle:hover {
+    background-color: #d1d5db;
+}
+
+.checkpoint-dropbag-toggle:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+    z-index: 1;
+}
+
+.checkpoint-dropbag-toggle[aria-pressed="true"] {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.checkpoint-dropbag-toggle[aria-pressed="true"]:hover {
+    background-color: #059669;
 }
 
 .checkpoint-input input.error {
@@ -367,28 +403,12 @@ header h2.subtitle {
     display: block;
 }
 
-.checkpoint-input-row input[type="number"] {
-    flex: 1;
-}
-
 .checkpoint-input select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
     background-color: white;
-    cursor: pointer;
-}
-
-.dropbag-label {
-    display: inline-flex;
-    align-items: center;
-    white-space: nowrap;
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.dropbag-label input[type="checkbox"] {
-    width: auto;
-    margin-right: 5px;
     cursor: pointer;
 }
 
