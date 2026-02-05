@@ -60,7 +60,8 @@
                     <h3>2. Checkpoints</h3>
                     <div class="input-group">
                         <label for="num-checkpoints">Number of Checkpoints:</label>
-                        <input type="number" id="num-checkpoints" min="0" max="20" value="3" />
+                        <input type="number" id="num-checkpoints" min="0" max="30" value="3" />
+                        <span class="checkpoint-counter" id="checkpoint-counter" style="color: #666; font-size: 0.9em; margin-left: 10px;"></span>
                     </div>
                     <div class="input-group">
                         <label for="avg-cp-time">
@@ -128,25 +129,62 @@
                 <section class="input-section">
                     <h3>4. Pacing</h3>
                     <div class="input-group">
-                        <label for="z2-pace-min">
-                            Flat Terrain Pace
+                        <label>
+                            Pacing Mode:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                                  data-tooltip="Base Pace: Calculate finish time from your flat terrain pace. Target Time: Enter your goal finish time and calculate required paces for each segment."></span>
                         </label>
-                        <div class="pace-input">
-                            <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
-                            <span>:</span>
-                            <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
-                            <span class="unit">min/km</span>
+                        <div class="pacing-mode-toggle">
+                            <label class="radio-label">
+                                <input type="radio" name="pacing-mode" id="pacing-mode-base" value="base_pace" checked />
+                                <span>Base Pace</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="pacing-mode" id="pacing-mode-target" value="target_time" />
+                                <span>Target Time</span>
+                            </label>
                         </div>
                     </div>
-                    <div class="input-group">
+                    <div id="base-pace-inputs">
+                        <div class="input-group">
+                            <label for="z2-pace-min">
+                                Flat Terrain Pace
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                            </label>
+                            <div class="pace-input">
+                                <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
+                                <span class="unit">min/km</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="target-time-inputs" style="display: none;">
+                        <div class="input-group">
+                            <label for="target-finish-time">
+                                Target Finish Time
+                                <span class="info-icon mdi mdi-information-outline" 
+                                      tabindex="0"
+                                      data-tooltip="Your goal total race time including checkpoint stops. The system will calculate required paces for each segment to meet this target, accounting for terrain, elevation, and fatigue."></span>
+                            </label>
+                            <div class="time-input">
+                                <input type="number" id="target-time-hours" min="0" max="99" value="10" placeholder="HH" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="target-time-minutes" min="0" max="59" value="0" placeholder="MM" pattern="[0-9]*" inputmode="numeric" />
+                                <span>:</span>
+                                <input type="number" id="target-time-seconds" min="0" max="59" value="0" placeholder="SS" pattern="[0-9]*" inputmode="numeric" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-group" id="climbing-ability-group">
                         <label for="climbing-ability">
                             Climbing Ability:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your vertical ascent rate capability. This determines how much climbing affects your pace on uphills. Conservative climbers slow down more on steep ascents, while elite climbers maintain better speed on climbs."></span>
+                                  data-tooltip="Your vertical ascent rate capability. BASE PACE MODE: Determines how much climbing affects your pace on uphills. TARGET TIME MODE: Affects effort cost multipliers - elite climbers find it 'cheaper' to gain time on climbs (0.75x cost) vs conservative climbers (1.2x cost), so optimizer naturally prioritizes climbs for strong climbers."></span>
                         </label>
                         <select id="climbing-ability">
                             <option value="conservative">Conservative Climber (600 m/h)</option>
@@ -162,7 +200,7 @@
                             Include Fatigue Penalty
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="When enabled, your pace will gradually slow down as accumulated distance and elevation increase throughout the race, simulating the natural effects of physical fatigue. Disable this for fresh or well-rested segment predictions."></span>
+                                  data-tooltip="BASE PACE MODE: Your pace gradually slows down as accumulated distance and elevation increase throughout the race. TARGET TIME MODE: Effort cost increases over distance (fatigue multiplier), making optimizer prefer early effort over late effort. Fitness level controls how steep the cost curve is."></span>
                         </label>
                     </div>
                     <div class="input-group" id="fitness-level-group">
@@ -170,7 +208,7 @@
                             Fitness Level:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your endurance fitness level determines how fatigue accumulates over the race distance. FOP (Fatigue Onset Point) indicates the distance where you start experiencing significant pace degradation. Higher fitness levels delay fatigue onset and reduce its impact."></span>
+                                  data-tooltip="Your endurance fitness level. BASE PACE MODE: Determines Fatigue Onset Point (FOP) - the distance where you start experiencing significant pace degradation. TARGET TIME MODE: Controls global effort budget (15-50% max deviation from natural pace) and fatigue cost curve steepness. Higher fitness allows more aggressive target times."></span>
                         </label>
                         <select id="fitness-level">
                             <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
@@ -261,13 +299,46 @@
                         </div>
                     </div>
 
+                    <!-- Target Time Thresholds (shown only in target time mode) -->
+                    <div id="effort-thresholds-container" style="display: none; margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <h3 style="margin-top: 0; margin-bottom: 15px; color: #1e293b; font-size: 1.1rem;">
+                            <span class="mdi mdi-information-outline"></span> Target Time Guidance
+                        </h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">Natural Pace Baseline</div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #0f172a;" id="threshold-natural">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Your natural pacing</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">
+                                    <span class="effort-badge effort-push" style="font-size: 0.7rem; padding: 2px 6px;">PUSH</span> Threshold
+                                </div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #dc2626;" id="threshold-push">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Most segments require pushing</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">
+                                    <span class="effort-badge effort-protect" style="font-size: 0.7rem; padding: 2px 6px;">Protect</span> Threshold
+                                </div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #16a34a;" id="threshold-protect">--:--:--</div>
+                                <div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">Most segments are protecting</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; padding: 10px; background: #eff6ff; border-radius: 4px; font-size: 0.85rem; color: #1e40af;">
+                            <strong>💡 How to use:</strong> Target times faster than the Push threshold require aggressive pacing. 
+                            Target times between Natural and Push will be mostly steady with some pushing. 
+                            Target times slower than Protect threshold allow for conservative pacing with recovery segments.
+                        </div>
+                    </div>
+
                     <!-- Segments Table -->
                     <div class="table-container">
                         <table id="segments-table">
                             <thead>
                                 <tr>
                                     <th>Segment</th>
-                                    <th>Dist (km)</th>
+                                    <th>Cumul Dist (km)</th>
                                     <th>Elev +/-</th>
                                     <th>Net (m)</th>
                                     <th>Elev Pace</th>

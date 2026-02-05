@@ -1,3 +1,6 @@
+// Constants
+const MAX_CHECKPOINTS = 30;
+
 // Helper to convert a string to Unicode bold (for tooltips)
 function toUnicodeBold(str) {
     const map = {
@@ -10,6 +13,42 @@ function toUnicodeBold(str) {
         '-': '⟶'
     };
     return str.split('').map(c => map[c] || c).join('');
+}
+
+// Helper to format timestamps in local timezone
+// Accepts timestamps in various formats and converts to local timezone display
+function formatTimestampToLocal(timestampStr) {
+    if (!timestampStr) return '';
+    
+    // Handle different timestamp formats from backend:
+    // 1. ISO format from Supabase: "2024-01-15T14:30:45+00:00" or "2024-01-15T14:30:45.123Z"
+    // 2. Space-separated format: "2024-01-15 14:30:45" (assumed UTC)
+    
+    let date;
+    
+    // Try parsing as ISO format first (includes timezone info)
+    if (timestampStr.includes('T')) {
+        date = new Date(timestampStr);
+    } else {
+        // Space-separated format - assume UTC, convert to ISO format with 'Z'
+        date = new Date(timestampStr.replace(' ', 'T') + 'Z');
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+        console.warn('Invalid timestamp:', timestampStr);
+        return timestampStr; // Return original if parsing fails
+    }
+    
+    // Format to local timezone: YYYY-MM-DD HH:MM:SS
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 // Helper to update the race plan title
@@ -36,7 +75,8 @@ let currentPlan = {
     planName: null,  // Track the currently loaded plan name for UI display
     total_distance: null,  // Total distance of the route
     is_known_race: false,  // Whether this is a known race
-    race_start_time: null  // Race start time for time-of-day calculations
+    race_start_time: null,  // Race start time for time-of-day calculations
+    pacing_mode: 'base_pace'  // 'base_pace' or 'target_time'
 };
 
 let elevationChart = null;
@@ -47,6 +87,7 @@ const fileNameDisplay = document.getElementById('file-name');
 const gpxInfoBox = document.getElementById('gpx-info');
 const numCheckpointsInput = document.getElementById('num-checkpoints');
 const checkpointDistancesContainer = document.getElementById('checkpoint-distances');
+const checkpointCounter = document.getElementById('checkpoint-counter');
 const calculateBtn = document.getElementById('calculate-btn');
 const saveBtn = document.getElementById('save-btn');
 const loadBtn = document.getElementById('load-btn');
@@ -87,9 +128,29 @@ const knownRaceSearch = document.getElementById('known-race-search');
 const knownRacesList = document.getElementById('known-races-list');
 const knownRaceCancelBtn = document.getElementById('known-race-cancel-btn');
 
+// Pacing mode elements
+const pacingModeBaseRadio = document.getElementById('pacing-mode-base');
+const pacingModeTargetRadio = document.getElementById('pacing-mode-target');
+const basePaceInputs = document.getElementById('base-pace-inputs');
+const targetTimeInputs = document.getElementById('target-time-inputs');
+const targetTimeHoursInput = document.getElementById('target-time-hours');
+const targetTimeMinutesInput = document.getElementById('target-time-minutes');
+const targetTimeSecondsInput = document.getElementById('target-time-seconds');
+
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
 numCheckpointsInput.addEventListener('input', () => {
+    let value = parseInt(numCheckpointsInput.value) || 0;
+    
+    // Enforce maximum limit
+    if (value > MAX_CHECKPOINTS) {
+        value = MAX_CHECKPOINTS;
+        numCheckpointsInput.value = MAX_CHECKPOINTS;
+    }
+    
+    // Update checkpoint counter
+    updateCheckpointCounter(value, MAX_CHECKPOINTS);
+    
     generateCheckpointInputs();
     validateCheckpointDistances();
 });
@@ -113,6 +174,10 @@ importPlanFileInput.addEventListener('change', handleImportPlan);
 loadKnownRaceBtn.addEventListener('click', showKnownRaceModal);
 knownRaceCancelBtn.addEventListener('click', () => hideModal(knownRaceModal));
 knownRaceSearch.addEventListener('input', filterKnownRaces);
+
+// Pacing mode listeners
+pacingModeBaseRadio.addEventListener('change', handlePacingModeChange);
+pacingModeTargetRadio.addEventListener('change', handlePacingModeChange);
 
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
@@ -526,7 +591,8 @@ function resetPlanState() {
         planName: null,
         total_distance: null,
         is_known_race: false,
-        race_start_time: null
+        race_start_time: null,
+        pacing_mode: 'base_pace'
     };
     
     // Reset the race plan title to default
@@ -764,9 +830,18 @@ function validateCheckpointDistances() {
     return !hasErrors;
 }
 
+function updateCheckpointCounter(current, max) {
+    if (checkpointCounter) {
+        checkpointCounter.textContent = `(${current} / ${max})`;
+    }
+}
+
 function generateCheckpointInputs() {
     const numCheckpoints = parseInt(numCheckpointsInput.value) || 0;
     checkpointDistancesContainer.innerHTML = '';
+    
+    // Update checkpoint counter
+    updateCheckpointCounter(numCheckpoints, MAX_CHECKPOINTS);
 
     // Create checkpoint distance inputs with dropbag checkbox
     for (let i = 0; i < numCheckpoints; i++) {
@@ -920,6 +995,28 @@ function generateTerrainDifficultyInputs() {
     });
 }
 
+function handlePacingModeChange() {
+    const selectedMode = document.querySelector('input[name="pacing-mode"]:checked').value;
+    currentPlan.pacing_mode = selectedMode;
+    
+    if (selectedMode === 'base_pace') {
+        basePaceInputs.style.display = 'block';
+        targetTimeInputs.style.display = 'none';
+    } else {
+        basePaceInputs.style.display = 'none';
+        targetTimeInputs.style.display = 'block';
+    }
+    
+    // Note: Climbing ability, fitness level, and fatigue settings are shown in both modes
+    // - Base Pace Mode: They affect forward prediction (ability → pace → time)
+    // - Target Time Mode: They affect effort allocation optimization (cost, capacity, limits)
+    
+    // Recalculate if a plan is loaded
+    if (currentPlan.gpx_filename && currentPlan.checkpoint_distances.length > 0) {
+        calculateRacePlan();
+    }
+}
+
 async function calculateRacePlan() {
     if (!currentPlan.gpx_filename) {
         alert('Please upload a GPX file first');
@@ -972,8 +1069,12 @@ async function calculateRacePlan() {
 
     // Gather other inputs
     const avgCpTime = parseFloat(document.getElementById('avg-cp-time').value) || 5;
-    const z2PaceMin = parseFloat(document.getElementById('z2-pace-min').value) || 6;
-    const z2PaceSec = parseFloat(document.getElementById('z2-pace-sec').value) || 30;
+    
+    // Parse pace components - handle zero values properly (0 is valid for seconds)
+    const z2PaceMinValue = document.getElementById('z2-pace-min').value;
+    const z2PaceSecValue = document.getElementById('z2-pace-sec').value;
+    const z2PaceMin = z2PaceMinValue === '' ? 6 : parseFloat(z2PaceMinValue);
+    const z2PaceSec = z2PaceSecValue === '' ? 30 : parseFloat(z2PaceSecValue);
     const z2Pace = z2PaceMin + z2PaceSec / 60;
     const climbingAbility = document.getElementById('climbing-ability').value || 'moderate';
     const carbsPerHour = parseFloat(document.getElementById('carbs-per-hour').value) || 60;
@@ -986,6 +1087,22 @@ async function calculateRacePlan() {
     // Get carbs per gel (optional)
     const carbsPerGelInput = document.getElementById('carbs-per-gel').value;
     const carbsPerGel = carbsPerGelInput && carbsPerGelInput.trim() !== '' ? parseFloat(carbsPerGelInput) : null;
+    
+    // Get pacing mode and target time
+    const pacingMode = currentPlan.pacing_mode;
+    let targetTime = null;
+    if (pacingMode === 'target_time') {
+        const hours = parseInt(targetTimeHoursInput.value) || 0;
+        const minutes = parseInt(targetTimeMinutesInput.value) || 0;
+        const seconds = parseInt(targetTimeSecondsInput.value) || 0;
+        
+        if (hours === 0 && minutes === 0 && seconds === 0) {
+            alert('Please enter a target finish time');
+            return;
+        }
+        
+        targetTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
 
     const requestData = {
         gpx_filename: currentPlan.gpx_filename,
@@ -1002,7 +1119,9 @@ async function calculateRacePlan() {
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
         fitness_level: fitnessLevel,
-        skill_level: skillLevel
+        skill_level: skillLevel,
+        pacing_mode: pacingMode,
+        target_time: targetTime
     };
 
     // Include elevation profile if available (from loaded plan)
@@ -1041,7 +1160,7 @@ async function calculateRacePlan() {
 }
 
 function displayResults(data) {
-    const { segments, summary, elevation_profile, dropbag_contents } = data;
+    const { segments, summary, elevation_profile, dropbag_contents, effort_thresholds } = data;
 
     // Store elevation profile and dropbag contents
     currentPlan.elevation_profile = elevation_profile;
@@ -1060,6 +1179,26 @@ function displayResults(data) {
     document.getElementById('summary-elev-gain').textContent = `${summary.total_elev_gain} m`;
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
     document.getElementById('summary-water').textContent = `${summary.total_water} L`;
+    
+    // Display effort thresholds if in target time mode
+    const thresholdsContainer = document.getElementById('effort-thresholds-container');
+    if (effort_thresholds && thresholdsContainer) {
+        thresholdsContainer.style.display = 'block';
+        
+        // Format times as HH:MM:SS
+        const formatMinutesToTime = (minutes) => {
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.floor(minutes % 60);
+            const secs = Math.floor((minutes % 1) * 60);
+            return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        };
+        
+        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time_minutes);
+        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold_minutes);
+        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold_minutes);
+    } else if (thresholdsContainer) {
+        thresholdsContainer.style.display = 'none';
+    }
 
     // Update segments table
     const tbody = document.getElementById('segments-tbody');
@@ -1088,7 +1227,31 @@ function displayResults(data) {
 
     segments.forEach(seg => {
         const row = document.createElement('tr');
-        const paceStyle = seg.pace_capped ? 'color: #ef4444; font-weight: bold;' : 'font-weight: bold;';
+        
+        // Determine pace styling based on mode
+        let paceStyle = 'font-weight: bold;';
+        let paceWarning = '';
+        let effortBadge = '';
+        
+        if (seg.pace_capped) {
+            paceStyle = 'color: #ef4444; font-weight: bold;';
+            paceWarning = ' ⚠️';
+        } else if (seg.pace_aggressive) {
+            // Highlight aggressive paces (faster than typical for the segment)
+            paceStyle = 'color: #f59e0b; font-weight: bold;';
+            paceWarning = ' ⚡';
+        }
+        
+        // Add effort level badge in target time mode only
+        if (effort_thresholds && seg.effort_level) {
+            const effortLabels = {
+                'push': '<span class="effort-badge effort-push">PUSH</span>',
+                'steady': '<span class="effort-badge effort-steady">Steady</span>',
+                'protect': '<span class="effort-badge effort-protect">Protect</span>'
+            };
+            effortBadge = effortLabels[seg.effort_level] || '';
+        }
+        
         const timeOfArrival = seg.time_of_day ? `${seg.time_of_day} at ${seg.to}` : '--';
         
         // Format terrain type for display
@@ -1097,13 +1260,13 @@ function displayResults(data) {
         
         row.innerHTML = `
             <td><strong>${seg.from} → ${seg.to}</strong></td>
-            <td>${seg.distance}</td>
+            <td>${seg.cumulative_distance}</td>
             <td>+${seg.elev_gain}/-${seg.elev_loss}</td>
             <td>${seg.net_elev > 0 ? '+' : ''}${seg.net_elev}</td>
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
             <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-            <td><strong style="${paceStyle}">${seg.pace_str}</strong></td>
+            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong> ${effortBadge}</td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
             <td>${seg.target_water}</td>
@@ -1356,7 +1519,7 @@ async function loadSavedPlans() {
                             ${plan.name}
                             ${sourceBadge}
                         </div>
-                        <div class="plan-date">${plan.modified}</div>
+                        <div class="plan-date">${formatTimestampToLocal(plan.modified)}</div>
                     </div>
                     <button class="plan-delete" data-filename="${plan.filename}" data-source="${plan.source}">Delete</button>
                 `;
@@ -1433,7 +1596,7 @@ async function importUnownedPlans() {
                             ${plan.name}
                             ${sourceBadge}
                         </div>
-                        <div class="plan-date">${plan.modified}</div>
+                        <div class="plan-date">${formatTimestampToLocal(plan.modified)}</div>
                     </div>
                     ${actionButtons}
                 `;
@@ -1564,8 +1727,19 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
             const z2Pace = data.z2_pace || 6.5;
-            document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
-            document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
+            let paceMin = Math.floor(z2Pace);
+            let paceSec = Math.round((z2Pace % 1) * 60);
+            
+            // Handle seconds overflow due to floating-point rounding
+            // When converting decimal minutes back to MM:SS format, values like 4.999
+            // can round to 60 seconds (4:60), which should be normalized to 5:00
+            if (paceSec >= 60) {
+                paceMin += 1;
+                paceSec = 0;
+            }
+            
+            document.getElementById('z2-pace-min').value = paceMin;
+            document.getElementById('z2-pace-sec').value = paceSec;
             
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
@@ -1787,8 +1961,19 @@ async function handleImportPlan(event) {
             document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
             
             const z2Pace = data.z2_pace || 6.5;
-            document.getElementById('z2-pace-min').value = Math.floor(z2Pace);
-            document.getElementById('z2-pace-sec').value = Math.round((z2Pace % 1) * 60);
+            let paceMin = Math.floor(z2Pace);
+            let paceSec = Math.round((z2Pace % 1) * 60);
+            
+            // Handle seconds overflow due to floating-point rounding
+            // When converting decimal minutes back to MM:SS format, values like 4.999
+            // can round to 60 seconds (4:60), which should be normalized to 5:00
+            if (paceSec >= 60) {
+                paceMin += 1;
+                paceSec = 0;
+            }
+            
+            document.getElementById('z2-pace-min').value = paceMin;
+            document.getElementById('z2-pace-sec').value = paceSec;
             
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
@@ -2011,7 +2196,7 @@ async function showLocalMigrationModal() {
                 <input type="checkbox" class="migration-plan-checkbox" data-filename="${plan.id}" checked />
                 <div class="migration-plan-info">
                     <div class="migration-plan-name">${plan.name}</div>
-                    <div class="migration-plan-date">Last updated: ${plan.updated_at}</div>
+                    <div class="migration-plan-date">Last updated: ${formatTimestampToLocal(plan.updated_at)}</div>
                 </div>
             `;
             plansList.appendChild(planDiv);
