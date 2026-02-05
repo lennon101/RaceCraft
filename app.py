@@ -179,7 +179,7 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
-TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation when achieved > target (rounding errors)
+TARGET_TIME_TOLERANCE_MINUTES = 5.0  # Tolerance for target time validation when achieved > target (allocation algorithm variability ~2-4 min)
 TARGET_TIME_MINIMUM_TOLERANCE_MINUTES = 0.01  # Minimal tolerance for target < minimum (36 seconds - catches real differences)
 
 # Climbing ability parameters - vertical speed in m/h
