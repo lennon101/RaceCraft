@@ -93,7 +93,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from PIL import Image as PILImage
 
@@ -2518,10 +2518,17 @@ def export_pdf():
         include_drop_bags = options.get('drop_bag_table', False)
         include_tags = options.get('drop_bag_tags', False)
         
-        # Extract user info for tags
+        # Extract user info for tags - get race_name from options first
+        tag_race_name = options.get('race_name', '').strip()
         bib_number = options.get('bib_number', '')
         runner_name = options.get('runner_name', '')
+        
+        # Get race name from data (fallback if not in options)
         race_name = data.get('race_name', 'Race Plan')
+        
+        # Use tag_race_name if provided, otherwise use race_name
+        if tag_race_name:
+            race_name = tag_race_name
         
         # Extract race plan data
         segments = data.get('segments', [])
@@ -2562,8 +2569,9 @@ def export_pdf():
         story.append(Paragraph(race_name, title_style))
         story.append(Spacer(1, 0.2*inch))
         
-        # Summary section (always included)
-        story.append(Paragraph("Race Summary", heading_style))
+        # Summary section (always included) - wrapped in KeepTogether
+        summary_section = []
+        summary_section.append(Paragraph("Race Summary", heading_style))
         summary_data = [
             ['Total Distance', f"{summary.get('total_distance', 0):.2f} km"],
             ['Moving Time', summary.get('total_moving_time_str', '--')],
@@ -2585,12 +2593,16 @@ def export_pdf():
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
         ]))
-        story.append(summary_table)
+        summary_section.append(summary_table)
+        
+        # Add summary as a single unit that stays together
+        story.append(KeepTogether(summary_section))
         story.append(Spacer(1, 0.3*inch))
         
         # Elevation Profile
         if include_elevation and elevation_profile_data:
-            story.append(Paragraph("Elevation Profile", heading_style))
+            elevation_section = []
+            elevation_section.append(Paragraph("Elevation Profile", heading_style))
             try:
                 # Validate and decode base64 image
                 if elevation_profile_data.startswith('data:'):
@@ -2612,7 +2624,8 @@ def export_pdf():
                 
                 # Create ReportLab image
                 img = Image(img_buffer, width=7*inch, height=3*inch)
-                story.append(img)
+                elevation_section.append(img)
+                story.append(KeepTogether(elevation_section))
                 story.append(Spacer(1, 0.3*inch))
             except Exception as e:
                 log_message(f"Error adding elevation profile: {str(e)}")
@@ -2621,7 +2634,8 @@ def export_pdf():
         
         # Race Plan Table
         if include_race_plan and segments:
-            story.append(Paragraph("Race Plan", heading_style))
+            race_plan_section = []
+            race_plan_section.append(Paragraph("Race Plan", heading_style))
             
             # Build table headers
             headers = ['CP', 'Name', 'Dist (km)', 'Elev +/-', 'Time', 'Pace', 'Carbs', 'Water']
@@ -2665,12 +2679,14 @@ def export_pdf():
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
             ]))
-            story.append(race_table)
+            race_plan_section.append(race_table)
+            story.append(KeepTogether(race_plan_section))
             story.append(Spacer(1, 0.3*inch))
         
         # Drop Bag Table
         if include_drop_bags and dropbag_contents:
-            story.append(Paragraph("Drop Bag Contents", heading_style))
+            dropbag_section = []
+            dropbag_section.append(Paragraph("Drop Bag Contents", heading_style))
             
             # Build drop bag table
             has_gel_data = any('num_gels' in db for db in dropbag_contents)
@@ -2711,7 +2727,8 @@ def export_pdf():
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0fdf4')])
             ]))
-            story.append(db_table)
+            dropbag_section.append(db_table)
+            story.append(KeepTogether(dropbag_section))
             story.append(Spacer(1, 0.3*inch))
         
         # Drop Bag Tags

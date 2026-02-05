@@ -136,6 +136,7 @@ const pdfIncludeRacePlan = document.getElementById('pdf-include-race-plan');
 const pdfIncludeDropbags = document.getElementById('pdf-include-dropbags');
 const pdfIncludeTags = document.getElementById('pdf-include-tags');
 const pdfTagOptions = document.getElementById('pdf-tag-options');
+const pdfRaceName = document.getElementById('pdf-race-name');
 const pdfBibNumber = document.getElementById('pdf-bib-number');
 const pdfRunnerName = document.getElementById('pdf-runner-name');
 const pdfGenerateBtn = document.getElementById('pdf-generate-btn');
@@ -2144,12 +2145,14 @@ async function generatePDF() {
         race_plan_table: pdfIncludeRacePlan.checked,
         drop_bag_table: pdfIncludeDropbags.checked,
         drop_bag_tags: pdfIncludeTags.checked,
+        race_name: pdfRaceName.value.trim(),
         bib_number: pdfBibNumber.value.trim(),
         runner_name: pdfRunnerName.value.trim()
     };
 
-    // Get race name from plan or default
-    const raceName = currentPlan.planName || 
+    // Get race name - use input field if provided, otherwise fallback to plan name
+    const raceName = options.race_name || 
+                    currentPlan.planName || 
                     currentPlan.loadedFilename?.replace('.json', '') || 
                     'Race Plan';
 
