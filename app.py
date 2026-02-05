@@ -2819,8 +2819,8 @@ def export_pdf():
         pdf_content = pdf_buffer.getvalue()
         
         # Generate filename with proper sanitization
-        # Remove special characters that may be invalid in filenames
-        safe_race_name = re.sub(r'[^\w\-_.]', '_', race_name)
+        # Remove special characters that may be invalid in filenames (consistent with frontend)
+        safe_race_name = re.sub(r'[^a-zA-Z0-9_-]', '_', race_name)
         pdf_filename = f"{safe_race_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         
         return send_file(io.BytesIO(pdf_content), 
