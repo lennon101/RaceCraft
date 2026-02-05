@@ -15,6 +15,7 @@
     <meta name="msapplication-TileImage" content="{{ url_for('static', filename='logo.png') }}">
     <meta name="msapplication-TileColor" content="#2563eb">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -23,6 +24,9 @@
     <div class="container">
         <header>
             <div class="header-content">
+                <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu">
+                    <span class="mdi mdi-menu"></span>
+                </button>
                 <img src="{{ url_for('static', filename='logo-bg-removed.png') }}" alt="RaceCraft Logo" class="header-logo">
                 <div class="header-text">
                     <h2 class="subtitle">Fuel & Pacing Planner</h2>
@@ -32,6 +36,24 @@
                 </div>
             </div>
         </header>
+
+        <!-- Side Navigation -->
+        <nav id="side-nav" class="side-nav">
+            <div class="side-nav-header">
+                <h3>Navigation</h3>
+                <button id="nav-close" class="nav-close" aria-label="Close menu">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link active"><span class="mdi mdi-home"></span> Home</a></li>
+                <li><a href="/about" class="nav-link"><span class="mdi mdi-information"></span> About</a></li>
+                <li><a href="/docs" class="nav-link"><span class="mdi mdi-book-open-variant"></span> Documentation</a></li>
+            </ul>
+        </nav>
+
+        <!-- Overlay for mobile menu -->
+        <div id="nav-overlay" class="nav-overlay"></div>
 
         <div class="main-grid">
             <!-- Left Panel: Inputs -->
@@ -539,6 +561,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

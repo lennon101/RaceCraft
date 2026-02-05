@@ -90,10 +90,10 @@ print()
 
 for ability, params in CLIMBING_ABILITY_PARAMS.items():
     vs = params['vertical_speed']
-    flat_speed_kmh = 60.0 / base_pace
+    base_pace_kmh = 60.0 / base_pace
     
     # Calculate times
-    horizontal_time = (distance_km / flat_speed_kmh) * 60.0
+    horizontal_time = (distance_km / base_pace_kmh) * 60.0
     climb_time = (ascent_m / vs) * 60.0
     total_time = horizontal_time + climb_time
     pace = total_time / distance_km
@@ -136,8 +136,8 @@ print(f"Fatigue multiplier: {fatigue_multiplier:.2f}×")
 print()
 
 # Calculate
-flat_speed_kmh = 60.0 / base_pace
-horizontal_time = (distance_km / flat_speed_kmh) * 60.0
+base_pace_kmh = 60.0 / base_pace
+horizontal_time = (distance_km / base_pace_kmh) * 60.0
 climb_time = (ascent_m / vs) * 60.0
 base_time = horizontal_time + climb_time
 

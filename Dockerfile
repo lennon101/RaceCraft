@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY templates/ templates/
 COPY static/ static/
+COPY docs/ docs/
 
 # Copy known races to a static location (not affected by volume mounts)
 COPY data/known_races/ /app/static_data/known_races/
