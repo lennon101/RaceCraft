@@ -645,8 +645,8 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     # === Calculate base segment time using additive model ===
     
     # 1. Horizontal movement time (minutes)
-    flat_speed_kmh = 60.0 / base_pace  # Convert min/km to km/h
-    horizontal_time = (distance_km / flat_speed_kmh) * 60.0  # minutes
+    base_pace_kmh = 60.0 / base_pace  # Convert min/km to km/h
+    horizontal_time = (distance_km / base_pace_kmh) * 60.0  # minutes
     
     # 2. Climbing time (minutes)
     if elevation_gain > 0:

@@ -43,7 +43,7 @@ Successfully replaced the penalty-based elevation gain system with an intuitive,
 **adjust_pace_for_elevation(...)**
 - Changed signature: `elev_gain_factor` → `climbing_ability`
 - Implements additive model: `segment_time = horizontal_time + climb_time - descent_savings`
-- Horizontal time: `distance / flat_speed`
+- Horizontal time: `distance / base_pace_kmh`
 - Climb time: `ascent / vertical_speed`
 - Descent savings: Based on downhill multiplier
 - Applies terrain and fatigue multipliers to total time
@@ -117,7 +117,7 @@ segment_time = distance × pace + elevation_gain × factor
 **New Approach:**
 ```python
 segment_time = horizontal_time + climb_time - descent_savings
-horizontal_time = distance / flat_speed
+horizontal_time = distance / base_pace_kmh
 climb_time = ascent / vertical_speed
 ```
 - Intuitive vertical speed (m/h)
