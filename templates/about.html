@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - RaceCraft</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon-circle.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu">
+                    <span class="mdi mdi-menu"></span>
+                </button>
+                <img src="{{ url_for('static', filename='logo-bg-removed.png') }}" alt="RaceCraft Logo" class="header-logo">
+                <div class="header-text">
+                    <h2 class="subtitle">Fuel & Pacing Planner</h2>
+                </div>
+            </div>
+        </header>
+
+        <!-- Side Navigation -->
+        <nav id="side-nav" class="side-nav">
+            <div class="side-nav-header">
+                <h3>Navigation</h3>
+                <button id="nav-close" class="nav-close" aria-label="Close menu">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link"><span class="mdi mdi-home"></span> Home</a></li>
+                <li><a href="/about" class="nav-link active"><span class="mdi mdi-information"></span> About</a></li>
+                <li><a href="/docs" class="nav-link"><span class="mdi mdi-book-open-variant"></span> Documentation</a></li>
+            </ul>
+        </nav>
+
+        <!-- Overlay for mobile menu -->
+        <div id="nav-overlay" class="nav-overlay"></div>
+
+        <!-- About Content -->
+        <main class="page-content">
+            <div class="content-wrapper">
+                <h1>About RaceCraft</h1>
+                
+                <section class="about-section">
+                    <h2><span class="mdi mdi-help-circle"></span> The Why</h2>
+                    <p>
+                        Endurance racing is a complex challenge that goes beyond physical fitness. Athletes often face:
+                    </p>
+                    <ul>
+                        <li><strong>Race-day pacing errors</strong> — Starting too fast or too slow can ruin months of training</li>
+                        <li><strong>Fueling mistakes</strong> — Running out of energy or consuming too much can lead to stomach issues or bonking</li>
+                        <li><strong>Planning complexity</strong> — Manually calculating checkpoint times, nutrition needs, and pacing strategy is time-consuming and error-prone</li>
+                        <li><strong>Terrain uncertainty</strong> — Underestimating how technical terrain or elevation affects pace</li>
+                        <li><strong>Fatigue miscalculation</strong> — Not accounting for how cumulative effort slows you down over ultra-distances</li>
+                    </ul>
+                    <p>
+                        RaceCraft was built to solve these problems by providing a data-driven, model-based approach to race planning.
+                    </p>
+                </section>
+
+                <section class="about-section">
+                    <h2><span class="mdi mdi-lightbulb"></span> The What</h2>
+                    <p>
+                        RaceCraft is a <strong>web-based race planning tool</strong> that helps endurance athletes:
+                    </p>
+                    <ul>
+                        <li><strong>Upload GPX routes</strong> — Import race routes to automatically extract distance, elevation, and terrain data</li>
+                        <li><strong>Calculate realistic pacing</strong> — Use advanced fatigue and terrain models to predict segment-by-segment pace</li>
+                        <li><strong>Plan nutrition and hydration</strong> — Estimate fuel requirements, gel counts, and water needs for each checkpoint</li>
+                        <li><strong>Estimate checkpoint timings</strong> — Know when you'll reach each aid station or drop bag location</li>
+                        <li><strong>Export race plans</strong> — Generate CSV exports to share with crew or print for race day</li>
+                        <li><strong>Save and load plans</strong> — Store plans in the cloud (with authentication) or locally for future races</li>
+                        <li><strong>Load known races</strong> — Access a library of popular race routes without needing to upload GPX files</li>
+                    </ul>
+                    <p>
+                        Whether you're running an ultra-marathon, mountain race, or multi-day event, RaceCraft provides the insights you need to execute your race strategy with confidence.
+                    </p>
+                </section>
+
+                <section class="about-section">
+                    <h2><span class="mdi mdi-cog"></span> The How</h2>
+                    <p>
+                        RaceCraft uses <strong>science-based models</strong> to generate realistic race plans:
+                    </p>
+                    
+                    <h3>1. Fatigue Model</h3>
+                    <p>
+                        An <strong>effort-based, fitness-dependent fatigue model</strong> that accounts for cumulative effort (including vertical gain), delays fatigue onset based on fitness level, and applies non-linear compounding after a threshold is exceeded.
+                    </p>
+                    <ul>
+                        <li><strong>Effort calculation</strong>: distance + (ascent/100) + (descent/200)</li>
+                        <li><strong>Fatigue onset point</strong>: Varies by fitness level (25-75 km-effort)</li>
+                        <li><strong>Progressive slowdown</strong>: Fatigue compounds as effort increases beyond threshold</li>
+                    </ul>
+                    <p><a href="/docs/models/FATIGUE_MODEL">→ Read the full Fatigue Model documentation</a></p>
+
+                    <h3>2. Climbing Model</h3>
+                    <p>
+                        A <strong>vertical speed climbing model</strong> (600-1500 m/h based on ability) with gradient-aware efficiency curves optimized for 6-12% gradients.
+                    </p>
+                    <ul>
+                        <li><strong>Ability-based vertical speed</strong>: Conservative (600 m/h) to Elite (1500 m/h)</li>
+                        <li><strong>Gradient efficiency</strong>: Optimal range at 6-12%, scales from 95% to 100%</li>
+                        <li><strong>Realistic pacing</strong>: Prevents unrealistic speeds on steep climbs</li>
+                    </ul>
+                    <p><a href="/docs/models/CLIMBING_MODEL">→ Read the full Climbing Model documentation</a></p>
+
+                    <h3>3. Terrain Difficulty</h3>
+                    <p>
+                        A <strong>7-level terrain system</strong> with skill-based adjustments that reduce terrain penalties for experienced trail runners.
+                    </p>
+                    <ul>
+                        <li><strong>7 terrain types</strong>: Road, smooth trail, dirt road, rocky runnable, technical, very technical, scrambling</li>
+                        <li><strong>Gradient scaling</strong>: Terrain difficulty amplified on steep terrain</li>
+                        <li><strong>Skill adjustment</strong>: Novice to expert reduces terrain penalties by 0-100%</li>
+                    </ul>
+                    <p><a href="/docs/models/TERRAIN_DIFFICULTY">→ Read the full Terrain Difficulty documentation</a></p>
+
+                    <h3>User Inputs</h3>
+                    <p>
+                        RaceCraft allows you to customize your race plan with:
+                    </p>
+                    <ul>
+                        <li><strong>Fitness level</strong>: Untrained, recreational, trained, elite</li>
+                        <li><strong>Climbing ability</strong>: Conservative, moderate, strong, very strong, elite</li>
+                        <li><strong>Technical skill</strong>: Novice to expert (affects downhill and technical terrain)</li>
+                        <li><strong>Flat terrain pace</strong>: Your comfortable pace on flat, easy terrain</li>
+                        <li><strong>Nutrition preferences</strong>: Carbs per hour, gel size, hydration needs</li>
+                        <li><strong>Checkpoint locations</strong>: Aid station or drop bag distances</li>
+                    </ul>
+
+                    <h3>Technology Stack</h3>
+                    <ul>
+                        <li><strong>Backend</strong>: Python 3 with Flask 3.0.0</li>
+                        <li><strong>Frontend</strong>: Vanilla JavaScript, HTML5, CSS3</li>
+                        <li><strong>Deployment</strong>: Docker containerization with Docker Hub publishing</li>
+                        <li><strong>Storage</strong>: Supabase (cloud) or JSON files (local)</li>
+                    </ul>
+                </section>
+
+                <section class="about-section">
+                    <h2><span class="mdi mdi-github"></span> Open Source</h2>
+                    <p>
+                        RaceCraft is an open-source project. You can view the source code, contribute, or report issues on GitHub:
+                    </p>
+                    <p>
+                        <a href="https://github.com/lennon101/RaceCraft" target="_blank" rel="noopener noreferrer" class="btn-link">
+                            <span class="mdi mdi-github"></span> View on GitHub
+                        </a>
+                    </p>
+                </section>
+
+                <div class="back-link">
+                    <a href="/" class="btn-link"><span class="mdi mdi-arrow-left"></span> Back to Planner</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+</body>
+</html>

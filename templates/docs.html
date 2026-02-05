@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - RaceCraft</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon-circle.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/docs.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu">
+                    <span class="mdi mdi-menu"></span>
+                </button>
+                <img src="{{ url_for('static', filename='logo-bg-removed.png') }}" alt="RaceCraft Logo" class="header-logo">
+                <div class="header-text">
+                    <h2 class="subtitle">Documentation</h2>
+                </div>
+            </div>
+        </header>
+
+        <!-- Side Navigation -->
+        <nav id="side-nav" class="side-nav">
+            <div class="side-nav-header">
+                <h3>Navigation</h3>
+                <button id="nav-close" class="nav-close" aria-label="Close menu">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link"><span class="mdi mdi-home"></span> Home</a></li>
+                <li><a href="/about" class="nav-link"><span class="mdi mdi-information"></span> About</a></li>
+                <li><a href="/docs" class="nav-link active"><span class="mdi mdi-book-open-variant"></span> Documentation</a></li>
+            </ul>
+        </nav>
+
+        <!-- Overlay for mobile menu -->
+        <div id="nav-overlay" class="nav-overlay"></div>
+
+        <!-- Documentation Layout -->
+        <main class="docs-layout">
+            <!-- Documentation Sidebar -->
+            <aside class="docs-sidebar">
+                <button id="docs-sidebar-toggle" class="docs-sidebar-toggle" aria-label="Toggle documentation sidebar">
+                    <span class="mdi mdi-menu"></span> Categories
+                </button>
+                
+                <div class="docs-sidebar-content" id="docs-sidebar-content">
+                    <h3>Documentation</h3>
+                    
+                    {% if doc_structure %}
+                        {% for category_key in doc_structure|sort %}
+                            {% set category = doc_structure[category_key] %}
+                            <div class="docs-category">
+                                <h4>{{ category.name }}</h4>
+                                <ul>
+                                    {% for file in category.files %}
+                                        <li>
+                                            <a href="/docs/{{ file.path }}" 
+                                               class="docs-link {% if current_doc == file.path or current_doc == file.path + '.md' %}active{% endif %}">
+                                                {{ file.name }}
+                                            </a>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-docs">No documentation available.</p>
+                    {% endif %}
+                </div>
+            </aside>
+
+            <!-- Documentation Content -->
+            <div class="docs-content">
+                {% if content %}
+                    <div class="markdown-content">
+                        {{ content|safe }}
+                    </div>
+                {% else %}
+                    <div class="docs-home">
+                        <h1>RaceCraft Documentation</h1>
+                        <p>Welcome to the RaceCraft documentation. Select a topic from the sidebar to learn more about how RaceCraft works.</p>
+                        
+                        <div class="docs-grid">
+                            <div class="docs-card">
+                                <h3><span class="mdi mdi-chart-line"></span> Models</h3>
+                                <p>Learn about the fatigue, climbing, and terrain difficulty models that power RaceCraft's calculations.</p>
+                                <ul>
+                                    <li><a href="/docs/models/FATIGUE_MODEL">Fatigue Model</a></li>
+                                    <li><a href="/docs/models/CLIMBING_MODEL">Climbing Model</a></li>
+                                    <li><a href="/docs/models/TERRAIN_DIFFICULTY">Terrain Difficulty</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="docs-card">
+                                <h3><span class="mdi mdi-feature-search"></span> Features</h3>
+                                <p>Discover RaceCraft's features and how to use them effectively.</p>
+                                <ul>
+                                    {% if doc_structure.get('features') %}
+                                        {% for file in doc_structure['features'].files[:3] %}
+                                            <li><a href="/docs/{{ file.path }}">{{ file.name }}</a></li>
+                                        {% endfor %}
+                                    {% endif %}
+                                </ul>
+                            </div>
+
+                            <div class="docs-card">
+                                <h3><span class="mdi mdi-server"></span> Deployment</h3>
+                                <p>Learn how to deploy and configure RaceCraft.</p>
+                                <ul>
+                                    {% if doc_structure.get('deployment') %}
+                                        {% for file in doc_structure['deployment'].files %}
+                                            <li><a href="/docs/{{ file.path }}">{{ file.name }}</a></li>
+                                        {% endfor %}
+                                    {% endif %}
+                                </ul>
+                            </div>
+
+                            <div class="docs-card">
+                                <h3><span class="mdi mdi-shield-lock"></span> Authentication</h3>
+                                <p>Set up user authentication and manage user data.</p>
+                                <ul>
+                                    {% if doc_structure.get('auth') %}
+                                        {% for file in doc_structure['auth'].files %}
+                                            <li><a href="/docs/{{ file.path }}">{{ file.name }}</a></li>
+                                        {% endfor %}
+                                    {% endif %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="back-link">
+                    <a href="/" class="btn-link"><span class="mdi mdi-arrow-left"></span> Back to Planner</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/docs.js') }}"></script>
+</body>
+</html>

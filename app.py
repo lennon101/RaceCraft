@@ -86,6 +86,8 @@ import platform
 from functools import wraps
 from dotenv import load_dotenv
 from whitenoise import WhiteNoise
+import markdown2
+import re
 
 # Load environment variables
 load_dotenv()
@@ -2824,6 +2826,134 @@ def claim_unowned_plan():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to claim plan: {str(e)}'}), 500
+
+
+@app.route('/about')
+def about():
+    """Render the About page."""
+    return render_template('about.html')
+
+
+@app.route('/docs')
+@app.route('/docs/')
+@app.route('/docs/<path:doc_path>')
+def documentation(doc_path=None):
+    """Render documentation pages with markdown content from /docs folder."""
+    docs_base = os.path.join(os.path.dirname(__file__), 'docs')
+    
+    # Get all documentation files organized by category
+    doc_structure = get_docs_structure()
+    
+    # If no specific doc requested, show the index
+    if not doc_path:
+        return render_template('docs.html', doc_structure=doc_structure, content=None, current_doc=None)
+    
+    # Construct the file path
+    doc_file = os.path.join(docs_base, doc_path)
+    if not doc_file.endswith('.md'):
+        doc_file += '.md'
+    
+    # Security check - ensure the path is within docs directory
+    if not os.path.abspath(doc_file).startswith(os.path.abspath(docs_base)):
+        return "Invalid document path", 404
+    
+    # Read and render markdown
+    if os.path.exists(doc_file):
+        with open(doc_file, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+        
+        # Convert markdown to HTML with extras
+        html_content = markdown2.markdown(
+            markdown_content,
+            extras=[
+                'fenced-code-blocks',
+                'tables',
+                'header-ids',
+                'code-friendly',
+                'strike',
+                'task_list'
+            ]
+        )
+        
+        # Process internal links to other .md files
+        html_content = process_doc_links(html_content)
+        
+        return render_template('docs.html', 
+                             doc_structure=doc_structure, 
+                             content=html_content, 
+                             current_doc=doc_path)
+    else:
+        return "Documentation not found", 404
+
+
+def get_docs_structure():
+    """
+    Scan the /docs folder and return a structured dict of documentation files
+    organized by folder (category).
+    """
+    docs_base = os.path.join(os.path.dirname(__file__), 'docs')
+    structure = {}
+    
+    if not os.path.exists(docs_base):
+        return structure
+    
+    # Walk through the docs directory
+    for root, dirs, files in os.walk(docs_base):
+        # Get relative path from docs base
+        rel_path = os.path.relpath(root, docs_base)
+        
+        # Skip hidden directories
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        
+        # Filter markdown files
+        md_files = [f for f in files if f.endswith('.md') and not f.startswith('.')]
+        
+        if md_files:
+            # Use folder name as category, or 'root' for top-level files
+            category = rel_path if rel_path != '.' else 'root'
+            category_name = category.replace('_', ' ').title() if category != 'root' else 'General'
+            
+            if category not in structure:
+                structure[category] = {
+                    'name': category_name,
+                    'files': []
+                }
+            
+            # Add files to this category
+            for md_file in sorted(md_files):
+                file_path = os.path.join(rel_path, md_file) if rel_path != '.' else md_file
+                file_name = md_file[:-3]  # Remove .md extension
+                display_name = file_name.replace('_', ' ').replace('-', ' ')
+                
+                structure[category]['files'].append({
+                    'path': file_path[:-3],  # Remove .md for URL
+                    'name': display_name,
+                    'filename': md_file
+                })
+    
+    return structure
+
+
+def process_doc_links(html_content):
+    """
+    Process internal markdown links to point to the documentation viewer.
+    Converts links like [text](OTHER_DOC.md) to [text](/docs/OTHER_DOC)
+    """
+    # Pattern to match markdown links ending in .md
+    pattern = r'href="([^"]+\.md)"'
+    
+    def replace_link(match):
+        link = match.group(1)
+        # Remove .md extension and ensure it starts with /docs/
+        clean_link = link[:-3] if link.endswith('.md') else link
+        
+        # Handle relative paths
+        if not clean_link.startswith('/'):
+            clean_link = clean_link
+        
+        return f'href="/docs/{clean_link}"'
+    
+    return re.sub(pattern, replace_link, html_content)
 
 
 if __name__ == '__main__':
