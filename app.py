@@ -1,7 +1,14 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.5.3
+Version: v1.6.0-target-time-mode
 Release Date: Feb 02, 2026
+
+Major Changes in v1.6.0-target-time-mode:
+- New Target Time Mode: Plan by desired finish time instead of pace
+- Revised UI to support target time input and display estimated finish time
+- Limit number of checkpoints to 30 for better performance and usability
+- Distance column now shows accumulated distance at each checkpoint for clearer pacing strategy
+- [BUG FIX] Fixed flat-terrain pace calculation where a value of 0 resulted in a default of 30 due to falsy check
 
 Major Changes in v1.5.3:
 - Move all docs to folder and organise 
