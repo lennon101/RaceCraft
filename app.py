@@ -1297,11 +1297,11 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         # Apply adjustment
         if delta_t > 0:  # Going faster (natural > target, need to speed up)
             adjusted_time = natural_time - segment_adjustment
-            effort_level = 'push' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'push' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t>0 (faster), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         else:  # Going slower (natural < target, need to slow down)
             adjusted_time = natural_time + segment_adjustment
-            effort_level = 'protect' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'protect' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t<0 (slower), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         
         adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
