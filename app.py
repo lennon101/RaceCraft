@@ -171,6 +171,7 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
+TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation (rounding errors can accumulate)
 
 # Climbing ability parameters - vertical speed in m/h
 # Updated to more realistic values for mountain runners
@@ -1876,8 +1877,8 @@ def calculate():
             # Compare achieved moving time vs requested target moving time
             time_difference = total_moving_time - target_moving_time
             
-            # Allow 1 minute tolerance (60 seconds can accumulate from rounding)
-            if time_difference > 1.0:
+            # Allow tolerance for rounding errors that accumulate across segments
+            if time_difference > TARGET_TIME_TOLERANCE_MINUTES:
                 # Target was not achievable - calculate minimum achievable time
                 # Minimum is achieved when all segments are at their maximum speed (min_mult)
                 min_achievable_moving_time = 0.0
