@@ -274,7 +274,7 @@
                     <button id="save-btn" class="btn btn-secondary" disabled>Save Plan</button>
                     <button id="load-btn" class="btn btn-secondary">Load Plan</button>
                     <button id="export-import-btn" class="btn btn-secondary">Export/Import Plans</button>
-                    <button id="export-btn" class="btn btn-secondary" disabled>Export CSV</button>
+                    <button id="export-btn" class="btn btn-secondary" disabled>Export</button>
                     <button id="clear-btn" class="btn btn-danger">Clear & Start Again</button>
                 </section>
             </div>
@@ -470,6 +470,80 @@
             </div>
             <div class="modal-actions">
                 <button id="export-import-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div id="export-options-modal" class="modal">
+        <div class="modal-content">
+            <h2>Export Options</h2>
+            <p class="info-text">Choose how you want to export your race plan:</p>
+            <div class="export-options">
+                <button id="export-pdf-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-file-pdf-box"></span> Export to PDF (Configurable)
+                </button>
+                <button id="export-backup-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-download"></span> Backup File (Re-importable)
+                </button>
+                <button id="export-csv-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-file-delimited"></span> CSV Export
+                </button>
+            </div>
+            <div class="modal-actions">
+                <button id="export-options-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Export Options Modal -->
+    <div id="pdf-options-modal" class="modal">
+        <div class="modal-content">
+            <h2>PDF Export Options</h2>
+            <p class="info-text">Select which sections to include in your PDF:</p>
+            
+            <div class="pdf-options">
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-elevation" checked>
+                        <span>Elevation Profile Image</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-race-plan" checked>
+                        <span>Race Plan Table</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-dropbags" checked>
+                        <span>Drop Bag Table</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-tags">
+                        <span>Drop Bag Tags (Printable Labels)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="pdf-tag-options" style="display: none; margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 5px;">
+                <h4 style="margin-top: 0;">Drop Bag Tag Information</h4>
+                <div class="input-group">
+                    <label for="pdf-bib-number">Bib Number (optional):</label>
+                    <input type="text" id="pdf-bib-number" placeholder="123" />
+                </div>
+                <div class="input-group">
+                    <label for="pdf-runner-name">Runner Name (optional):</label>
+                    <input type="text" id="pdf-runner-name" placeholder="Your Name" />
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button id="pdf-generate-btn" class="btn btn-primary">Generate PDF</button>
+                <button id="pdf-options-cancel-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
