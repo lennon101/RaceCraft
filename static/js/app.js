@@ -867,7 +867,7 @@ function generateCheckpointInputs() {
                         data-index="${i}"
                         aria-pressed="${hasDropbag}"
                         aria-label="Toggle drop bag for checkpoint ${i + 1}">
-                    ${hasDropbag ? 'ON' : 'OFF'}
+                    Dropbag
                 </button>
             </div>
             <div class="error-message" id="checkpoint-error-${i}"></div>
@@ -922,7 +922,7 @@ function generateCheckpointInputs() {
             const currentState = button.getAttribute('aria-pressed') === 'true';
             const newState = !currentState;
             button.setAttribute('aria-pressed', newState);
-            button.textContent = newState ? 'ON' : 'OFF';
+            button.textContent = 'Dropbag';
             
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
