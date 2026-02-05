@@ -844,7 +844,7 @@ function generateCheckpointInputs() {
     // Update checkpoint counter
     updateCheckpointCounter(numCheckpoints, MAX_CHECKPOINTS);
 
-    // Create checkpoint distance inputs with dropbag checkbox
+    // Create checkpoint distance inputs with integrated dropbag toggle
     for (let i = 0; i < numCheckpoints; i++) {
         const div = document.createElement('div');
         div.className = 'checkpoint-input';
@@ -853,7 +853,7 @@ function generateCheckpointInputs() {
         
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
-            <div class="checkpoint-input-row">
+            <div class="checkpoint-input-wrapper">
                 <input type="text" 
                        class="checkpoint-distance" 
                        data-index="${i}" 
@@ -863,13 +863,13 @@ function generateCheckpointInputs() {
                        inputmode="decimal"
                        value="${currentPlan.checkpoint_distances ? currentPlan.checkpoint_distances[i] || '' : ''}"
                        placeholder="e.g., 25.5" />
-                <label class="dropbag-label">
-                    <input type="checkbox" 
-                           class="checkpoint-dropbag" 
-                           data-index="${i}"
-                           ${currentPlan.checkpoint_dropbags ? currentPlan.checkpoint_dropbags[i] ? 'checked' : '' : ''} />
+                <button type="button"
+                        class="checkpoint-dropbag-toggle" 
+                        data-index="${i}"
+                        aria-pressed="${hasDropbag}"
+                        aria-label="Toggle drop bag for checkpoint ${i + 1}">
                     Dropbag
-                </label>
+                </button>
             </div>
             <div class="error-message" id="checkpoint-error-${i}"></div>
         `;
@@ -917,9 +917,14 @@ function generateCheckpointInputs() {
         });
     });
     
-    // Add event listeners for dropbag checkboxes
-    document.querySelectorAll('.checkpoint-dropbag').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
+    // Add event listeners for dropbag toggle buttons
+    document.querySelectorAll('.checkpoint-dropbag-toggle').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const currentState = button.getAttribute('aria-pressed') === 'true';
+            const newState = !currentState;
+            button.setAttribute('aria-pressed', newState);
+            button.textContent = 'Dropbag';
+            
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
             }
@@ -1039,9 +1044,9 @@ async function calculateRacePlan() {
         .map(input => parseFloat(input.value));
     
     // Gather checkpoint dropbag status - must align with checkpoint distances
-    const dropbagCheckboxes = document.querySelectorAll('.checkpoint-dropbag');
-    const checkpointDropbags = Array.from(dropbagCheckboxes)
-        .map(checkbox => checkbox.checked);
+    const dropbagToggleButtons = document.querySelectorAll('.checkpoint-dropbag-toggle');
+    const checkpointDropbags = Array.from(dropbagToggleButtons)
+        .map(button => button.getAttribute('aria-pressed') === 'true');
     
     // Filter out invalid distances and their corresponding dropbag values
     const validCheckpoints = [];
