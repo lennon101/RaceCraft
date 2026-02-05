@@ -171,6 +171,8 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
+TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation when achieved > target (rounding errors)
+TARGET_TIME_MINIMUM_TOLERANCE_MINUTES = 0.01  # Minimal tolerance for target < minimum (36 seconds - catches real differences)
 
 # Climbing ability parameters - vertical speed in m/h
 # Updated to more realistic values for mountain runners
@@ -1297,11 +1299,11 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         # Apply adjustment
         if delta_t > 0:  # Going faster (natural > target, need to speed up)
             adjusted_time = natural_time - segment_adjustment
-            effort_level = 'push' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'push' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t>0 (faster), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         else:  # Going slower (natural < target, need to slow down)
             adjusted_time = natural_time + segment_adjustment
-            effort_level = 'protect' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'protect' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t<0 (slower), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         
         adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
@@ -1871,6 +1873,56 @@ def calculate():
         total_water = sum(s['target_water'] for s in segments)
         total_cp_time = avg_cp_time * num_checkpoints
         
+        # Validate target time achievement if in target time mode
+        target_time_warning = None
+        if use_target_time:
+            # Calculate minimum achievable time (maximum speed on all segments)
+            # This is needed for validation even if target was achieved
+            min_achievable_moving_time = 0.0
+            for i, seg_data in enumerate(segments_basic_data):
+                distance_km = seg_data['distance']
+                elev_gain = seg_data['elev_gain']
+                elev_loss = seg_data['elev_loss']
+                
+                min_mult, _, _ = get_terrain_effort_bounds(
+                    elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+                )
+                
+                # Minimum segment time is natural time × min_mult
+                natural_time = natural_results[i]['natural_time']
+                min_segment_time = natural_time * min_mult
+                min_achievable_moving_time += min_segment_time
+            
+            min_achievable_total_time = min_achievable_moving_time + total_cp_time
+            target_total_time = target_moving_time + total_cp_time
+            
+            # Check if target is less than minimum possible (very aggressive)
+            # OR if achieved time exceeds target (not aggressive enough to hit limits)
+            # Use different tolerances for each case:
+            # - When target < minimum: Use minimal tolerance (user wants impossible time)
+            # - When achieved > target: Use standard tolerance (rounding accumulation)
+            time_below_minimum = min_achievable_total_time - target_total_time
+            time_above_target = total_moving_time - target_moving_time
+            
+            # Apply asymmetric tolerance: stricter when target is below minimum
+            target_below_minimum = time_below_minimum > TARGET_TIME_MINIMUM_TOLERANCE_MINUTES
+            achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
+            
+            if target_below_minimum or achieved_above_target:
+                # Target was not achievable
+                # Format times for warning message
+                target_total_time_str = format_time(target_total_time)
+                min_achievable_str = format_time(min_achievable_total_time)
+                
+                target_time_warning = (
+                    f"⚠️ Target time {target_total_time_str} is not achievable with current settings. "
+                    f"The minimum achievable time is {min_achievable_str}. "
+                    f"Consider: (1) increasing your target time to {min_achievable_str} or more, (2) improving base pace, "
+                    f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                )
+                
+                log_message(f"WARNING: Target time validation - {target_time_warning}")
+        
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
         if elevation_profile_data:
@@ -1929,6 +1981,10 @@ def calculate():
         # Add effort thresholds if in target time mode
         if effort_thresholds:
             response_data['effort_thresholds'] = effort_thresholds
+        
+        # Add target time warning if present
+        if target_time_warning:
+            response_data['target_time_warning'] = target_time_warning
         
         return jsonify(response_data)
     except Exception as e:
