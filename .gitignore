@@ -3,3 +3,8 @@ __pycache__/
 static/uploads/
 .env
 FuelPlanData/
+test_export*.pdf
+test_export*.csv
+test_pdf_export.py
+test_csv_export.py
+test_pdf_updates.py

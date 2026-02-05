@@ -88,6 +88,14 @@ from dotenv import load_dotenv
 from whitenoise import WhiteNoise
 import markdown2
 import re
+import base64
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from PIL import Image as PILImage
 
 # Load environment variables
 load_dotenv()
@@ -2492,6 +2500,355 @@ def export_csv():
                         download_name=csv_filename, 
                         mimetype='text/csv')
     except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/export-pdf', methods=['POST'])
+def export_pdf():
+    """Export race plan to PDF with configurable sections."""
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Extract configuration options
+        options = data.get('options', {})
+        include_elevation = options.get('elevation_profile', False)
+        include_race_plan = options.get('race_plan_table', False)
+        include_drop_bags = options.get('drop_bag_table', False)
+        include_tags = options.get('drop_bag_tags', False)
+        
+        # Extract user info for tags - get race_name from options first
+        tag_race_name = options.get('race_name', '').strip()
+        bib_number = options.get('bib_number', '')
+        runner_name = options.get('runner_name', '')
+        
+        # Get race name from data (fallback if not in options)
+        race_name = data.get('race_name', 'Race Plan')
+        
+        # Use tag_race_name if provided, otherwise use race_name
+        if tag_race_name:
+            race_name = tag_race_name
+        
+        # Extract race plan data
+        segments = data.get('segments', [])
+        summary = data.get('summary', {})
+        elevation_profile_data = data.get('elevation_profile')
+        dropbag_contents = data.get('dropbag_contents', [])
+        race_start_time = data.get('race_start_time')
+        
+        # Generate PDF in memory
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, 
+                               topMargin=0.5*inch, bottomMargin=0.5*inch,
+                               leftMargin=0.5*inch, rightMargin=0.5*inch)
+        
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#2563eb'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=12,
+            spaceBefore=20
+        )
+        
+        # Title
+        story.append(Paragraph(race_name, title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Summary section (always included) - wrapped in KeepTogether
+        summary_section = []
+        summary_section.append(Paragraph("Race Summary", heading_style))
+        summary_data = [
+            ['Total Distance', f"{summary.get('total_distance', 0):.2f} km"],
+            ['Moving Time', summary.get('total_moving_time_str', '--')],
+            ['CP Time', summary.get('total_cp_time_str', '--')],
+            ['Total Time', summary.get('total_race_time_str', '--')],
+            ['Elevation Gain', f"{summary.get('total_elev_gain', 0):.0f} m"],
+            ['Total Carbs', f"{summary.get('total_carbs', 0):.0f} g"],
+            ['Total Water', f"{summary.get('total_water', 0):.2f} L"]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+        ]))
+        summary_section.append(summary_table)
+        
+        # Add summary as a single unit that stays together
+        story.append(KeepTogether(summary_section))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Elevation Profile
+        if include_elevation and elevation_profile_data:
+            elevation_section = []
+            elevation_section.append(Paragraph("Elevation Profile", heading_style))
+            try:
+                # Validate and decode base64 image
+                if elevation_profile_data.startswith('data:'):
+                    # Data URI format: data:image/png;base64,<data>
+                    image_data = elevation_profile_data.split(',', 1)[1] if ',' in elevation_profile_data else elevation_profile_data
+                else:
+                    # Raw base64 data
+                    image_data = elevation_profile_data
+                
+                image_bytes = base64.b64decode(image_data)
+                
+                # Load with PIL to get dimensions and convert if needed
+                pil_image = PILImage.open(io.BytesIO(image_bytes))
+                
+                # Save to a new buffer in a format ReportLab can handle
+                img_buffer = io.BytesIO()
+                pil_image.save(img_buffer, format='PNG')
+                img_buffer.seek(0)
+                
+                # Create ReportLab image
+                img = Image(img_buffer, width=7*inch, height=3*inch)
+                elevation_section.append(img)
+                story.append(KeepTogether(elevation_section))
+                story.append(Spacer(1, 0.3*inch))
+            except Exception as e:
+                log_message(f"Error adding elevation profile: {str(e)}")
+                story.append(Paragraph(f"<i>Error loading elevation profile</i>", styles['Normal']))
+                story.append(Spacer(1, 0.3*inch))
+        
+        # Race Plan Table
+        if include_race_plan and segments:
+            race_plan_section = []
+            race_plan_section.append(Paragraph("Race Plan", heading_style))
+            
+            # Build table headers
+            headers = ['CP', 'Name', 'Dist (km)', 'Elev +/-', 'Time', 'Pace', 'Carbs', 'Water']
+            if race_start_time:
+                headers.append('Arrival')
+            
+            # Build table data
+            table_data = [headers]
+            
+            for i, seg in enumerate(segments):
+                row = [
+                    str(i + 1),
+                    seg.get('to', ''),
+                    f"{seg.get('cumulative_distance', 0):.1f}",
+                    f"+{seg.get('elev_gain', 0):.0f}/-{seg.get('elev_loss', 0):.0f}",
+                    seg.get('cumulative_time_str', ''),
+                    seg.get('pace_str', ''),
+                    f"{seg.get('target_carbs', 0):.0f}g",
+                    f"{seg.get('target_water', 0):.2f}L"
+                ]
+                if race_start_time:
+                    row.append(seg.get('time_of_day', ''))
+                table_data.append(row)
+            
+            # Calculate column widths
+            if race_start_time:
+                col_widths = [0.4*inch, 1.2*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.7*inch, 0.9*inch]
+            else:
+                col_widths = [0.4*inch, 1.5*inch, 0.8*inch, 1*inch, 1*inch, 0.9*inch, 0.7*inch, 0.8*inch]
+            
+            race_table = Table(table_data, colWidths=col_widths)
+            race_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563eb')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
+            ]))
+            race_plan_section.append(race_table)
+            story.append(KeepTogether(race_plan_section))
+            story.append(Spacer(1, 0.3*inch))
+        
+        # Drop Bag Table
+        if include_drop_bags and dropbag_contents:
+            dropbag_section = []
+            dropbag_section.append(Paragraph("Drop Bag Contents", heading_style))
+            
+            # Build drop bag table
+            has_gel_data = any('num_gels' in db for db in dropbag_contents)
+            
+            if has_gel_data:
+                db_headers = ['Checkpoint', 'Carbs Target', 'Num Gels', 'Actual Carbs', 'Hydration']
+                db_data = [db_headers]
+                for db in dropbag_contents:
+                    db_data.append([
+                        db.get('checkpoint', ''),
+                        f"{db.get('carbs', 0):.0f}g",
+                        str(db.get('num_gels', '')),
+                        f"{db.get('actual_carbs', 0):.0f}g" if db.get('actual_carbs') else '',
+                        f"{db.get('hydration', 0):.2f}L"
+                    ])
+                col_widths = [1.5*inch, 1.2*inch, 1*inch, 1.2*inch, 1.2*inch]
+            else:
+                db_headers = ['Checkpoint', 'Carbs Target', 'Hydration']
+                db_data = [db_headers]
+                for db in dropbag_contents:
+                    db_data.append([
+                        db.get('checkpoint', ''),
+                        f"{db.get('carbs', 0):.0f}g",
+                        f"{db.get('hydration', 0):.2f}L"
+                    ])
+                col_widths = [2*inch, 2*inch, 2*inch]
+            
+            db_table = Table(db_data, colWidths=col_widths)
+            db_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0fdf4')])
+            ]))
+            dropbag_section.append(db_table)
+            story.append(KeepTogether(dropbag_section))
+            story.append(Spacer(1, 0.3*inch))
+        
+        # Drop Bag Tags
+        if include_tags and dropbag_contents:
+            story.append(PageBreak())
+            story.append(Paragraph("Drop Bag Tags", title_style))
+            story.append(Paragraph("<i>Cut along the lines and attach to drop bags</i>", 
+                                 ParagraphStyle('Italic', parent=styles['Normal'], 
+                                              alignment=TA_CENTER, fontSize=10, 
+                                              textColor=colors.grey, spaceAfter=20)))
+            
+            # Create tags for each drop bag (excluding "Start")
+            tags_per_row = 2
+            tag_width = 3.5 * inch
+            tag_height = 2.5 * inch
+            
+            # Filter out "Start" checkpoint
+            dropbag_tags = [db for db in dropbag_contents if db.get('checkpoint', '').lower() != 'start']
+            
+            for i in range(0, len(dropbag_tags), tags_per_row):
+                row_tags = dropbag_tags[i:i+tags_per_row]
+                
+                # Create a row of tags
+                tag_cells = []
+                for db in row_tags:
+                    # Build tag content
+                    tag_content = []
+                    
+                    # Race name
+                    tag_content.append(Paragraph(f"<b>{race_name}</b>", 
+                                                ParagraphStyle('TagRace', fontSize=12, 
+                                                             alignment=TA_CENTER, 
+                                                             textColor=colors.HexColor('#1e40af'))))
+                    
+                    # Checkpoint
+                    tag_content.append(Paragraph(f"<font size=16><b>{db.get('checkpoint', '')}</b></font>", 
+                                                ParagraphStyle('TagCP', fontSize=16, 
+                                                             alignment=TA_CENTER,
+                                                             spaceAfter=8)))
+                    
+                    # Nutrition info
+                    num_gels = db.get('num_gels', 0)
+                    if num_gels:
+                        tag_content.append(Paragraph(f"<b>Gels:</b> {num_gels}", 
+                                                    ParagraphStyle('TagInfo', fontSize=11, 
+                                                                 alignment=TA_LEFT)))
+                    else:
+                        tag_content.append(Paragraph(f"<b>Carbs:</b> {db.get('carbs', 0):.0f}g", 
+                                                    ParagraphStyle('TagInfo', fontSize=11, 
+                                                                 alignment=TA_LEFT)))
+                    
+                    tag_content.append(Paragraph(f"<b>Water:</b> {db.get('hydration', 0):.2f}L", 
+                                                ParagraphStyle('TagInfo', fontSize=11, 
+                                                             alignment=TA_LEFT)))
+                    
+                    # Bib number
+                    if bib_number:
+                        tag_content.append(Paragraph(f"<b>Bib:</b> {bib_number}", 
+                                                    ParagraphStyle('TagBib', fontSize=11, 
+                                                                 alignment=TA_LEFT, 
+                                                                 spaceAfter=4)))
+                    
+                    # Runner name (if space and provided)
+                    if runner_name:
+                        tag_content.append(Paragraph(f"<i>{runner_name}</i>", 
+                                                    ParagraphStyle('TagName', fontSize=9, 
+                                                                 alignment=TA_CENTER,
+                                                                 textColor=colors.grey)))
+                    
+                    # Create a mini-table for this tag
+                    tag_table = Table([[c] for c in tag_content], colWidths=[tag_width - 0.2*inch])
+                    tag_table.setStyle(TableStyle([
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ]))
+                    
+                    tag_cells.append(tag_table)
+                
+                # Pad with empty cell if odd number of tags
+                if len(tag_cells) == 1:
+                    tag_cells.append('')
+                
+                # Create the row table
+                tags_row = Table([tag_cells], colWidths=[tag_width, tag_width])
+                tags_row.setStyle(TableStyle([
+                    ('BOX', (0, 0), (-1, -1), 2, colors.black),
+                    ('INNERGRID', (0, 0), (-1, -1), 1, colors.grey),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ]))
+                
+                story.append(tags_row)
+                story.append(Spacer(1, 0.3*inch))
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Get PDF content
+        pdf_buffer.seek(0)
+        pdf_content = pdf_buffer.getvalue()
+        
+        # Generate filename with proper sanitization
+        # Remove special characters that may be invalid in filenames (consistent with frontend)
+        safe_race_name = re.sub(r'[^a-zA-Z0-9_-]', '_', race_name)
+        pdf_filename = f"{safe_race_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return send_file(io.BytesIO(pdf_content), 
+                        as_attachment=True, 
+                        download_name=pdf_filename, 
+                        mimetype='application/pdf')
+        
+    except Exception as e:
+        log_message(f"Error generating PDF: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 400
 
 

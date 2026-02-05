@@ -100,12 +100,16 @@ const racePlanTitle = document.getElementById('race-plan-title');
 const saveModal = document.getElementById('save-modal');
 const loadModal = document.getElementById('load-modal');
 const exportImportModal = document.getElementById('export-import-modal');
+const exportOptionsModal = document.getElementById('export-options-modal');
+const pdfOptionsModal = document.getElementById('pdf-options-modal');
 const saveConfirmBtn = document.getElementById('save-confirm-btn');
 const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
 const importUnownedPlansBtn = document.getElementById('import-unowned-plans-btn');
 const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
+const exportOptionsCancelBtn = document.getElementById('export-options-cancel-btn');
+const pdfOptionsCancelBtn = document.getElementById('pdf-options-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
@@ -120,6 +124,22 @@ const exportImportBtn = document.getElementById('export-import-btn');
 const exportPlanBtn = document.getElementById('export-plan-btn');
 const importPlanBtn = document.getElementById('import-plan-btn');
 const importPlanFileInput = document.getElementById('import-plan-file-input');
+
+// Export options modal elements
+const exportPdfBtn = document.getElementById('export-pdf-btn');
+const exportBackupBtn = document.getElementById('export-backup-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+
+// PDF options modal elements
+const pdfIncludeElevation = document.getElementById('pdf-include-elevation');
+const pdfIncludeRacePlan = document.getElementById('pdf-include-race-plan');
+const pdfIncludeDropbags = document.getElementById('pdf-include-dropbags');
+const pdfIncludeTags = document.getElementById('pdf-include-tags');
+const pdfTagOptions = document.getElementById('pdf-tag-options');
+const pdfRaceName = document.getElementById('pdf-race-name');
+const pdfBibNumber = document.getElementById('pdf-bib-number');
+const pdfRunnerName = document.getElementById('pdf-runner-name');
+const pdfGenerateBtn = document.getElementById('pdf-generate-btn');
 
 // Known Race modal elements
 const loadKnownRaceBtn = document.getElementById('load-known-race-btn');
@@ -158,7 +178,7 @@ numCheckpointsInput.addEventListener('input', () => {
 calculateBtn.addEventListener('click', calculateRacePlan);
 saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
-exportBtn.addEventListener('click', exportToCSV);
+exportBtn.addEventListener('click', showExportOptionsModal);
 clearBtn.addEventListener('click', clearAll);
 saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
@@ -167,9 +187,26 @@ loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
 exportImportBtn.addEventListener('click', showExportImportModal);
 exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
+exportOptionsCancelBtn.addEventListener('click', () => hideModal(exportOptionsModal));
+pdfOptionsCancelBtn.addEventListener('click', () => hideModal(pdfOptionsModal));
 exportPlanBtn.addEventListener('click', exportCurrentPlan);
 importPlanBtn.addEventListener('click', () => importPlanFileInput.click());
 importPlanFileInput.addEventListener('change', handleImportPlan);
+
+// Export options listeners
+exportPdfBtn.addEventListener('click', showPdfOptionsModal);
+exportBackupBtn.addEventListener('click', exportCurrentPlan);
+exportCsvBtn.addEventListener('click', exportToCSV);
+
+// PDF options listeners
+pdfIncludeTags.addEventListener('change', function() {
+    if (this.checked) {
+        pdfTagOptions.style.display = 'block';
+    } else {
+        pdfTagOptions.style.display = 'none';
+    }
+});
+pdfGenerateBtn.addEventListener('click', generatePDF);
 
 // Known Race listeners
 loadKnownRaceBtn.addEventListener('click', showKnownRaceModal);
@@ -2070,12 +2107,106 @@ async function exportToCSV() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            hideModal(exportOptionsModal);
         } else {
             const data = await response.json();
             alert('Error exporting CSV: ' + data.error);
         }
     } catch (error) {
         alert('Error exporting CSV: ' + error.message);
+    }
+}
+
+// Show export options modal
+function showExportOptionsModal() {
+    if (!currentPlan.segments) {
+        alert('Please calculate a race plan first');
+        return;
+    }
+    exportOptionsModal.classList.add('active');
+}
+
+// Show PDF options modal
+function showPdfOptionsModal() {
+    hideModal(exportOptionsModal);
+    pdfOptionsModal.classList.add('active');
+}
+
+// Generate PDF with selected options
+async function generatePDF() {
+    if (!currentPlan.segments) {
+        alert('Please calculate a race plan first');
+        return;
+    }
+
+    // Get selected options
+    const options = {
+        elevation_profile: pdfIncludeElevation.checked,
+        race_plan_table: pdfIncludeRacePlan.checked,
+        drop_bag_table: pdfIncludeDropbags.checked,
+        drop_bag_tags: pdfIncludeTags.checked,
+        race_name: pdfRaceName.value.trim(),
+        bib_number: pdfBibNumber.value.trim(),
+        runner_name: pdfRunnerName.value.trim()
+    };
+
+    // Get race name - use input field if provided, otherwise fallback to plan name
+    const raceName = options.race_name || 
+                    currentPlan.planName || 
+                    currentPlan.loadedFilename?.replace('.json', '') || 
+                    'Race Plan';
+
+    // Get elevation profile as base64
+    let elevationProfileData = null;
+    if (options.elevation_profile && elevationChart) {
+        try {
+            elevationProfileData = elevationChart.toBase64Image();
+        } catch (e) {
+            console.error('Error getting chart image:', e);
+        }
+    }
+
+    const exportData = {
+        options: options,
+        race_name: raceName,
+        segments: currentPlan.segments,
+        summary: currentPlan.summary,
+        elevation_profile: elevationProfileData,
+        dropbag_contents: currentPlan.dropbag_contents || [],
+        race_start_time: currentPlan.race_start_time
+    };
+
+    try {
+        const response = await fetch('/api/export-pdf', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(exportData)
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // Sanitize filename to remove special characters that may be invalid
+            const safeRaceName = raceName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            a.download = `${safeRaceName}_${new Date().getTime()}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            hideModal(pdfOptionsModal);
+            hideModal(exportOptionsModal);
+            alert('PDF exported successfully!');
+        } else {
+            const data = await response.json();
+            alert('Error exporting PDF: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error exporting PDF: ' + error.message);
     }
 }
 
