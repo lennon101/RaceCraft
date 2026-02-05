@@ -99,7 +99,6 @@ const racePlanTitle = document.getElementById('race-plan-title');
 // Modal elements
 const saveModal = document.getElementById('save-modal');
 const loadModal = document.getElementById('load-modal');
-const exportImportModal = document.getElementById('export-import-modal');
 const exportOptionsModal = document.getElementById('export-options-modal');
 const pdfOptionsModal = document.getElementById('pdf-options-modal');
 const saveConfirmBtn = document.getElementById('save-confirm-btn');
@@ -107,7 +106,6 @@ const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
 const importUnownedPlansBtn = document.getElementById('import-unowned-plans-btn');
-const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
 const exportOptionsCancelBtn = document.getElementById('export-options-cancel-btn');
 const pdfOptionsCancelBtn = document.getElementById('pdf-options-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
@@ -120,9 +118,7 @@ const terrainSkillContainer = document.getElementById('terrain-skill-container')
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
 const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
-const exportImportBtn = document.getElementById('export-import-btn');
-const exportPlanBtn = document.getElementById('export-plan-btn');
-const importPlanBtn = document.getElementById('import-plan-btn');
+const importPlanBtnDirect = document.getElementById('import-plan-btn-direct');
 const importPlanFileInput = document.getElementById('import-plan-file-input');
 
 // Export options modal elements
@@ -185,12 +181,9 @@ saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
-exportImportBtn.addEventListener('click', showExportImportModal);
-exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
+importPlanBtnDirect.addEventListener('click', () => importPlanFileInput.click());
 exportOptionsCancelBtn.addEventListener('click', () => hideModal(exportOptionsModal));
 pdfOptionsCancelBtn.addEventListener('click', () => hideModal(pdfOptionsModal));
-exportPlanBtn.addEventListener('click', exportCurrentPlan);
-importPlanBtn.addEventListener('click', () => importPlanFileInput.click());
 importPlanFileInput.addEventListener('change', handleImportPlan);
 
 // Export options listeners
@@ -1875,16 +1868,6 @@ async function deletePlan(filename, source = 'local') {
     }
 }
 
-function showExportImportModal() {
-    // Enable/disable export button based on whether a plan is loaded
-    if (currentPlan.segments && currentPlan.segments.length > 0) {
-        exportPlanBtn.disabled = false;
-    } else {
-        exportPlanBtn.disabled = true;
-    }
-    exportImportModal.classList.add('active');
-}
-
 async function exportCurrentPlan() {
     if (!currentPlan.segments) {
         alert('Please calculate or load a race plan first');
@@ -1944,7 +1927,7 @@ async function exportCurrentPlan() {
             window.URL.revokeObjectURL(url);
             
             alert('Plan exported successfully!');
-            hideModal(exportImportModal);
+            // No need to hide modal - let user choose more exports if they want
         } else {
             alert('Error exporting plan: ' + data.error);
         }
