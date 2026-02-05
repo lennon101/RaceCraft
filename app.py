@@ -179,7 +179,7 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
-TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation when achieved > target (rounding errors)
+TARGET_TIME_TOLERANCE_MINUTES = 5.0  # Tolerance for target time validation when achieved > target (allocation algorithm variability ~2-4 min)
 TARGET_TIME_MINIMUM_TOLERANCE_MINUTES = 0.01  # Minimal tolerance for target < minimum (36 seconds - catches real differences)
 
 # Climbing ability parameters - vertical speed in m/h
@@ -1884,52 +1884,88 @@ def calculate():
         # Validate target time achievement if in target time mode
         target_time_warning = None
         if use_target_time:
-            # Calculate minimum achievable time (maximum speed on all segments)
-            # This is needed for validation even if target was achieved
-            min_achievable_moving_time = 0.0
-            for i, seg_data in enumerate(segments_basic_data):
-                distance_km = seg_data['distance']
-                elev_gain = seg_data['elev_gain']
-                elev_loss = seg_data['elev_loss']
-                
-                min_mult, _, _ = get_terrain_effort_bounds(
-                    elev_gain, elev_loss, distance_km, climbing_ability, skill_level
-                )
-                
-                # Minimum segment time is natural time × min_mult
-                natural_time = natural_results[i]['natural_time']
-                min_segment_time = natural_time * min_mult
-                min_achievable_moving_time += min_segment_time
-            
-            min_achievable_total_time = min_achievable_moving_time + total_cp_time
+            # Calculate target total time for warning message
             target_total_time = target_moving_time + total_cp_time
             
-            # Check if target is less than minimum possible (very aggressive)
-            # OR if achieved time exceeds target (not aggressive enough to hit limits)
-            # Use different tolerances for each case:
-            # - When target < minimum: Use minimal tolerance (user wants impossible time)
-            # - When achieved > target: Use standard tolerance (rounding accumulation)
-            time_below_minimum = min_achievable_total_time - target_total_time
+            # Calculate natural pacing total time (stable reference that never changes)
+            # Natural pacing represents steady-effort time without target optimization
+            if natural_results and all('natural_time' in r for r in natural_results):
+                natural_moving_time = sum(r['natural_time'] for r in natural_results)
+                natural_total_time = natural_moving_time + total_cp_time
+            else:
+                # Fallback if natural_results not available (shouldn't happen in target time mode)
+                natural_total_time = None
+            
+            # Calculate TRUE minimum achievable time (independent of target)
+            # This represents the absolute fastest time possible with maximum effort
+            # By using zero/negative target, we force the algorithm to max out effort everywhere
+            minimum_achievable_total_time = None
+            if natural_results:
+                try:
+                    # Use impossible target (0 or negative) to force maximum effort allocation
+                    # This ensures algorithm maxes out all segments within fitness/ability constraints
+                    impossible_target = 0.0  # Moving time of 0 (physically impossible)
+                    min_effort_results = allocate_effort_to_target(
+                        impossible_target, segments_basic_data, natural_results,
+                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
+                    )
+                    if min_effort_results:
+                        min_moving_time = sum(r['segment_time'] for r in min_effort_results)
+                        minimum_achievable_total_time = min_moving_time + total_cp_time
+                except Exception as e:
+                    log_message(f"Could not calculate minimum achievable time: {e}")
+                    minimum_achievable_total_time = None
+            
+            # Check if achieved time exceeds target significantly
+            # NOTE: We don't check if target is below theoretical minimum because:
+            # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
+            # - Cost-weighted allocation can't achieve this in practice
+            # - This created false "too aggressive" warnings causing circular behavior
+            # - Better to only warn if algorithm ACTUALLY can't achieve the target
             time_above_target = total_moving_time - target_moving_time
             
-            # Apply asymmetric tolerance: stricter when target is below minimum
-            target_below_minimum = time_below_minimum > TARGET_TIME_MINIMUM_TOLERANCE_MINUTES
+            # Only show warning if achieved time significantly exceeds target
             achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
             
-            if target_below_minimum or achieved_above_target:
-                # Target was not achievable
-                # Format times for warning message
+            # Generate warning if target couldn't be achieved
+            if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
-                min_achievable_str = format_time(min_achievable_total_time)
                 
-                target_time_warning = (
-                    f"⚠️ Target time {target_total_time_str} is not achievable with current settings. "
-                    f"The minimum achievable time is {min_achievable_str}. "
-                    f"Consider: (1) increasing your target time to {min_achievable_str} or more, (2) improving base pace, "
-                    f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                # Common suggestion text
+                suggestions = (
+                    "Consider: (1) increasing your target time{target_hint}, (2) improving base pace, "
+                    "(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
                 )
                 
-                log_message(f"WARNING: Target time validation - {target_time_warning}")
+                # Build warning message with stable references (independent of target)
+                if natural_total_time is not None and minimum_achievable_total_time is not None:
+                    natural_total_time_str = format_time(natural_total_time)
+                    minimum_achievable_time_str = format_time(minimum_achievable_total_time)
+                    target_hint = f" (ideally to {minimum_achievable_time_str} or more)"
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"Minimum achievable time: {minimum_achievable_time_str} (max effort), "
+                        f"Natural pacing: {natural_total_time_str} (steady effort). "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                elif natural_total_time is not None:
+                    # Fallback: only natural pacing available
+                    natural_total_time_str = format_time(natural_total_time)
+                    target_hint = f" (ideally to {natural_total_time_str} or more)"
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"With steady effort, your natural pacing would take {natural_total_time_str}. "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                else:
+                    # Fallback if neither reference available
+                    target_hint = ""
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                
+                log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
         
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
