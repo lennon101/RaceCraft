@@ -1889,8 +1889,12 @@ def calculate():
             
             # Calculate natural pacing total time (stable reference that never changes)
             # Natural pacing represents steady-effort time without target optimization
-            natural_moving_time = sum(r['natural_time'] for r in natural_results)
-            natural_total_time = natural_moving_time + total_cp_time
+            if natural_results and all('natural_time' in r for r in natural_results):
+                natural_moving_time = sum(r['natural_time'] for r in natural_results)
+                natural_total_time = natural_moving_time + total_cp_time
+            else:
+                # Fallback if natural_results not available (shouldn't happen in target time mode)
+                natural_total_time = None
             
             # Check if achieved time exceeds target significantly
             # NOTE: We don't check if target is below theoretical minimum because:
@@ -1906,16 +1910,24 @@ def calculate():
             # Generate warning if target couldn't be achieved
             if achieved_above_target:
                 target_total_time_str = format_time(target_total_time)
-                natural_total_time_str = format_time(natural_total_time)
                 
                 # Use natural pacing time as stable reference (doesn't change with target)
                 # This prevents the warning from appearing to "chase" as user adjusts target
-                target_time_warning = (
-                    f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                    f"With steady effort, your natural pacing would take {natural_total_time_str}. "
-                    f"Consider: (1) increasing your target time closer to {natural_total_time_str}, (2) improving base pace, "
-                    f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
-                )
+                if natural_total_time is not None:
+                    natural_total_time_str = format_time(natural_total_time)
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"With steady effort, your natural pacing would take {natural_total_time_str}. "
+                        f"Consider: (1) increasing your target time (ideally to {natural_total_time_str} or more), (2) improving base pace, "
+                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                    )
+                else:
+                    # Fallback if natural pacing not available
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"Consider: (1) increasing your target time, (2) improving base pace, "
+                        f"(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                    )
                 
                 log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
         
