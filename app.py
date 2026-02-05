@@ -171,7 +171,8 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
-TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation (rounding errors can accumulate)
+TARGET_TIME_TOLERANCE_MINUTES = 1.0  # Tolerance for target time validation when achieved > target (rounding errors)
+TARGET_TIME_MINIMUM_TOLERANCE_MINUTES = 0.01  # Minimal tolerance for target < minimum (36 seconds - catches real differences)
 
 # Climbing ability parameters - vertical speed in m/h
 # Updated to more realistic values for mountain runners
@@ -1897,11 +1898,17 @@ def calculate():
             
             # Check if target is less than minimum possible (very aggressive)
             # OR if achieved time exceeds target (not aggressive enough to hit limits)
-            # Allow tolerance for rounding errors
+            # Use different tolerances for each case:
+            # - When target < minimum: Use minimal tolerance (user wants impossible time)
+            # - When achieved > target: Use standard tolerance (rounding accumulation)
             time_below_minimum = min_achievable_total_time - target_total_time
             time_above_target = total_moving_time - target_moving_time
             
-            if time_below_minimum > TARGET_TIME_TOLERANCE_MINUTES or time_above_target > TARGET_TIME_TOLERANCE_MINUTES:
+            # Apply asymmetric tolerance: stricter when target is below minimum
+            target_below_minimum = time_below_minimum > TARGET_TIME_MINIMUM_TOLERANCE_MINUTES
+            achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
+            
+            if target_below_minimum or achieved_above_target:
                 # Target was not achievable
                 # Format times for warning message
                 target_total_time_str = format_time(target_total_time)
