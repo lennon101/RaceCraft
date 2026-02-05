@@ -1875,32 +1875,36 @@ def calculate():
         # Validate target time achievement if in target time mode
         target_time_warning = None
         if use_target_time:
-            # Compare achieved moving time vs requested target moving time
-            time_difference = total_moving_time - target_moving_time
+            # Calculate minimum achievable time (maximum speed on all segments)
+            # This is needed for validation even if target was achieved
+            min_achievable_moving_time = 0.0
+            for i, seg_data in enumerate(segments_basic_data):
+                distance_km = seg_data['distance']
+                elev_gain = seg_data['elev_gain']
+                elev_loss = seg_data['elev_loss']
+                
+                min_mult, _, _ = get_terrain_effort_bounds(
+                    elev_gain, elev_loss, distance_km, climbing_ability, skill_level
+                )
+                
+                # Minimum segment time is natural time × min_mult
+                natural_time = natural_results[i]['natural_time']
+                min_segment_time = natural_time * min_mult
+                min_achievable_moving_time += min_segment_time
             
-            # Allow tolerance for rounding errors that accumulate across segments
-            if time_difference > TARGET_TIME_TOLERANCE_MINUTES:
-                # Target was not achievable - calculate minimum achievable time
-                # Minimum is achieved when all segments are at their maximum speed (min_mult)
-                min_achievable_moving_time = 0.0
-                for i, seg_data in enumerate(segments_basic_data):
-                    distance_km = seg_data['distance']
-                    elev_gain = seg_data['elev_gain']
-                    elev_loss = seg_data['elev_loss']
-                    
-                    min_mult, _, _ = get_terrain_effort_bounds(
-                        elev_gain, elev_loss, distance_km, climbing_ability, skill_level
-                    )
-                    
-                    # Minimum segment time is natural time × min_mult
-                    natural_time = natural_results[i]['natural_time']
-                    min_segment_time = natural_time * min_mult
-                    min_achievable_moving_time += min_segment_time
-                
-                min_achievable_total_time = min_achievable_moving_time + total_cp_time
-                
+            min_achievable_total_time = min_achievable_moving_time + total_cp_time
+            target_total_time = target_moving_time + total_cp_time
+            
+            # Check if target is less than minimum possible (very aggressive)
+            # OR if achieved time exceeds target (not aggressive enough to hit limits)
+            # Allow tolerance for rounding errors
+            time_below_minimum = min_achievable_total_time - target_total_time
+            time_above_target = total_moving_time - target_moving_time
+            
+            if time_below_minimum > TARGET_TIME_TOLERANCE_MINUTES or time_above_target > TARGET_TIME_TOLERANCE_MINUTES:
+                # Target was not achievable
                 # Format times for warning message
-                target_total_time_str = format_time(target_moving_time + total_cp_time)
+                target_total_time_str = format_time(target_total_time)
                 min_achievable_str = format_time(min_achievable_total_time)
                 
                 target_time_warning = (
