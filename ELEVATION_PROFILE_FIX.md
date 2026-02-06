@@ -68,6 +68,8 @@ x: {
 ```javascript
 x: {
     type: 'linear',  // Force linear scale based on numeric x values
+    min: 0,          // Start at 0 km
+    max: elevationProfile[elevationProfile.length - 1].distance,  // End at total distance
     title: {
         display: true,
         text: 'Distance (km)',
@@ -98,6 +100,7 @@ x: {
 
 **Impact:**
 - `type: 'linear'` ensures proportional distance representation
+- `min: 0` and `max: totalDistance` bounds the x-axis to the exact race distance (no whitespace)
 - Dynamic `stepSize` adapts to route distance (1-25 km intervals)
 - Tick labels show actual distance values, not array indices
 - `autoSkip: true` automatically adjusts tick density based on plot width

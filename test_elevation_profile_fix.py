@@ -135,6 +135,33 @@ def test_app_js_changes():
         tests_failed += 1
     print()
     
+    # Test 9: Verify x-axis min/max bounds
+    print("Test 9: X-axis bounded to actual distance range")
+    x_axis_match = re.search(
+        r"x:\s*\{[^}]*type:\s*['\"]linear['\"][^}]*\}",
+        content,
+        re.DOTALL
+    )
+    if x_axis_match:
+        x_axis_config = x_axis_match.group(0)
+        has_min = "min: 0" in x_axis_config or "min:0" in x_axis_config
+        has_max = "max: elevationProfile[elevationProfile.length - 1].distance" in x_axis_config
+        
+        if has_min and has_max:
+            print("  ✓ PASS: X-axis has min: 0 and max: totalDistance")
+            print("    - Prevents whitespace beyond race distance")
+            tests_passed += 1
+        else:
+            if not has_min:
+                print("  ✗ FAIL: X-axis min not set to 0")
+            if not has_max:
+                print("  ✗ FAIL: X-axis max not set to total distance")
+            tests_failed += 1
+    else:
+        print("  ⚠ WARNING: Could not find x-axis configuration")
+        tests_failed += 1
+    print()
+    
     # Summary
     print("=" * 70)
     print("SUMMARY")
@@ -148,6 +175,7 @@ def test_app_js_changes():
         print()
         print("Expected Benefits:")
         print("  • X-axis represents cumulative distance linearly")
+        print("  • X-axis bounded to 0 to total distance (no whitespace)")
         print("  • Graticules evenly spaced and adapt to total distance")
         print("  • Visual distortion from GPX sampling eliminated")
         print("  • On 102km route, 50km point appears at ~50% (not ~25%)")

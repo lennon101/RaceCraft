@@ -622,6 +622,8 @@ function renderElevationChart(elevationProfile, segments) {
             scales: {
                 x: {
                     type: 'linear',
+                    min: 0,
+                    max: elevationProfile[elevationProfile.length - 1].distance,
                     title: {
                         display: true,
                         text: 'Distance (km)',
