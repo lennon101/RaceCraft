@@ -1,6 +1,15 @@
 // Constants
 const MAX_CHECKPOINTS = 30;
 
+// Helper function to safely get element by trying multiple IDs (for backward compatibility)
+function safeGetElementById(...ids) {
+    for (const id of ids) {
+        const elem = document.getElementById(id);
+        if (elem) return elem;
+    }
+    return null;
+}
+
 // Helper to convert a string to Unicode bold (for tooltips)
 function toUnicodeBold(str) {
     const map = {
@@ -668,7 +677,8 @@ function clearAllInputs() {
     document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
-    document.getElementById('carbs-per-serving').value = '';
+    const clearServingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+    if (clearServingInput) clearServingInput.value = '';
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
     document.getElementById('fitness-level').value = 'recreational';
@@ -1130,7 +1140,8 @@ async function calculateRacePlan() {
     const skillLevel = parseFloat(document.getElementById('skill-level').value) || 0.5;
     
     // Get carbs per serving (optional)
-    const carbsPerServingInput = document.getElementById('carbs-per-serving').value;
+    const carbsPerServingElem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+    const carbsPerServingInput = carbsPerServingElem ? carbsPerServingElem.value : '';
     const carbsPerServing = carbsPerServingInput && carbsPerServingInput.trim() !== '' ? parseFloat(carbsPerServingInput) : null;
     
     // Get pacing mode and target time
@@ -1458,7 +1469,10 @@ async function savePlan(forceSaveAs = false) {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
-        carbs_per_serving: document.getElementById('carbs-per-serving').value ? parseFloat(document.getElementById('carbs-per-serving').value) : null,
+        carbs_per_serving: (function() {
+            const elem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            return elem && elem.value ? parseFloat(elem.value) : null;
+        })(),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -1802,7 +1816,10 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-serving').value = data.carbs_per_serving || data.carbs_per_gel || '';
+            const servingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            if (servingInput) {
+                servingInput.value = data.carbs_per_serving || data.carbs_per_gel || '';
+            }
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
@@ -1895,8 +1912,10 @@ async function exportCurrentPlan() {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value) || 60,
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value) || 500,
-        carbs_per_serving: document.getElementById('carbs-per-serving').value ? 
-                       parseFloat(document.getElementById('carbs-per-serving').value) : null,
+        carbs_per_serving: (function() {
+            const elem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            return elem && elem.value ? parseFloat(elem.value) : null;
+        })(),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -2025,7 +2044,12 @@ async function handleImportPlan(event) {
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
             document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-serving').value = data.carbs_per_serving || data.carbs_per_gel || '';
+            // Use helper to support both old and new element IDs during transition
+            const importServingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            if (importServingInput) {
+                importServingInput.value = data.carbs_per_serving || data.carbs_per_gel || '';
+            }
+            
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
             document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
