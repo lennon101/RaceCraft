@@ -2523,7 +2523,7 @@ def export_csv():
             has_serving_data = any('num_servings' in dropbag or 'num_gels' in dropbag for dropbag in dropbag_contents)  # Check both for backward compatibility
             
             if has_serving_data:
-                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Servings', 'Actual Carbs (g)', 'Hydration Target (L)'])
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Energy Servings', 'Actual Carbs (g)', 'Hydration Target (L)'])
                 for dropbag in dropbag_contents:
                     writer.writerow([
                         dropbag['checkpoint'], 
@@ -2737,7 +2737,7 @@ def export_pdf():
             has_serving_data = any('num_servings' in db or 'num_gels' in db for db in dropbag_contents)  # Check both for backward compatibility
             
             if has_serving_data:
-                db_headers = ['Checkpoint', 'Carbs Target', 'Num Servings', 'Actual Carbs', 'Hydration']
+                db_headers = ['Checkpoint', 'Carbs Target', 'Num Energy Servings', 'Actual Carbs', 'Hydration']
                 db_data = [db_headers]
                 for db in dropbag_contents:
                     db_data.append([
@@ -2817,7 +2817,7 @@ def export_pdf():
                     # Nutrition info
                     num_servings = db.get('num_servings') or db.get('num_gels', 0)  # Try new name first, fallback to old
                     if num_servings:
-                        tag_content.append(Paragraph(f"<b>Servings:</b> {num_servings}", 
+                        tag_content.append(Paragraph(f"<b>Energy servings:</b> {num_servings}", 
                                                     ParagraphStyle('TagInfo', fontSize=11, 
                                                                  alignment=TA_LEFT)))
                     else:

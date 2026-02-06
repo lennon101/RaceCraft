@@ -537,15 +537,14 @@ function renderElevationChart(elevationProfile, segments) {
                                             labels.push('');
                                             const bolded = `${prevLabel} dropbag contents:`;
                                             labels.push(toUnicodeBold(bolded));
-                                            let planLine = '';
                                             if (dropbag.num_servings !== undefined || dropbag.num_gels !== undefined) {
                                                 // Try new name first, fallback to old for backward compatibility
                                                 const servingCount = dropbag.num_servings || dropbag.num_gels;
-                                                planLine = `Servings: ${servingCount}, Hydration: ${dropbag.hydration}L`;
+                                                labels.push(`Energy servings: ${servingCount}`);
+                                                labels.push(`Hydration: ${dropbag.hydration}L`);
                                             } else {
-                                                planLine = `Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
+                                                labels.push(`Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`);
                                             }
-                                            labels.push(planLine);
                                         }
                                     }
                                 }
@@ -1360,7 +1359,7 @@ function displayResults(data) {
             dropbagTableHeader.innerHTML = `
                 <th>Checkpoint</th>
                 <th>Carb Target (g)</th>
-                <th>Number of Servings</th>
+                <th>Number of Energy Servings</th>
                 <th>Actual Carbs (g)</th>
                 <th>Hydration Target (L)</th>
             `;
