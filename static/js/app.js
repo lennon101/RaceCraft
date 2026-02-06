@@ -1852,6 +1852,7 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('climbing-ability').value = planData.climbing_ability;
             document.getElementById('carbs-per-hour').value = planData.carbs_per_hour;
             document.getElementById('water-per-hour').value = planData.water_per_hour;
+            // Optional fields: use empty string for UI if null (these fields allow empty values)
             document.getElementById('carbs-per-gel').value = planData.carbs_per_gel || '';
             document.getElementById('race-start-time').value = planData.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = planData.fatigue_enabled;
@@ -2075,6 +2076,7 @@ async function handleImportPlan(event) {
             document.getElementById('climbing-ability').value = data.climbing_ability;
             document.getElementById('carbs-per-hour').value = data.carbs_per_hour;
             document.getElementById('water-per-hour').value = data.water_per_hour;
+            // Optional fields: use empty string for UI if null (these fields allow empty values)
             document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
             document.getElementById('race-start-time').value = data.race_start_time || '';
             document.getElementById('fatigue-enabled').checked = data.fatigue_enabled;

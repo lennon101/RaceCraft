@@ -1,7 +1,7 @@
 # Graceful Handling of Missing Values in JSON Race Plans
 
 ## Overview
-As of version 1.6.x, RaceCraft now gracefully handles missing or incomplete fields when importing or loading JSON race plan files. This ensures backward compatibility with older exported plans and prevents import errors due to missing data.
+As of version 1.6.1+, RaceCraft gracefully handles missing or incomplete fields when importing or loading JSON race plan files. This ensures backward compatibility with older exported plans and prevents import errors due to missing data.
 
 ## Problem
 Previously, importing older or incomplete JSON race plan files could result in errors such as:
@@ -135,7 +135,7 @@ function applyDefaultValues(planData) {
 Both functions are called automatically during import/load operations, so users don't need to take any special action.
 
 ## Versioning
-This feature was added in version 1.6.1 (or later) as part of the effort to improve robustness and backward compatibility.
+This feature was added in version 1.6.1+ as part of the effort to improve robustness and backward compatibility.
 
 ---
 
