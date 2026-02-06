@@ -1359,7 +1359,7 @@ function displayResults(data) {
             dropbagTableHeader.innerHTML = `
                 <th>Checkpoint</th>
                 <th>Carb Target (g)</th>
-                <th>Number of Energy Servings</th>
+                <th>Energy Servings</th>
                 <th>Actual Carbs (g)</th>
                 <th>Hydration Target (L)</th>
             `;

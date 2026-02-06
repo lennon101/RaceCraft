@@ -2737,7 +2737,7 @@ def export_pdf():
             has_serving_data = any('num_servings' in db or 'num_gels' in db for db in dropbag_contents)  # Check both for backward compatibility
             
             if has_serving_data:
-                db_headers = ['Checkpoint', 'Carbs Target', 'Num Energy Servings', 'Actual Carbs', 'Hydration']
+                db_headers = ['Checkpoint', 'Carbs Target', 'Energy Servings', 'Actual Carbs', 'Hydration']
                 db_data = [db_headers]
                 for db in dropbag_contents:
                     db_data.append([
@@ -2747,7 +2747,7 @@ def export_pdf():
                         f"{db.get('actual_carbs', 0):.0f}g" if db.get('actual_carbs') else '',
                         f"{db.get('hydration', 0):.2f}L"
                     ])
-                col_widths = [1.5*inch, 1.2*inch, 1*inch, 1.2*inch, 1.2*inch]
+                col_widths = [1.5*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch]
             else:
                 db_headers = ['Checkpoint', 'Carbs Target', 'Hydration']
                 db_data = [db_headers]
