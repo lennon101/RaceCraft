@@ -1,7 +1,10 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.6.1
+Version: v1.6.2
 Release Date: Feb 05, 2026
+
+Major Changes in v1.6.2:
+- added cache busting to static assets by appending version query parameter in template
 
 Major Changes in v1.6.1:
 - TERMINOLOGY UPDATE: Renamed "Gels/Sachets" to "Servings" throughout the application
@@ -162,8 +165,34 @@ else:
 
 app = Flask(__name__)
 
+# Extract version from docstring or use environment variable
+def extract_app_version():
+    """Extract version from module docstring or environment variable."""
+    version = os.environ.get('APP_VERSION')
+    if version:
+        return version
+    
+    # Try to extract from docstring
+    docstring = __doc__
+    if docstring:
+        for line in docstring.split('\n'):
+            if line.strip().startswith('Version:'):
+                return line.split('Version:')[1].strip()
+    
+    # Fallback to unknown
+    return 'unknown'
+
+APP_VERSION = extract_app_version()
+log_message(f"RaceCraft version: {APP_VERSION}")
+
 # Configure WhiteNoise for static file serving in production
-app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
+# Add cache headers for static assets to support cache busting
+app.wsgi_app = WhiteNoise(
+    app.wsgi_app, 
+    root='static/', 
+    prefix='static/',
+    max_age=0 if os.environ.get('FLASK_ENV') == 'development' else 31536000  # No cache in dev, 1 year in prod with versioning
+)
 
 # Configure paths - use local paths for development, Docker paths for production
 if os.environ.get('FLASK_ENV') == 'production' or os.path.exists('/app'):
@@ -852,7 +881,7 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving=
 @app.route('/')
 def index():
     """Render main page."""
-    return render_template('index.html')
+    return render_template('index.html', app_version=APP_VERSION)
 
 @app.route('/robots.txt')
 def robots():
@@ -3360,7 +3389,7 @@ def claim_unowned_plan():
 @app.route('/about')
 def about():
     """Render the About page."""
-    return render_template('about.html')
+    return render_template('about.html', app_version=APP_VERSION)
 
 
 @app.route('/docs')
@@ -3375,7 +3404,7 @@ def documentation(doc_path=None):
     
     # If no specific doc requested, show the index
     if not doc_path:
-        return render_template('docs.html', doc_structure=doc_structure, content=None, current_doc=None)
+        return render_template('docs.html', doc_structure=doc_structure, content=None, current_doc=None, app_version=APP_VERSION)
     
     # Construct the file path
     doc_file = os.path.join(docs_base, doc_path)
@@ -3413,7 +3442,8 @@ def documentation(doc_path=None):
         return render_template('docs.html', 
                              doc_structure=doc_structure, 
                              content=html_content, 
-                             current_doc=doc_path)
+                             current_doc=doc_path,
+                             app_version=APP_VERSION)
     else:
         return "Documentation not found", 404
 

@@ -5,9 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About - RaceCraft</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='fav-icon-circle.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ app_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}?v={{ app_version }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <!-- App Version for Frontend -->
+    <script>
+        window.APP_VERSION = '{{ app_version }}';
+        window.CLIENT_STORAGE_VERSION = 'v1.6.1'; // Update when localStorage schema changes
+    </script>
 </head>
 <body>
     <div class="container">
@@ -149,6 +154,6 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/navigation.js') }}?v={{ app_version }}"></script>
 </body>
 </html>
