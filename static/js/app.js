@@ -153,6 +153,61 @@ const knownRaceSearch = document.getElementById('known-race-search');
 const knownRacesList = document.getElementById('known-races-list');
 const knownRaceCancelBtn = document.getElementById('known-race-cancel-btn');
 
+// Helper function to apply default values for missing plan fields
+function applyDefaultValues(planData) {
+    // Create a new object with all default values
+    const defaults = {
+        // Core plan configuration
+        plan_name: null,
+        gpx_filename: null,
+        checkpoint_distances: [],
+        checkpoint_dropbags: [],
+        segment_terrain_types: [],
+        
+        // Athlete configuration
+        avg_cp_time: 5,
+        z2_pace: 6.5,
+        climbing_ability: 'moderate',
+        carbs_per_hour: 60,
+        water_per_hour: 500,
+        carbs_per_gel: null,
+        race_start_time: null,
+        
+        // Fatigue & fitness
+        fatigue_enabled: true,
+        fitness_level: 'recreational',
+        skill_level: 0.5,
+        
+        // Calculated results (optional)
+        segments: null,
+        summary: null,
+        elevation_profile: null,
+        dropbag_contents: null,
+        
+        // Target time mode fields (if present)
+        pacing_mode: 'base_pace',
+        target_time_hours: null,
+        target_time_minutes: null,
+        target_time_seconds: null
+    };
+    
+    // Merge planData with defaults, preferring planData values when they exist
+    const result = { ...defaults };
+    
+    for (const key in planData) {
+        if (planData[key] !== undefined && planData[key] !== null) {
+            result[key] = planData[key];
+        }
+    }
+    
+    // Ensure arrays are always arrays (even if they come as null)
+    result.checkpoint_distances = Array.isArray(result.checkpoint_distances) ? result.checkpoint_distances : [];
+    result.checkpoint_dropbags = Array.isArray(result.checkpoint_dropbags) ? result.checkpoint_dropbags : [];
+    result.segment_terrain_types = Array.isArray(result.segment_terrain_types) ? result.segment_terrain_types : [];
+    
+    return result;
+}
+
 // Pacing mode elements
 const pacingModeBaseRadio = document.getElementById('pacing-mode-base');
 const pacingModeTargetRadio = document.getElementById('pacing-mode-target');
@@ -1768,36 +1823,39 @@ async function loadPlan(filename, source = 'local') {
         const data = await response.json();
 
         if (response.ok) {
+            // Apply default values to handle missing fields gracefully
+            const planData = applyDefaultValues(data);
+            
             // Track the loaded filename for save/save-as functionality
             currentPlan.loadedFilename = filename;
             currentPlan.loadedSource = source;  // Track source for future saves
             
             // Store plan name (from data or filename without .json)
-            currentPlan.planName = data.plan_name || filename.replace(/\.json$/, '');
+            currentPlan.planName = planData.plan_name || filename.replace(/\.json$/, '');
             
             // Update the race plan title to show the loaded plan name
             updateRacePlanTitle(currentPlan.planName);
             
             // Load plan data into form
-            currentPlan.gpx_filename = data.gpx_filename;
-            currentPlan.checkpoint_distances = data.checkpoint_distances || [];
-            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
-            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
+            currentPlan.gpx_filename = planData.gpx_filename;
+            currentPlan.checkpoint_distances = planData.checkpoint_distances;
+            currentPlan.checkpoint_dropbags = planData.checkpoint_dropbags;
+            currentPlan.segment_terrain_types = planData.segment_terrain_types;
             
             // Set total_distance early (before validation) to avoid showing stale distance in error messages
-            if (data.summary && data.summary.total_distance !== undefined && data.summary.total_distance !== null) {
-                currentPlan.total_distance = data.summary.total_distance;
+            if (planData.summary && planData.summary.total_distance !== undefined && planData.summary.total_distance !== null) {
+                currentPlan.total_distance = planData.summary.total_distance;
             }
             
             // Update the GPX file display to show the loaded GPX filename
-            if (data.gpx_filename) {
-                fileNameDisplay.textContent = data.gpx_filename;
+            if (planData.gpx_filename) {
+                fileNameDisplay.textContent = planData.gpx_filename;
             }
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
-            document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            document.getElementById('avg-cp-time').value = planData.avg_cp_time;
             
-            const z2Pace = data.z2_pace || 6.5;
+            const z2Pace = planData.z2_pace;
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
@@ -1812,22 +1870,31 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('z2-pace-min').value = paceMin;
             document.getElementById('z2-pace-sec').value = paceSec;
             
-            document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
-            document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
-            document.getElementById('water-per-hour').value = data.water_per_hour || 500;
+            // Required fields with sensible defaults
+            document.getElementById('climbing-ability').value = planData.climbing_ability || 'moderate';
+            document.getElementById('carbs-per-hour').value = planData.carbs_per_hour ?? 60;
+            document.getElementById('water-per-hour').value = planData.water_per_hour ?? 500;
+
+            // Serving / gel compatibility (new + legacy)
             const servingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
             if (servingInput) {
-                servingInput.value = data.carbs_per_serving || data.carbs_per_gel || '';
+                servingInput.value = planData.carbs_per_serving ?? planData.carbs_per_gel ?? '';
             }
-            document.getElementById('race-start-time').value = data.race_start_time || '';
-            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
-            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
-            
+
+            // Optional fields (allow empty UI values)
+            document.getElementById('race-start-time').value = planData.race_start_time || '';
+
+            // Fatigue + fitness handling
+            const fatigueEnabled = planData.fatigue_enabled !== undefined ? planData.fatigue_enabled : true;
+
+            document.getElementById('fatigue-enabled').checked = fatigueEnabled;
+            document.getElementById('fitness-level').value = planData.fitness_level || 'recreational';
+            document.getElementById('fitness-level').disabled = !fatigueEnabled;
+
             // Load terrain settings
-            const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
+            const hasTerrainTypes = planData.segment_terrain_types && planData.segment_terrain_types.some(t => t !== 'smooth_trail');
             document.getElementById('terrain-enabled').checked = hasTerrainTypes;
-            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            document.getElementById('skill-level').value = planData.skill_level;
             terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
             // Generate checkpoint inputs and populate (this will restore dropbag checkboxes)
@@ -1837,19 +1904,19 @@ async function loadPlan(filename, source = 'local') {
             validateCheckpointDistances();
 
             // Load results if available
-            if (data.segments && data.summary) {
-                currentPlan.segments = data.segments;
-                currentPlan.summary = data.summary;
-                currentPlan.total_distance = data.summary.total_distance;
-                currentPlan.race_start_time = data.race_start_time;
-                currentPlan.elevation_profile = data.elevation_profile || null;
-                currentPlan.dropbag_contents = data.dropbag_contents || null;
+            if (planData.segments && planData.summary) {
+                currentPlan.segments = planData.segments;
+                currentPlan.summary = planData.summary;
+                currentPlan.total_distance = planData.summary.total_distance;
+                currentPlan.race_start_time = planData.race_start_time;
+                currentPlan.elevation_profile = planData.elevation_profile;
+                currentPlan.dropbag_contents = planData.dropbag_contents;
                 
                 // If no elevation profile, recalculate to get it
                 if (!currentPlan.elevation_profile) {
                     calculateRacePlan();
                 } else {
-                    displayResults(data);
+                    displayResults(planData);
                 }
                 
                 saveBtn.disabled = false;
@@ -2004,8 +2071,8 @@ async function handleImportPlan(event) {
         const result = await response.json();
 
         if (response.ok) {
-            // Load the imported plan data into the form
-            const data = result.plan;
+            // Apply default values to handle missing fields gracefully
+            const data = applyDefaultValues(result.plan);
             
             // Clear current plan tracking
             currentPlan.loadedFilename = null;
@@ -2018,14 +2085,14 @@ async function handleImportPlan(event) {
             
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
-            currentPlan.checkpoint_distances = data.checkpoint_distances || [];
-            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
-            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
+            currentPlan.checkpoint_distances = data.checkpoint_distances;
+            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags;
+            currentPlan.segment_terrain_types = data.segment_terrain_types;
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
-            document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            document.getElementById('avg-cp-time').value = data.avg_cp_time;
             
-            const z2Pace = data.z2_pace || 6.5;
+            const z2Pace = data.z2_pace;
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
@@ -2040,24 +2107,29 @@ async function handleImportPlan(event) {
             document.getElementById('z2-pace-min').value = paceMin;
             document.getElementById('z2-pace-sec').value = paceSec;
             
+            // Required fields with defaults
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
-            document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
-            document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            // Use helper to support both old and new element IDs during transition
+
+            document.getElementById('carbs-per-hour').value = data.carbs_per_hour ?? 60;
+
+            document.getElementById('water-per-hour').value = data.water_per_hour ?? 500;
+
+            // Serving / gel compatibility (new + legacy)
             const importServingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
             if (importServingInput) {
-                importServingInput.value = data.carbs_per_serving || data.carbs_per_gel || '';
+                importServingInput.value =
+                    data.carbs_per_serving ?? data.carbs_per_gel ?? '';
             }
-            
+          
             document.getElementById('race-start-time').value = data.race_start_time || '';
-            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
-            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled;
+            document.getElementById('fitness-level').value = data.fitness_level;
+            document.getElementById('fitness-level').disabled = !data.fatigue_enabled;
             
             // Load terrain settings
             const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
             document.getElementById('terrain-enabled').checked = hasTerrainTypes;
-            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            document.getElementById('skill-level').value = data.skill_level;
             terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
             // Generate checkpoint inputs
@@ -2069,8 +2141,8 @@ async function handleImportPlan(event) {
                 currentPlan.summary = data.summary;
                 currentPlan.total_distance = data.summary.total_distance;
                 currentPlan.race_start_time = data.race_start_time;
-                currentPlan.elevation_profile = data.elevation_profile || null;
-                currentPlan.dropbag_contents = data.dropbag_contents || null;
+                currentPlan.elevation_profile = data.elevation_profile;
+                currentPlan.dropbag_contents = data.dropbag_contents;
                 
                 displayResults(data);
                 
@@ -2078,7 +2150,7 @@ async function handleImportPlan(event) {
                 exportBtn.disabled = false;
             }
 
-            hideModal(exportImportModal);
+            // Note: No modal to hide for direct file import
             alert('Plan imported successfully!');
         } else {
             alert('Error importing plan: ' + result.error);
