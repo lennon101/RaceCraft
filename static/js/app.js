@@ -1,6 +1,135 @@
 // Constants
 const MAX_CHECKPOINTS = 30;
 
+// ============================================================
+// Cache Busting & Client State Versioning System
+// ============================================================
+
+/**
+ * Unregister any legacy Service Workers that might be controlling the page.
+ * This prevents stale cached content from persisting across deployments.
+ */
+function unregisterServiceWorkers() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            if (registrations.length > 0) {
+                console.log(`Found ${registrations.length} service worker(s) - unregistering...`);
+                registrations.forEach(function(registration) {
+                    registration.unregister().then(function(success) {
+                        if (success) {
+                            console.log('Service Worker unregistered successfully');
+                        }
+                    });
+                });
+            }
+        }).catch(function(error) {
+            console.warn('Error checking service workers:', error);
+        });
+    }
+}
+
+/**
+ * Check client storage version and clear if mismatch detected.
+ * This ensures old saved UI state doesn't break new logic after updates.
+ */
+function checkClientStorageVersion() {
+    const STORAGE_VERSION_KEY = 'racecraft_storage_version';
+    const currentVersion = window.CLIENT_STORAGE_VERSION || window.APP_VERSION || 'unknown';
+    const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+    
+    if (storedVersion && storedVersion !== currentVersion) {
+        console.log(`Client storage version mismatch: stored=${storedVersion}, current=${currentVersion}`);
+        console.log('Clearing localStorage to prevent compatibility issues...');
+        
+        // Clear all localStorage except Supabase auth tokens
+        const keysToPreserve = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            // Preserve Supabase auth data
+            if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+                keysToPreserve.push({ key, value: localStorage.getItem(key) });
+            }
+        }
+        
+        // Clear all
+        localStorage.clear();
+        
+        // Restore preserved keys
+        keysToPreserve.forEach(item => {
+            localStorage.setItem(item.key, item.value);
+        });
+        
+        // Set new version
+        localStorage.setItem(STORAGE_VERSION_KEY, currentVersion);
+        
+        console.log(`✓ Client storage upgraded to version ${currentVersion}`);
+        
+        // Show user-friendly notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 10000;
+            font-size: 14px;
+            text-align: center;
+        `;
+        notification.textContent = '✓ App updated to latest version';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.transition = 'opacity 0.3s';
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    } else if (!storedVersion) {
+        // First time, just set the version
+        localStorage.setItem(STORAGE_VERSION_KEY, currentVersion);
+        console.log(`Client storage initialized at version ${currentVersion}`);
+    } else {
+        console.log(`Client storage version OK: ${currentVersion}`);
+    }
+}
+
+/**
+ * Log application version information
+ */
+function logVersionInfo() {
+    const appVersion = window.APP_VERSION || 'unknown';
+    const storageVersion = window.CLIENT_STORAGE_VERSION || window.APP_VERSION || 'unknown';
+    
+    console.log('='.repeat(50));
+    console.log('RaceCraft - Race Fuel & Pacing Planner');
+    console.log('='.repeat(50));
+    console.log(`App Version:     ${appVersion}`);
+    console.log(`Storage Version: ${storageVersion}`);
+    console.log(`User Agent:      ${navigator.userAgent}`);
+    console.log('='.repeat(50));
+}
+
+/**
+ * Initialize cache busting and versioning system
+ * Must be called before any other app initialization
+ */
+function initializeCacheBusting() {
+    logVersionInfo();
+    unregisterServiceWorkers();
+    checkClientStorageVersion();
+}
+
+// Run cache busting initialization immediately
+initializeCacheBusting();
+
+// ============================================================
+// End Cache Busting System
+// ============================================================
+
 // Helper function to safely get element by trying multiple IDs (for backward compatibility)
 function safeGetElementById(...ids) {
     for (const id of ids) {
