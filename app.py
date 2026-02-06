@@ -1,7 +1,14 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.6.0-target-time-mode
-Release Date: Feb 02, 2026
+Version: v1.7.0-serving-terminology
+Release Date: Feb 05, 2026
+
+Major Changes in v1.7.0-serving-terminology:
+- TERMINOLOGY UPDATE: Renamed "Gels/Sachets" to "Servings" throughout the application
+  - UI labels, variable names, API fields, and exports all updated
+  - Maintains backward compatibility: accepts both carbs_per_gel and carbs_per_serving in API
+  - CSV/PDF exports now display "Number of Servings" instead of "Number of Gels"
+  - Hover tooltips and documentation updated with new terminology
 
 Major Changes in v1.6.0-target-time-mode:
 - New Target Time Mode: Plan by desired finish time instead of pace
@@ -31,7 +38,7 @@ Major Changes in v1.4.0:
 Major Changes in v1.3.4:
 - fix decimal input validation for numeric fields
     - Change input type from 'number' to 'text' for all decimal-input fields
-    - Fields updated: avg-cp-time, carbs-per-hour, water-per-hour, carbs-per-gel, checkpoint-distances
+    - Fields updated: avg-cp-time, carbs-per-hour, water-per-hour, carbs-per-serving, checkpoint-distances
     - Enables proper JavaScript control over decimal input without browser interference
 
 Major Changes in v1.3.3:
@@ -57,7 +64,7 @@ Major Changes in v1.3.0:
 
 Major Changes in v1.2.2:
 - Add drop bag plan to each of the tooltip hovers in the elevation profile plot #26
-- Fix incorrect gel count in drop bag plan when carbs per gel is specified 
+- Fix incorrect serving count in drop bag plan when carbs per serving is specified 
 - Fix incorrect hover info tooltip for skill level in index.html
 - Update export_csv function to improve checkpoint naming format in CSV output
 
@@ -729,7 +736,7 @@ def format_time(minutes):
     secs = int((minutes % 1) * 60)
     return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None):
+def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving=None):
     """
     Calculate dropbag contents for each checkpoint with a dropbag, plus starting supplies.
     
@@ -745,12 +752,12 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
     Args:
         segments: List of calculated segments with target_carbs and target_water
         checkpoint_dropbags: List of booleans indicating which checkpoints have dropbags
-        carbs_per_gel: Optional carbs per gel/sachet in grams. If provided, calculates gel quantities.
+        carbs_per_serving: Optional carbs per serving in grams. If provided, calculates serving quantities.
         
     Returns:
         List of dropbag contents: [{'checkpoint': 'Start', 'carbs': 20, 'hydration': 0.2},
                                      {'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5, 
-                                      'num_gels': 5, 'actual_carbs': 125}, ...]
+                                      'num_servings': 5, 'actual_carbs': 125}, ...]
     """
     dropbag_contents = []
     
@@ -765,11 +772,11 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
             'hydration': round(start_segment['target_water'], 1)
         }
         
-        # Add gel calculations if carbs_per_gel is provided
-        if carbs_per_gel and carbs_per_gel > 0:
-            num_gels = round(carb_target / carbs_per_gel)
-            actual_carbs = round(num_gels * carbs_per_gel, 2)
-            start_item['num_gels'] = num_gels
+        # Add serving calculations if carbs_per_serving is provided
+        if carbs_per_serving and carbs_per_serving > 0:
+            num_servings = round(carb_target / carbs_per_serving)
+            actual_carbs = round(num_servings * carbs_per_serving, 2)
+            start_item['num_servings'] = num_servings
             start_item['actual_carbs'] = actual_carbs
         
         dropbag_contents.append(start_item)
@@ -825,11 +832,11 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
             'hydration': round(contents['hydration'], 1)
         }
         
-        # Add gel calculations if carbs_per_gel is provided
-        if carbs_per_gel and carbs_per_gel > 0:
-            num_gels = round(carb_target / carbs_per_gel)  # Round to nearest whole number
-            actual_carbs = round(num_gels * carbs_per_gel, 2)
-            dropbag_item['num_gels'] = num_gels
+        # Add serving calculations if carbs_per_serving is provided
+        if carbs_per_serving and carbs_per_serving > 0:
+            num_servings = round(carb_target / carbs_per_serving)  # Round to nearest whole number
+            actual_carbs = round(num_servings * carbs_per_serving, 2)
+            dropbag_item['num_servings'] = num_servings
             dropbag_item['actual_carbs'] = actual_carbs
         
         dropbag_contents.append(dropbag_item)
@@ -1629,11 +1636,12 @@ def calculate():
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
         carbs_per_hour = float(data.get('carbs_per_hour', DEFAULT_CARBS_PER_HOUR))
         water_per_hour = float(data.get('water_per_hour', DEFAULT_WATER_PER_HOUR))
-        carbs_per_gel = data.get('carbs_per_gel')  # Optional: carbs per gel/sachet
-        if carbs_per_gel is not None and carbs_per_gel != '':
-            carbs_per_gel = float(carbs_per_gel)
+        # Get carbs per serving (maintain backward compatibility with carbs_per_gel)
+        carbs_per_serving = data.get('carbs_per_serving') or data.get('carbs_per_gel')  # Try new name first, fallback to old
+        if carbs_per_serving is not None and carbs_per_serving != '':
+            carbs_per_serving = float(carbs_per_serving)
         else:
-            carbs_per_gel = None
+            carbs_per_serving = None
         climbing_ability = data.get('climbing_ability', 'moderate')
         race_start_time = data.get('race_start_time')  # "HH:MM" or None
         
@@ -1870,8 +1878,8 @@ def calculate():
                 'time_of_day': time_of_day
             }
             
-            if carbs_per_gel and carbs_per_gel > 0:
-                segment_data['num_gels'] = round(target_carbs / carbs_per_gel)
+            if carbs_per_serving and carbs_per_serving > 0:
+                segment_data['num_servings'] = round(target_carbs / carbs_per_serving)
             
             segments.append(segment_data)
         
@@ -1992,7 +2000,7 @@ def calculate():
                 elevation_profile = elevation_profile[::step]
         
         # Calculate dropbag contents
-        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
+        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving)
         
         # Calculate effort thresholds for target time mode
         effort_thresholds = None
@@ -2062,7 +2070,8 @@ def save_plan():
             'climbing_ability': data.get('climbing_ability'),
             'carbs_per_hour': data.get('carbs_per_hour'),
             'water_per_hour': data.get('water_per_hour'),
-            'carbs_per_gel': data.get('carbs_per_gel'),
+            'carbs_per_serving': data.get('carbs_per_serving') or data.get('carbs_per_gel'),  # Return new name, fallback to old
+            'carbs_per_gel': data.get('carbs_per_serving') or data.get('carbs_per_gel'),  # Keep for backward compatibility
             'race_start_time': data.get('race_start_time'),
             'fatigue_enabled': data.get('fatigue_enabled'),
             'fitness_level': data.get('fitness_level'),
@@ -2575,16 +2584,16 @@ def export_csv():
             writer.writerow([])
             writer.writerow(['DROP BAG CONTENTS'])
             
-            # Check if gel data is present
-            has_gel_data = any('num_gels' in dropbag for dropbag in dropbag_contents)
+            # Check if serving data is present
+            has_serving_data = any('num_servings' in dropbag or 'num_gels' in dropbag for dropbag in dropbag_contents)  # Check both for backward compatibility
             
-            if has_gel_data:
-                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Gels', 'Actual Carbs (g)', 'Hydration Target (L)'])
+            if has_serving_data:
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Energy Servings', 'Actual Carbs (g)', 'Hydration Target (L)'])
                 for dropbag in dropbag_contents:
                     writer.writerow([
                         dropbag['checkpoint'], 
                         dropbag['carbs'], 
-                        dropbag.get('num_gels', ''),
+                        dropbag.get('num_servings') or dropbag.get('num_gels', ''),  # Try new name first, fallback to old
                         dropbag.get('actual_carbs', ''),
                         dropbag['hydration']
                     ])
@@ -2790,20 +2799,20 @@ def export_pdf():
             dropbag_section.append(Paragraph("Drop Bag Contents", heading_style))
             
             # Build drop bag table
-            has_gel_data = any('num_gels' in db for db in dropbag_contents)
+            has_serving_data = any('num_servings' in db or 'num_gels' in db for db in dropbag_contents)  # Check both for backward compatibility
             
-            if has_gel_data:
-                db_headers = ['Checkpoint', 'Carbs Target', 'Num Gels', 'Actual Carbs', 'Hydration']
+            if has_serving_data:
+                db_headers = ['Checkpoint', 'Carbs Target', 'Energy Servings', 'Actual Carbs', 'Hydration']
                 db_data = [db_headers]
                 for db in dropbag_contents:
                     db_data.append([
                         db.get('checkpoint', ''),
                         f"{db.get('carbs', 0):.0f}g",
-                        str(db.get('num_gels', '')),
+                        str(db.get('num_servings') or db.get('num_gels', '')),  # Try new name first, fallback to old
                         f"{db.get('actual_carbs', 0):.0f}g" if db.get('actual_carbs') else '',
                         f"{db.get('hydration', 0):.2f}L"
                     ])
-                col_widths = [1.5*inch, 1.2*inch, 1*inch, 1.2*inch, 1.2*inch]
+                col_widths = [1.5*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch]
             else:
                 db_headers = ['Checkpoint', 'Carbs Target', 'Hydration']
                 db_data = [db_headers]
@@ -2871,9 +2880,9 @@ def export_pdf():
                                                              spaceAfter=8)))
                     
                     # Nutrition info
-                    num_gels = db.get('num_gels', 0)
-                    if num_gels:
-                        tag_content.append(Paragraph(f"<b>Gels:</b> {num_gels}", 
+                    num_servings = db.get('num_servings') or db.get('num_gels', 0)  # Try new name first, fallback to old
+                    if num_servings:
+                        tag_content.append(Paragraph(f"<b>Energy servings:</b> {num_servings}", 
                                                     ParagraphStyle('TagInfo', fontSize=11, 
                                                                  alignment=TA_LEFT)))
                     else:
