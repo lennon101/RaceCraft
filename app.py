@@ -1,7 +1,20 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.6.0-target-time-mode
-Release Date: Feb 02, 2026
+Version: v1.6.1
+Release Date: Feb 05, 2026
+
+Major Changes in v1.6.1:
+- TERMINOLOGY UPDATE: Renamed "Gels/Sachets" to "Servings" throughout the application
+  - UI labels, variable names, API fields, and exports all updated
+  - Maintains backward compatibility: accepts both carbs_per_gel and carbs_per_serving in API
+  - CSV/PDF exports now display "Number of Servings" instead of "Number of Gels"
+  - Hover tooltips and documentation updated with new terminology
+- added about page with markdown content and new navigation menu 
+- resolved bug with target time validation where achieved times slightly above target were incorrectly flagged as invalid due to strict equality check - now uses a tolerance window to allow for minor allocation variability while still enforcing realistic target times
+- replaced cp input toggle with button 
+- removed export/import button 
+- new pdf export with improved formatting and elevation profile integration
+- elevation profile plot now uses linear distance scale with bounded range
 
 Major Changes in v1.6.0-target-time-mode:
 - New Target Time Mode: Plan by desired finish time instead of pace
@@ -31,7 +44,7 @@ Major Changes in v1.4.0:
 Major Changes in v1.3.4:
 - fix decimal input validation for numeric fields
     - Change input type from 'number' to 'text' for all decimal-input fields
-    - Fields updated: avg-cp-time, carbs-per-hour, water-per-hour, carbs-per-gel, checkpoint-distances
+    - Fields updated: avg-cp-time, carbs-per-hour, water-per-hour, carbs-per-serving, checkpoint-distances
     - Enables proper JavaScript control over decimal input without browser interference
 
 Major Changes in v1.3.3:
@@ -57,7 +70,7 @@ Major Changes in v1.3.0:
 
 Major Changes in v1.2.2:
 - Add drop bag plan to each of the tooltip hovers in the elevation profile plot #26
-- Fix incorrect gel count in drop bag plan when carbs per gel is specified 
+- Fix incorrect serving count in drop bag plan when carbs per serving is specified 
 - Fix incorrect hover info tooltip for skill level in index.html
 - Update export_csv function to improve checkpoint naming format in CSV output
 
@@ -86,6 +99,16 @@ import platform
 from functools import wraps
 from dotenv import load_dotenv
 from whitenoise import WhiteNoise
+import markdown2
+import re
+import base64
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from PIL import Image as PILImage
 
 # Load environment variables
 load_dotenv()
@@ -169,6 +192,8 @@ os.makedirs(app.config['KNOWN_RACES_FOLDER'], exist_ok=True)
 # Constants
 DEFAULT_CARBS_PER_HOUR = 60.0
 DEFAULT_WATER_PER_HOUR = 500.0
+TARGET_TIME_TOLERANCE_MINUTES = 5.0  # Tolerance for target time validation when achieved > target (allocation algorithm variability ~2-4 min)
+TARGET_TIME_MINIMUM_TOLERANCE_MINUTES = 0.01  # Minimal tolerance for target < minimum (36 seconds - catches real differences)
 
 # Climbing ability parameters - vertical speed in m/h
 # Updated to more realistic values for mountain runners
@@ -643,8 +668,8 @@ def adjust_pace_for_elevation(base_pace, elevation_gain, elevation_loss, distanc
     # === Calculate base segment time using additive model ===
     
     # 1. Horizontal movement time (minutes)
-    flat_speed_kmh = 60.0 / base_pace  # Convert min/km to km/h
-    horizontal_time = (distance_km / flat_speed_kmh) * 60.0  # minutes
+    base_pace_kmh = 60.0 / base_pace  # Convert min/km to km/h
+    horizontal_time = (distance_km / base_pace_kmh) * 60.0  # minutes
     
     # 2. Climbing time (minutes)
     if elevation_gain > 0:
@@ -717,7 +742,7 @@ def format_time(minutes):
     secs = int((minutes % 1) * 60)
     return f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None):
+def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving=None):
     """
     Calculate dropbag contents for each checkpoint with a dropbag, plus starting supplies.
     
@@ -733,12 +758,12 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
     Args:
         segments: List of calculated segments with target_carbs and target_water
         checkpoint_dropbags: List of booleans indicating which checkpoints have dropbags
-        carbs_per_gel: Optional carbs per gel/sachet in grams. If provided, calculates gel quantities.
+        carbs_per_serving: Optional carbs per serving in grams. If provided, calculates serving quantities.
         
     Returns:
         List of dropbag contents: [{'checkpoint': 'Start', 'carbs': 20, 'hydration': 0.2},
                                      {'checkpoint': 'CP1', 'carbs': 120, 'hydration': 1.5, 
-                                      'num_gels': 5, 'actual_carbs': 125}, ...]
+                                      'num_servings': 5, 'actual_carbs': 125}, ...]
     """
     dropbag_contents = []
     
@@ -753,11 +778,11 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
             'hydration': round(start_segment['target_water'], 1)
         }
         
-        # Add gel calculations if carbs_per_gel is provided
-        if carbs_per_gel and carbs_per_gel > 0:
-            num_gels = round(carb_target / carbs_per_gel)
-            actual_carbs = round(num_gels * carbs_per_gel, 2)
-            start_item['num_gels'] = num_gels
+        # Add serving calculations if carbs_per_serving is provided
+        if carbs_per_serving and carbs_per_serving > 0:
+            num_servings = round(carb_target / carbs_per_serving)
+            actual_carbs = round(num_servings * carbs_per_serving, 2)
+            start_item['num_servings'] = num_servings
             start_item['actual_carbs'] = actual_carbs
         
         dropbag_contents.append(start_item)
@@ -813,11 +838,11 @@ def calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel=None
             'hydration': round(contents['hydration'], 1)
         }
         
-        # Add gel calculations if carbs_per_gel is provided
-        if carbs_per_gel and carbs_per_gel > 0:
-            num_gels = round(carb_target / carbs_per_gel)  # Round to nearest whole number
-            actual_carbs = round(num_gels * carbs_per_gel, 2)
-            dropbag_item['num_gels'] = num_gels
+        # Add serving calculations if carbs_per_serving is provided
+        if carbs_per_serving and carbs_per_serving > 0:
+            num_servings = round(carb_target / carbs_per_serving)  # Round to nearest whole number
+            actual_carbs = round(num_servings * carbs_per_serving, 2)
+            dropbag_item['num_servings'] = num_servings
             dropbag_item['actual_carbs'] = actual_carbs
         
         dropbag_contents.append(dropbag_item)
@@ -1295,11 +1320,11 @@ def allocate_effort_to_target(target_time_minutes, segments_data, natural_result
         # Apply adjustment
         if delta_t > 0:  # Going faster (natural > target, need to speed up)
             adjusted_time = natural_time - segment_adjustment
-            effort_level = 'push' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'push' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t>0 (faster), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         else:  # Going slower (natural < target, need to slow down)
             adjusted_time = natural_time + segment_adjustment
-            effort_level = 'protect' if segment_adjustment / natural_time >= 0.10 else 'steady'
+            effort_level = 'protect' if natural_time > 0 and segment_adjustment / natural_time >= 0.10 else 'steady'
             log_message(f"DEBUG seg{i}: delta_t<0 (slower), natural={natural_time:.2f}, adj={segment_adjustment:.2f} ({adjustment_pct:.1f}%), effort={effort_level}")
         
         adjusted_pace = adjusted_time / distance_km if distance_km > 0 else natural_pace
@@ -1617,11 +1642,12 @@ def calculate():
         z2_pace = float(data.get('z2_pace', 6.5))  # in minutes per km
         carbs_per_hour = float(data.get('carbs_per_hour', DEFAULT_CARBS_PER_HOUR))
         water_per_hour = float(data.get('water_per_hour', DEFAULT_WATER_PER_HOUR))
-        carbs_per_gel = data.get('carbs_per_gel')  # Optional: carbs per gel/sachet
-        if carbs_per_gel is not None and carbs_per_gel != '':
-            carbs_per_gel = float(carbs_per_gel)
+        # Get carbs per serving (maintain backward compatibility with carbs_per_gel)
+        carbs_per_serving = data.get('carbs_per_serving') or data.get('carbs_per_gel')  # Try new name first, fallback to old
+        if carbs_per_serving is not None and carbs_per_serving != '':
+            carbs_per_serving = float(carbs_per_serving)
         else:
-            carbs_per_gel = None
+            carbs_per_serving = None
         climbing_ability = data.get('climbing_ability', 'moderate')
         race_start_time = data.get('race_start_time')  # "HH:MM" or None
         
@@ -1858,8 +1884,8 @@ def calculate():
                 'time_of_day': time_of_day
             }
             
-            if carbs_per_gel and carbs_per_gel > 0:
-                segment_data['num_gels'] = round(target_carbs / carbs_per_gel)
+            if carbs_per_serving and carbs_per_serving > 0:
+                segment_data['num_servings'] = round(target_carbs / carbs_per_serving)
             
             segments.append(segment_data)
         
@@ -1868,6 +1894,92 @@ def calculate():
         total_carbs = sum(s['target_carbs'] for s in segments)
         total_water = sum(s['target_water'] for s in segments)
         total_cp_time = avg_cp_time * num_checkpoints
+        
+        # Validate target time achievement if in target time mode
+        target_time_warning = None
+        if use_target_time:
+            # Calculate target total time for warning message
+            target_total_time = target_moving_time + total_cp_time
+            
+            # Calculate natural pacing total time (stable reference that never changes)
+            # Natural pacing represents steady-effort time without target optimization
+            if natural_results and all('natural_time' in r for r in natural_results):
+                natural_moving_time = sum(r['natural_time'] for r in natural_results)
+                natural_total_time = natural_moving_time + total_cp_time
+            else:
+                # Fallback if natural_results not available (shouldn't happen in target time mode)
+                natural_total_time = None
+            
+            # Calculate TRUE minimum achievable time (independent of target)
+            # This represents the absolute fastest time possible with maximum effort
+            # By using zero/negative target, we force the algorithm to max out effort everywhere
+            minimum_achievable_total_time = None
+            if natural_results:
+                try:
+                    # Use impossible target (0 or negative) to force maximum effort allocation
+                    # This ensures algorithm maxes out all segments within fitness/ability constraints
+                    impossible_target = 0.0  # Moving time of 0 (physically impossible)
+                    min_effort_results = allocate_effort_to_target(
+                        impossible_target, segments_basic_data, natural_results,
+                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
+                    )
+                    if min_effort_results:
+                        min_moving_time = sum(r['segment_time'] for r in min_effort_results)
+                        minimum_achievable_total_time = min_moving_time + total_cp_time
+                except Exception as e:
+                    log_message(f"Could not calculate minimum achievable time: {e}")
+                    minimum_achievable_total_time = None
+            
+            # Check if achieved time exceeds target significantly
+            # NOTE: We don't check if target is below theoretical minimum because:
+            # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
+            # - Cost-weighted allocation can't achieve this in practice
+            # - This created false "too aggressive" warnings causing circular behavior
+            # - Better to only warn if algorithm ACTUALLY can't achieve the target
+            time_above_target = total_moving_time - target_moving_time
+            
+            # Only show warning if achieved time significantly exceeds target
+            achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
+            
+            # Generate warning if target couldn't be achieved
+            if achieved_above_target:
+                target_total_time_str = format_time(target_total_time)
+                
+                # Common suggestion text
+                suggestions = (
+                    "Consider: (1) increasing your target time{target_hint}, (2) improving base pace, "
+                    "(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
+                )
+                
+                # Build warning message with stable references (independent of target)
+                if natural_total_time is not None and minimum_achievable_total_time is not None:
+                    natural_total_time_str = format_time(natural_total_time)
+                    minimum_achievable_time_str = format_time(minimum_achievable_total_time)
+                    target_hint = f" (ideally to {minimum_achievable_time_str} or more)"
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"Minimum achievable time: {minimum_achievable_time_str} (max effort), "
+                        f"Natural pacing: {natural_total_time_str} (steady effort). "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                elif natural_total_time is not None:
+                    # Fallback: only natural pacing available
+                    natural_total_time_str = format_time(natural_total_time)
+                    target_hint = f" (ideally to {natural_total_time_str} or more)"
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        f"With steady effort, your natural pacing would take {natural_total_time_str}. "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                else:
+                    # Fallback if neither reference available
+                    target_hint = ""
+                    target_time_warning = (
+                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
+                        + suggestions.format(target_hint=target_hint)
+                    )
+                
+                log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
         
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
@@ -1894,7 +2006,7 @@ def calculate():
                 elevation_profile = elevation_profile[::step]
         
         # Calculate dropbag contents
-        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_gel)
+        dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving)
         
         # Calculate effort thresholds for target time mode
         effort_thresholds = None
@@ -1928,6 +2040,10 @@ def calculate():
         if effort_thresholds:
             response_data['effort_thresholds'] = effort_thresholds
         
+        # Add target time warning if present
+        if target_time_warning:
+            response_data['target_time_warning'] = target_time_warning
+        
         return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
@@ -1960,7 +2076,8 @@ def save_plan():
             'climbing_ability': data.get('climbing_ability'),
             'carbs_per_hour': data.get('carbs_per_hour'),
             'water_per_hour': data.get('water_per_hour'),
-            'carbs_per_gel': data.get('carbs_per_gel'),
+            'carbs_per_serving': data.get('carbs_per_serving') or data.get('carbs_per_gel'),  # Return new name, fallback to old
+            'carbs_per_gel': data.get('carbs_per_serving') or data.get('carbs_per_gel'),  # Keep for backward compatibility
             'race_start_time': data.get('race_start_time'),
             'fatigue_enabled': data.get('fatigue_enabled'),
             'fitness_level': data.get('fitness_level'),
@@ -2309,7 +2426,68 @@ def export_plan():
 
 @app.route('/api/import-plan', methods=['POST'])
 def import_plan():
-    """Import a single plan from JSON file."""
+    """Import a single plan from JSON file with graceful handling of missing fields."""
+    
+    def apply_plan_defaults(plan_data):
+        """Apply default values for missing fields in plan data."""
+        defaults = {
+            # Core plan configuration
+            'plan_name': None,
+            'gpx_filename': None,
+            'checkpoint_distances': [],
+            'checkpoint_dropbags': [],
+            'segment_terrain_types': [],
+            
+            # Athlete configuration
+            'avg_cp_time': 5,
+            'z2_pace': 6.5,
+            'climbing_ability': 'moderate',
+            'carbs_per_hour': 60,
+            'water_per_hour': 500,
+            'carbs_per_gel': None,
+            'race_start_time': None,
+            
+            # Fatigue & fitness
+            'fatigue_enabled': True,
+            'fitness_level': 'recreational',
+            'skill_level': 0.5,
+            
+            # Calculated results (optional)
+            'segments': None,
+            'summary': None,
+            'elevation_profile': None,
+            'dropbag_contents': None,
+            
+            # Target time mode fields (if present)
+            'pacing_mode': 'base_pace',
+            'target_time_hours': None,
+            'target_time_minutes': None,
+            'target_time_seconds': None
+        }
+        
+        # Create result dict with defaults
+        result = {}
+        for key, default_value in defaults.items():
+            if key in plan_data and plan_data[key] is not None:
+                result[key] = plan_data[key]
+            else:
+                result[key] = default_value
+        
+        # Preserve any additional fields not in defaults
+        for key in plan_data:
+            if key not in result:
+                result[key] = plan_data[key]
+        
+        # Ensure arrays are always arrays (even if they come as null)
+        if not isinstance(result['checkpoint_distances'], list):
+            result['checkpoint_distances'] = []
+        if not isinstance(result['checkpoint_dropbags'], list):
+            result['checkpoint_dropbags'] = []
+        if not isinstance(result['segment_terrain_types'], list):
+            result['segment_terrain_types'] = []
+        
+        return result
+    
     try:
         data = request.json
         if data is None:
@@ -2334,13 +2512,17 @@ def import_plan():
         if plan_data is None or not isinstance(plan_data, dict):
             return jsonify({'error': 'Invalid format: unable to find valid plan data'}), 400
         
+        # Apply default values to handle missing fields gracefully
+        plan_data_with_defaults = apply_plan_defaults(plan_data)
+        
         # Return the plan data so the frontend can load it
         return jsonify({
             'message': 'Plan imported successfully',
-            'plan': plan_data
+            'plan': plan_data_with_defaults
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/api/export-csv', methods=['POST'])
 def export_csv():
@@ -2408,16 +2590,16 @@ def export_csv():
             writer.writerow([])
             writer.writerow(['DROP BAG CONTENTS'])
             
-            # Check if gel data is present
-            has_gel_data = any('num_gels' in dropbag for dropbag in dropbag_contents)
+            # Check if serving data is present
+            has_serving_data = any('num_servings' in dropbag or 'num_gels' in dropbag for dropbag in dropbag_contents)  # Check both for backward compatibility
             
-            if has_gel_data:
-                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Gels', 'Actual Carbs (g)', 'Hydration Target (L)'])
+            if has_serving_data:
+                writer.writerow(['Checkpoint', 'Carb Target (g)', 'Number of Energy Servings', 'Actual Carbs (g)', 'Hydration Target (L)'])
                 for dropbag in dropbag_contents:
                     writer.writerow([
                         dropbag['checkpoint'], 
                         dropbag['carbs'], 
-                        dropbag.get('num_gels', ''),
+                        dropbag.get('num_servings') or dropbag.get('num_gels', ''),  # Try new name first, fallback to old
                         dropbag.get('actual_carbs', ''),
                         dropbag['hydration']
                     ])
@@ -2434,6 +2616,355 @@ def export_csv():
                         download_name=csv_filename, 
                         mimetype='text/csv')
     except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/export-pdf', methods=['POST'])
+def export_pdf():
+    """Export race plan to PDF with configurable sections."""
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Extract configuration options
+        options = data.get('options', {})
+        include_elevation = options.get('elevation_profile', False)
+        include_race_plan = options.get('race_plan_table', False)
+        include_drop_bags = options.get('drop_bag_table', False)
+        include_tags = options.get('drop_bag_tags', False)
+        
+        # Extract user info for tags - get race_name from options first
+        tag_race_name = options.get('race_name', '').strip()
+        bib_number = options.get('bib_number', '')
+        runner_name = options.get('runner_name', '')
+        
+        # Get race name from data (fallback if not in options)
+        race_name = data.get('race_name', 'Race Plan')
+        
+        # Use tag_race_name if provided, otherwise use race_name
+        if tag_race_name:
+            race_name = tag_race_name
+        
+        # Extract race plan data
+        segments = data.get('segments', [])
+        summary = data.get('summary', {})
+        elevation_profile_data = data.get('elevation_profile')
+        dropbag_contents = data.get('dropbag_contents', [])
+        race_start_time = data.get('race_start_time')
+        
+        # Generate PDF in memory
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, 
+                               topMargin=0.5*inch, bottomMargin=0.5*inch,
+                               leftMargin=0.5*inch, rightMargin=0.5*inch)
+        
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#2563eb'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=12,
+            spaceBefore=20
+        )
+        
+        # Title
+        story.append(Paragraph(race_name, title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Summary section (always included) - wrapped in KeepTogether
+        summary_section = []
+        summary_section.append(Paragraph("Race Summary", heading_style))
+        summary_data = [
+            ['Total Distance', f"{summary.get('total_distance', 0):.2f} km"],
+            ['Moving Time', summary.get('total_moving_time_str', '--')],
+            ['CP Time', summary.get('total_cp_time_str', '--')],
+            ['Total Time', summary.get('total_race_time_str', '--')],
+            ['Elevation Gain', f"{summary.get('total_elev_gain', 0):.0f} m"],
+            ['Total Carbs', f"{summary.get('total_carbs', 0):.0f} g"],
+            ['Total Water', f"{summary.get('total_water', 0):.2f} L"]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+        ]))
+        summary_section.append(summary_table)
+        
+        # Add summary as a single unit that stays together
+        story.append(KeepTogether(summary_section))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Elevation Profile
+        if include_elevation and elevation_profile_data:
+            elevation_section = []
+            elevation_section.append(Paragraph("Elevation Profile", heading_style))
+            try:
+                # Validate and decode base64 image
+                if elevation_profile_data.startswith('data:'):
+                    # Data URI format: data:image/png;base64,<data>
+                    image_data = elevation_profile_data.split(',', 1)[1] if ',' in elevation_profile_data else elevation_profile_data
+                else:
+                    # Raw base64 data
+                    image_data = elevation_profile_data
+                
+                image_bytes = base64.b64decode(image_data)
+                
+                # Load with PIL to get dimensions and convert if needed
+                pil_image = PILImage.open(io.BytesIO(image_bytes))
+                
+                # Save to a new buffer in a format ReportLab can handle
+                img_buffer = io.BytesIO()
+                pil_image.save(img_buffer, format='PNG')
+                img_buffer.seek(0)
+                
+                # Create ReportLab image
+                img = Image(img_buffer, width=7*inch, height=3*inch)
+                elevation_section.append(img)
+                story.append(KeepTogether(elevation_section))
+                story.append(Spacer(1, 0.3*inch))
+            except Exception as e:
+                log_message(f"Error adding elevation profile: {str(e)}")
+                story.append(Paragraph(f"<i>Error loading elevation profile</i>", styles['Normal']))
+                story.append(Spacer(1, 0.3*inch))
+        
+        # Race Plan Table
+        if include_race_plan and segments:
+            race_plan_section = []
+            race_plan_section.append(Paragraph("Race Plan", heading_style))
+            
+            # Build table headers
+            headers = ['CP', 'Name', 'Dist (km)', 'Elev +/-', 'Time', 'Pace', 'Carbs', 'Water']
+            if race_start_time:
+                headers.append('Arrival')
+            
+            # Build table data
+            table_data = [headers]
+            
+            for i, seg in enumerate(segments):
+                row = [
+                    str(i + 1),
+                    seg.get('to', ''),
+                    f"{seg.get('cumulative_distance', 0):.1f}",
+                    f"+{seg.get('elev_gain', 0):.0f}/-{seg.get('elev_loss', 0):.0f}",
+                    seg.get('cumulative_time_str', ''),
+                    seg.get('pace_str', ''),
+                    f"{seg.get('target_carbs', 0):.0f}g",
+                    f"{seg.get('target_water', 0):.2f}L"
+                ]
+                if race_start_time:
+                    row.append(seg.get('time_of_day', ''))
+                table_data.append(row)
+            
+            # Calculate column widths
+            if race_start_time:
+                col_widths = [0.4*inch, 1.2*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.7*inch, 0.9*inch]
+            else:
+                col_widths = [0.4*inch, 1.5*inch, 0.8*inch, 1*inch, 1*inch, 0.9*inch, 0.7*inch, 0.8*inch]
+            
+            race_table = Table(table_data, colWidths=col_widths)
+            race_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563eb')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
+            ]))
+            race_plan_section.append(race_table)
+            story.append(KeepTogether(race_plan_section))
+            story.append(Spacer(1, 0.3*inch))
+        
+        # Drop Bag Table
+        if include_drop_bags and dropbag_contents:
+            dropbag_section = []
+            dropbag_section.append(Paragraph("Drop Bag Contents", heading_style))
+            
+            # Build drop bag table
+            has_serving_data = any('num_servings' in db or 'num_gels' in db for db in dropbag_contents)  # Check both for backward compatibility
+            
+            if has_serving_data:
+                db_headers = ['Checkpoint', 'Carbs Target', 'Energy Servings', 'Actual Carbs', 'Hydration']
+                db_data = [db_headers]
+                for db in dropbag_contents:
+                    db_data.append([
+                        db.get('checkpoint', ''),
+                        f"{db.get('carbs', 0):.0f}g",
+                        str(db.get('num_servings') or db.get('num_gels', '')),  # Try new name first, fallback to old
+                        f"{db.get('actual_carbs', 0):.0f}g" if db.get('actual_carbs') else '',
+                        f"{db.get('hydration', 0):.2f}L"
+                    ])
+                col_widths = [1.5*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch]
+            else:
+                db_headers = ['Checkpoint', 'Carbs Target', 'Hydration']
+                db_data = [db_headers]
+                for db in dropbag_contents:
+                    db_data.append([
+                        db.get('checkpoint', ''),
+                        f"{db.get('carbs', 0):.0f}g",
+                        f"{db.get('hydration', 0):.2f}L"
+                    ])
+                col_widths = [2*inch, 2*inch, 2*inch]
+            
+            db_table = Table(db_data, colWidths=col_widths)
+            db_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0fdf4')])
+            ]))
+            dropbag_section.append(db_table)
+            story.append(KeepTogether(dropbag_section))
+            story.append(Spacer(1, 0.3*inch))
+        
+        # Drop Bag Tags
+        if include_tags and dropbag_contents:
+            story.append(PageBreak())
+            story.append(Paragraph("Drop Bag Tags", title_style))
+            story.append(Paragraph("<i>Cut along the lines and attach to drop bags</i>", 
+                                 ParagraphStyle('Italic', parent=styles['Normal'], 
+                                              alignment=TA_CENTER, fontSize=10, 
+                                              textColor=colors.grey, spaceAfter=20)))
+            
+            # Create tags for each drop bag (excluding "Start")
+            tags_per_row = 2
+            tag_width = 3.5 * inch
+            tag_height = 2.5 * inch
+            
+            # Filter out "Start" checkpoint
+            dropbag_tags = [db for db in dropbag_contents if db.get('checkpoint', '').lower() != 'start']
+            
+            for i in range(0, len(dropbag_tags), tags_per_row):
+                row_tags = dropbag_tags[i:i+tags_per_row]
+                
+                # Create a row of tags
+                tag_cells = []
+                for db in row_tags:
+                    # Build tag content
+                    tag_content = []
+                    
+                    # Race name
+                    tag_content.append(Paragraph(f"<b>{race_name}</b>", 
+                                                ParagraphStyle('TagRace', fontSize=12, 
+                                                             alignment=TA_CENTER, 
+                                                             textColor=colors.HexColor('#1e40af'))))
+                    
+                    # Checkpoint
+                    tag_content.append(Paragraph(f"<font size=16><b>{db.get('checkpoint', '')}</b></font>", 
+                                                ParagraphStyle('TagCP', fontSize=16, 
+                                                             alignment=TA_CENTER,
+                                                             spaceAfter=8)))
+                    
+                    # Nutrition info
+                    num_servings = db.get('num_servings') or db.get('num_gels', 0)  # Try new name first, fallback to old
+                    if num_servings:
+                        tag_content.append(Paragraph(f"<b>Energy servings:</b> {num_servings}", 
+                                                    ParagraphStyle('TagInfo', fontSize=11, 
+                                                                 alignment=TA_LEFT)))
+                    else:
+                        tag_content.append(Paragraph(f"<b>Carbs:</b> {db.get('carbs', 0):.0f}g", 
+                                                    ParagraphStyle('TagInfo', fontSize=11, 
+                                                                 alignment=TA_LEFT)))
+                    
+                    tag_content.append(Paragraph(f"<b>Water:</b> {db.get('hydration', 0):.2f}L", 
+                                                ParagraphStyle('TagInfo', fontSize=11, 
+                                                             alignment=TA_LEFT)))
+                    
+                    # Bib number
+                    if bib_number:
+                        tag_content.append(Paragraph(f"<b>Bib:</b> {bib_number}", 
+                                                    ParagraphStyle('TagBib', fontSize=11, 
+                                                                 alignment=TA_LEFT, 
+                                                                 spaceAfter=4)))
+                    
+                    # Runner name (if space and provided)
+                    if runner_name:
+                        tag_content.append(Paragraph(f"<i>{runner_name}</i>", 
+                                                    ParagraphStyle('TagName', fontSize=9, 
+                                                                 alignment=TA_CENTER,
+                                                                 textColor=colors.grey)))
+                    
+                    # Create a mini-table for this tag
+                    tag_table = Table([[c] for c in tag_content], colWidths=[tag_width - 0.2*inch])
+                    tag_table.setStyle(TableStyle([
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ]))
+                    
+                    tag_cells.append(tag_table)
+                
+                # Pad with empty cell if odd number of tags
+                if len(tag_cells) == 1:
+                    tag_cells.append('')
+                
+                # Create the row table
+                tags_row = Table([tag_cells], colWidths=[tag_width, tag_width])
+                tags_row.setStyle(TableStyle([
+                    ('BOX', (0, 0), (-1, -1), 2, colors.black),
+                    ('INNERGRID', (0, 0), (-1, -1), 1, colors.grey),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ]))
+                
+                story.append(tags_row)
+                story.append(Spacer(1, 0.3*inch))
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Get PDF content
+        pdf_buffer.seek(0)
+        pdf_content = pdf_buffer.getvalue()
+        
+        # Generate filename with proper sanitization
+        # Remove special characters that may be invalid in filenames (consistent with frontend)
+        safe_race_name = re.sub(r'[^a-zA-Z0-9_-]', '_', race_name)
+        pdf_filename = f"{safe_race_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return send_file(io.BytesIO(pdf_content), 
+                        as_attachment=True, 
+                        download_name=pdf_filename, 
+                        mimetype='application/pdf')
+        
+    except Exception as e:
+        log_message(f"Error generating PDF: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 400
 
 
@@ -2824,6 +3355,137 @@ def claim_unowned_plan():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to claim plan: {str(e)}'}), 500
+
+
+@app.route('/about')
+def about():
+    """Render the About page."""
+    return render_template('about.html')
+
+
+@app.route('/docs')
+@app.route('/docs/')
+@app.route('/docs/<path:doc_path>')
+def documentation(doc_path=None):
+    """Render documentation pages with markdown content from /docs folder."""
+    docs_base = os.path.join(os.path.dirname(__file__), 'docs')
+    
+    # Get all documentation files organized by category
+    doc_structure = get_docs_structure()
+    
+    # If no specific doc requested, show the index
+    if not doc_path:
+        return render_template('docs.html', doc_structure=doc_structure, content=None, current_doc=None)
+    
+    # Construct the file path
+    doc_file = os.path.join(docs_base, doc_path)
+    if not doc_file.endswith('.md'):
+        doc_file += '.md'
+    
+    # Security check - ensure the path is within docs directory
+    if not os.path.abspath(doc_file).startswith(os.path.abspath(docs_base)):
+        return "Invalid document path", 404
+    
+    # Read and render markdown
+    if os.path.exists(doc_file):
+        with open(doc_file, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+        
+        # Convert markdown to HTML with extras
+        # Security Note: Markdown files are part of the repository and controlled by repo owners.
+        # Only trusted documentation should be added to the /docs folder.
+        # If allowing user-uploaded markdown in the future, add HTML sanitization with bleach.
+        html_content = markdown2.markdown(
+            markdown_content,
+            extras=[
+                'fenced-code-blocks',
+                'tables',
+                'header-ids',
+                'code-friendly',
+                'strike',
+                'task_list'
+            ]
+        )
+        
+        # Process internal links to other .md files
+        html_content = process_doc_links(html_content)
+        
+        return render_template('docs.html', 
+                             doc_structure=doc_structure, 
+                             content=html_content, 
+                             current_doc=doc_path)
+    else:
+        return "Documentation not found", 404
+
+
+def get_docs_structure():
+    """
+    Scan the /docs folder and return a structured dict of documentation files
+    organized by folder (category).
+    """
+    docs_base = os.path.join(os.path.dirname(__file__), 'docs')
+    structure = {}
+    
+    if not os.path.exists(docs_base):
+        return structure
+    
+    # Walk through the docs directory
+    for root, dirs, files in os.walk(docs_base):
+        # Get relative path from docs base
+        rel_path = os.path.relpath(root, docs_base)
+        
+        # Skip hidden directories
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        
+        # Filter markdown files
+        md_files = [f for f in files if f.endswith('.md') and not f.startswith('.')]
+        
+        if md_files:
+            # Use folder name as category, or 'root' for top-level files
+            category = rel_path if rel_path != '.' else 'root'
+            category_name = category.replace('_', ' ').title() if category != 'root' else 'General'
+            
+            if category not in structure:
+                structure[category] = {
+                    'name': category_name,
+                    'files': []
+                }
+            
+            # Add files to this category
+            for md_file in sorted(md_files):
+                file_path = os.path.join(rel_path, md_file) if rel_path != '.' else md_file
+                file_name = md_file[:-3]  # Remove .md extension
+                display_name = file_name.replace('_', ' ').replace('-', ' ')
+                
+                structure[category]['files'].append({
+                    'path': file_path[:-3],  # Remove .md for URL
+                    'name': display_name,
+                    'filename': md_file
+                })
+    
+    return structure
+
+
+def process_doc_links(html_content):
+    """
+    Process internal markdown links to point to the documentation viewer.
+    Converts links like [text](OTHER_DOC.md) to [text](/docs/OTHER_DOC)
+    """
+    # Pattern to match markdown links ending in .md
+    pattern = r'href="([^"]+\.md)"'
+    
+    def replace_link(match):
+        link = match.group(1)
+        # Remove .md extension
+        clean_link = link[:-3] if link.endswith('.md') else link
+        
+        # Remove leading slash if present to avoid double slashes
+        if clean_link.startswith('/'):
+            clean_link = clean_link[1:]
+        
+        return f'href="/docs/{clean_link}"'
+    
+    return re.sub(pattern, replace_link, html_content)
 
 
 if __name__ == '__main__':

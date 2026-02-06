@@ -1,6 +1,15 @@
 // Constants
 const MAX_CHECKPOINTS = 30;
 
+// Helper function to safely get element by trying multiple IDs (for backward compatibility)
+function safeGetElementById(...ids) {
+    for (const id of ids) {
+        const elem = document.getElementById(id);
+        if (elem) return elem;
+    }
+    return null;
+}
+
 // Helper to convert a string to Unicode bold (for tooltips)
 function toUnicodeBold(str) {
     const map = {
@@ -99,13 +108,15 @@ const racePlanTitle = document.getElementById('race-plan-title');
 // Modal elements
 const saveModal = document.getElementById('save-modal');
 const loadModal = document.getElementById('load-modal');
-const exportImportModal = document.getElementById('export-import-modal');
+const exportOptionsModal = document.getElementById('export-options-modal');
+const pdfOptionsModal = document.getElementById('pdf-options-modal');
 const saveConfirmBtn = document.getElementById('save-confirm-btn');
 const saveAsBtn = document.getElementById('save-as-btn');
 const saveCancelBtn = document.getElementById('save-cancel-btn');
 const loadCancelBtn = document.getElementById('load-cancel-btn');
 const importUnownedPlansBtn = document.getElementById('import-unowned-plans-btn');
-const exportImportCancelBtn = document.getElementById('export-import-cancel-btn');
+const exportOptionsCancelBtn = document.getElementById('export-options-cancel-btn');
+const pdfOptionsCancelBtn = document.getElementById('pdf-options-cancel-btn');
 const planNameInput = document.getElementById('plan-name');
 const plansList = document.getElementById('plans-list');
 const clearBtn = document.getElementById('clear-btn');
@@ -116,10 +127,24 @@ const terrainSkillContainer = document.getElementById('terrain-skill-container')
 const terrainDifficultiesContainer = document.getElementById('terrain-difficulties');
 const skillLevelInput = document.getElementById('skill-level');
 const defaultTerrainTypeInput = document.getElementById('default-terrain-type');
-const exportImportBtn = document.getElementById('export-import-btn');
-const exportPlanBtn = document.getElementById('export-plan-btn');
-const importPlanBtn = document.getElementById('import-plan-btn');
+const importPlanBtnDirect = document.getElementById('import-plan-btn-direct');
 const importPlanFileInput = document.getElementById('import-plan-file-input');
+
+// Export options modal elements
+const exportPdfBtn = document.getElementById('export-pdf-btn');
+const exportBackupBtn = document.getElementById('export-backup-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+
+// PDF options modal elements
+const pdfIncludeElevation = document.getElementById('pdf-include-elevation');
+const pdfIncludeRacePlan = document.getElementById('pdf-include-race-plan');
+const pdfIncludeDropbags = document.getElementById('pdf-include-dropbags');
+const pdfIncludeTags = document.getElementById('pdf-include-tags');
+const pdfTagOptions = document.getElementById('pdf-tag-options');
+const pdfRaceName = document.getElementById('pdf-race-name');
+const pdfBibNumber = document.getElementById('pdf-bib-number');
+const pdfRunnerName = document.getElementById('pdf-runner-name');
+const pdfGenerateBtn = document.getElementById('pdf-generate-btn');
 
 // Known Race modal elements
 const loadKnownRaceBtn = document.getElementById('load-known-race-btn');
@@ -127,6 +152,61 @@ const knownRaceModal = document.getElementById('known-race-modal');
 const knownRaceSearch = document.getElementById('known-race-search');
 const knownRacesList = document.getElementById('known-races-list');
 const knownRaceCancelBtn = document.getElementById('known-race-cancel-btn');
+
+// Helper function to apply default values for missing plan fields
+function applyDefaultValues(planData) {
+    // Create a new object with all default values
+    const defaults = {
+        // Core plan configuration
+        plan_name: null,
+        gpx_filename: null,
+        checkpoint_distances: [],
+        checkpoint_dropbags: [],
+        segment_terrain_types: [],
+        
+        // Athlete configuration
+        avg_cp_time: 5,
+        z2_pace: 6.5,
+        climbing_ability: 'moderate',
+        carbs_per_hour: 60,
+        water_per_hour: 500,
+        carbs_per_gel: null,
+        race_start_time: null,
+        
+        // Fatigue & fitness
+        fatigue_enabled: true,
+        fitness_level: 'recreational',
+        skill_level: 0.5,
+        
+        // Calculated results (optional)
+        segments: null,
+        summary: null,
+        elevation_profile: null,
+        dropbag_contents: null,
+        
+        // Target time mode fields (if present)
+        pacing_mode: 'base_pace',
+        target_time_hours: null,
+        target_time_minutes: null,
+        target_time_seconds: null
+    };
+    
+    // Merge planData with defaults, preferring planData values when they exist
+    const result = { ...defaults };
+    
+    for (const key in planData) {
+        if (planData[key] !== undefined && planData[key] !== null) {
+            result[key] = planData[key];
+        }
+    }
+    
+    // Ensure arrays are always arrays (even if they come as null)
+    result.checkpoint_distances = Array.isArray(result.checkpoint_distances) ? result.checkpoint_distances : [];
+    result.checkpoint_dropbags = Array.isArray(result.checkpoint_dropbags) ? result.checkpoint_dropbags : [];
+    result.segment_terrain_types = Array.isArray(result.segment_terrain_types) ? result.segment_terrain_types : [];
+    
+    return result;
+}
 
 // Pacing mode elements
 const pacingModeBaseRadio = document.getElementById('pacing-mode-base');
@@ -136,6 +216,7 @@ const targetTimeInputs = document.getElementById('target-time-inputs');
 const targetTimeHoursInput = document.getElementById('target-time-hours');
 const targetTimeMinutesInput = document.getElementById('target-time-minutes');
 const targetTimeSecondsInput = document.getElementById('target-time-seconds');
+const targetTimeWarning = document.getElementById('target-time-warning');
 
 // Event Listeners
 gpxFileInput.addEventListener('change', handleGPXUpload);
@@ -157,18 +238,32 @@ numCheckpointsInput.addEventListener('input', () => {
 calculateBtn.addEventListener('click', calculateRacePlan);
 saveBtn.addEventListener('click', showSaveModal);
 loadBtn.addEventListener('click', showLoadModal);
-exportBtn.addEventListener('click', exportToCSV);
+exportBtn.addEventListener('click', showExportOptionsModal);
 clearBtn.addEventListener('click', clearAll);
 saveConfirmBtn.addEventListener('click', () => savePlan(false));
 saveAsBtn.addEventListener('click', () => savePlan(true));
 saveCancelBtn.addEventListener('click', () => hideModal(saveModal));
 loadCancelBtn.addEventListener('click', () => hideModal(loadModal));
 importUnownedPlansBtn.addEventListener('click', importUnownedPlans);
-exportImportBtn.addEventListener('click', showExportImportModal);
-exportImportCancelBtn.addEventListener('click', () => hideModal(exportImportModal));
-exportPlanBtn.addEventListener('click', exportCurrentPlan);
-importPlanBtn.addEventListener('click', () => importPlanFileInput.click());
+importPlanBtnDirect.addEventListener('click', () => importPlanFileInput.click());
+exportOptionsCancelBtn.addEventListener('click', () => hideModal(exportOptionsModal));
+pdfOptionsCancelBtn.addEventListener('click', () => hideModal(pdfOptionsModal));
 importPlanFileInput.addEventListener('change', handleImportPlan);
+
+// Export options listeners
+exportPdfBtn.addEventListener('click', showPdfOptionsModal);
+exportBackupBtn.addEventListener('click', exportCurrentPlan);
+exportCsvBtn.addEventListener('click', exportToCSV);
+
+// PDF options listeners
+pdfIncludeTags.addEventListener('change', function() {
+    if (this.checked) {
+        pdfTagOptions.style.display = 'block';
+    } else {
+        pdfTagOptions.style.display = 'none';
+    }
+});
+pdfGenerateBtn.addEventListener('click', generatePDF);
 
 // Known Race listeners
 loadKnownRaceBtn.addEventListener('click', showKnownRaceModal);
@@ -240,7 +335,7 @@ function setupNumericInputFiltering() {
     });
     
     // Decimal-allowed fields
-    const decimalFields = ['avg-cp-time', 'carbs-per-hour', 'water-per-hour', 'carbs-per-gel'];
+    const decimalFields = ['avg-cp-time', 'carbs-per-hour', 'water-per-hour', 'carbs-per-serving'];
     decimalFields.forEach(fieldId => {
         const input = document.getElementById(fieldId);
         if (input) {
@@ -315,6 +410,12 @@ function renderElevationChart(elevationProfile, segments) {
         return;
     }
     
+    // Validate elevation profile data
+    if (!elevationProfile || elevationProfile.length === 0) {
+        console.warn('No elevation profile data available');
+        return;
+    }
+    
     const ctx = document.getElementById('elevation-chart');
     
     // Destroy existing chart
@@ -360,20 +461,8 @@ function renderElevationChart(elevationProfile, segments) {
             const { ctx, chartArea: { top, bottom, left, right }, scales: { x, y } } = chart;
             
             checkpointData.forEach(cp => {
-                // Find the closest index in elevation profile to this checkpoint distance
-                let closestIndex = 0;
-                let minDiff = Math.abs(elevationProfile[0].distance - cp.distance);
-                
-                for (let i = 1; i < elevationProfile.length; i++) {
-                    const diff = Math.abs(elevationProfile[i].distance - cp.distance);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIndex = i;
-                    }
-                }
-                
-                // Get pixel position using the index
-                const xPos = x.getPixelForValue(closestIndex);
+                // Get pixel position using the distance value directly
+                const xPos = x.getPixelForValue(cp.distance);
                 
                 // Draw vertical dotted line
                 ctx.save();
@@ -400,10 +489,9 @@ function renderElevationChart(elevationProfile, segments) {
     elevationChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: elevationProfile.map(p => p.distance.toFixed(1)),
             datasets: [{
                 label: 'Elevation (m)',
-                data: elevationProfile.map(p => p.elevation),
+                data: elevationProfile.map(p => ({ x: p.distance, y: p.elevation })),
                 borderColor: 'rgb(37, 99, 235)',
                 backgroundColor: gradient,
                 fill: true,
@@ -429,7 +517,7 @@ function renderElevationChart(elevationProfile, segments) {
                     intersect: false,
                     callbacks: {
                         title: (context) => {
-                            const distance = parseFloat(context[0].label);
+                            const distance = context[0].parsed.x;
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
                                 Math.abs(cp.distance - distance) < 0.5
@@ -439,12 +527,12 @@ function renderElevationChart(elevationProfile, segments) {
                                 titleLines.push(`${nearCheckpoint.label}`);
                                 titleLines.push(`Distance: ${nearCheckpoint.distance.toFixed(1)} km`);
                             } else {
-                                titleLines.push(`Distance: ${distance} km`);
+                                titleLines.push(`Distance: ${distance.toFixed(1)} km`);
                             }
                             return titleLines;
                         },
                         label: (context) => {
-                            const distance = parseFloat(context.label);
+                            const distance = context.parsed.x;
                             const labels = [`Elevation: ${context.parsed.y.toFixed(0)} m`];
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
@@ -468,15 +556,18 @@ function renderElevationChart(elevationProfile, segments) {
                                 }
                                 const sectionLabel = `${prevLabel} to ${nextLabel} Details:`;
                                 labels.push(toUnicodeBold(sectionLabel));
-                                // Show gels/sachets needed for next section (from segment data), else carbs
+                                // Show servings needed for next section (from segment data), else carbs
                                 let fuelLine = '';
                                 // Find the next segment (this CP -> next CP)
                                 let nextSegment = null;
                                 if (segments && nearCheckpoint.cpNumber < segments.length) {
                                     nextSegment = segments[nearCheckpoint.cpNumber];
                                 }
-                                if (nextSegment && nextSegment.num_gels !== undefined && nextSegment.num_gels !== null && nextSegment.num_gels > 0) {
-                                    fuelLine = `Fuel Needed: ${nextSegment.num_gels} gels/sachets`;
+                                if (nextSegment && (nextSegment.num_servings !== undefined || nextSegment.num_gels !== undefined) && 
+                                    ((nextSegment.num_servings !== null && nextSegment.num_servings > 0) || (nextSegment.num_gels !== null && nextSegment.num_gels > 0))) {
+                                    // Try new name first, fallback to old for backward compatibility
+                                    const servingCount = nextSegment.num_servings || nextSegment.num_gels;
+                                    fuelLine = `Fuel Needed: ${servingCount} servings`;
                                 } else if (nextSegment && nextSegment.target_carbs !== undefined && nextSegment.target_carbs !== null) {
                                     fuelLine = `Fuel Needed: ${nextSegment.target_carbs}g carbs`;
                                 } else {
@@ -494,13 +585,14 @@ function renderElevationChart(elevationProfile, segments) {
                                             labels.push('');
                                             const bolded = `${prevLabel} dropbag contents:`;
                                             labels.push(toUnicodeBold(bolded));
-                                            let planLine = '';
-                                            if (dropbag.num_gels !== undefined) {
-                                                planLine = `Gels/Sachets: ${dropbag.num_gels}, Hydration: ${dropbag.hydration}L`;
+                                            if (dropbag.num_servings !== undefined || dropbag.num_gels !== undefined) {
+                                                // Try new name first, fallback to old for backward compatibility
+                                                const servingCount = dropbag.num_servings || dropbag.num_gels;
+                                                labels.push(`Energy servings: ${servingCount}`);
+                                                labels.push(`Hydration: ${dropbag.hydration}L`);
                                             } else {
-                                                planLine = `Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`;
+                                                labels.push(`Carbs: ${dropbag.carbs}g, Hydration: ${dropbag.hydration}L`);
                                             }
-                                            labels.push(planLine);
                                         }
                                     }
                                 }
@@ -529,6 +621,9 @@ function renderElevationChart(elevationProfile, segments) {
             },
             scales: {
                 x: {
+                    type: 'linear',
+                    min: 0,
+                    max: elevationProfile[elevationProfile.length - 1].distance,
                     title: {
                         display: true,
                         text: 'Distance (km)',
@@ -538,12 +633,23 @@ function renderElevationChart(elevationProfile, segments) {
                         }
                     },
                     ticks: {
+                        callback: function(value) {
+                            return value.toFixed(1);
+                        },
+                        autoSkip: true,
                         maxTicksLimit: 15,
-                        callback: function(value, index) {
-                            // Show every nth tick based on data size
-                            const step = Math.ceil(elevationProfile.length / 15);
-                            return index % step === 0 ? this.getLabelForValue(value) : '';
-                        }
+                        stepSize: (function() {
+                            // Calculate dynamic step size based on total distance
+                            const totalDistance = elevationProfile[elevationProfile.length - 1].distance;
+                            
+                            // Determine appropriate step size
+                            if (totalDistance <= 10) return 1;
+                            if (totalDistance <= 30) return 2;
+                            if (totalDistance <= 50) return 5;
+                            if (totalDistance <= 100) return 10;
+                            if (totalDistance <= 200) return 20;
+                            return 25;
+                        })()
                     },
                     grid: {
                         display: true,
@@ -632,7 +738,8 @@ function clearAllInputs() {
     document.getElementById('climbing-ability').value = 'moderate';
     document.getElementById('carbs-per-hour').value = 60;
     document.getElementById('water-per-hour').value = 500;
-    document.getElementById('carbs-per-gel').value = '';
+    const clearServingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+    if (clearServingInput) clearServingInput.value = '';
     document.getElementById('race-start-time').value = '';
     document.getElementById('fatigue-enabled').checked = true;
     document.getElementById('fitness-level').value = 'recreational';
@@ -843,7 +950,7 @@ function generateCheckpointInputs() {
     // Update checkpoint counter
     updateCheckpointCounter(numCheckpoints, MAX_CHECKPOINTS);
 
-    // Create checkpoint distance inputs with dropbag checkbox
+    // Create checkpoint distance inputs with integrated dropbag toggle
     for (let i = 0; i < numCheckpoints; i++) {
         const div = document.createElement('div');
         div.className = 'checkpoint-input';
@@ -852,7 +959,7 @@ function generateCheckpointInputs() {
         
         div.innerHTML = `
             <label>Checkpoint ${i + 1} Distance (km):</label>
-            <div class="checkpoint-input-row">
+            <div class="checkpoint-input-wrapper">
                 <input type="text" 
                        class="checkpoint-distance" 
                        data-index="${i}" 
@@ -862,13 +969,13 @@ function generateCheckpointInputs() {
                        inputmode="decimal"
                        value="${currentPlan.checkpoint_distances ? currentPlan.checkpoint_distances[i] || '' : ''}"
                        placeholder="e.g., 25.5" />
-                <label class="dropbag-label">
-                    <input type="checkbox" 
-                           class="checkpoint-dropbag" 
-                           data-index="${i}"
-                           ${currentPlan.checkpoint_dropbags ? currentPlan.checkpoint_dropbags[i] ? 'checked' : '' : ''} />
+                <button type="button"
+                        class="checkpoint-dropbag-toggle" 
+                        data-index="${i}"
+                        aria-pressed="${hasDropbag}"
+                        aria-label="Toggle drop bag for checkpoint ${i + 1}">
                     Dropbag
-                </label>
+                </button>
             </div>
             <div class="error-message" id="checkpoint-error-${i}"></div>
         `;
@@ -916,9 +1023,14 @@ function generateCheckpointInputs() {
         });
     });
     
-    // Add event listeners for dropbag checkboxes
-    document.querySelectorAll('.checkpoint-dropbag').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
+    // Add event listeners for dropbag toggle buttons
+    document.querySelectorAll('.checkpoint-dropbag-toggle').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const currentState = button.getAttribute('aria-pressed') === 'true';
+            const newState = !currentState;
+            button.setAttribute('aria-pressed', newState);
+            button.textContent = 'Dropbag';
+            
             if (currentPlan.gpx_filename) {
                 calculateRacePlan();
             }
@@ -1002,6 +1114,10 @@ function handlePacingModeChange() {
     if (selectedMode === 'base_pace') {
         basePaceInputs.style.display = 'block';
         targetTimeInputs.style.display = 'none';
+        // Clear target time warning when switching to base pace mode
+        if (targetTimeWarning) {
+            targetTimeWarning.style.display = 'none';
+        }
     } else {
         basePaceInputs.style.display = 'none';
         targetTimeInputs.style.display = 'block';
@@ -1034,9 +1150,9 @@ async function calculateRacePlan() {
         .map(input => parseFloat(input.value));
     
     // Gather checkpoint dropbag status - must align with checkpoint distances
-    const dropbagCheckboxes = document.querySelectorAll('.checkpoint-dropbag');
-    const checkpointDropbags = Array.from(dropbagCheckboxes)
-        .map(checkbox => checkbox.checked);
+    const dropbagToggleButtons = document.querySelectorAll('.checkpoint-dropbag-toggle');
+    const checkpointDropbags = Array.from(dropbagToggleButtons)
+        .map(button => button.getAttribute('aria-pressed') === 'true');
     
     // Filter out invalid distances and their corresponding dropbag values
     const validCheckpoints = [];
@@ -1084,9 +1200,10 @@ async function calculateRacePlan() {
     const fitnessLevel = document.getElementById('fitness-level').value;
     const skillLevel = parseFloat(document.getElementById('skill-level').value) || 0.5;
     
-    // Get carbs per gel (optional)
-    const carbsPerGelInput = document.getElementById('carbs-per-gel').value;
-    const carbsPerGel = carbsPerGelInput && carbsPerGelInput.trim() !== '' ? parseFloat(carbsPerGelInput) : null;
+    // Get carbs per serving (optional)
+    const carbsPerServingElem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+    const carbsPerServingInput = carbsPerServingElem ? carbsPerServingElem.value : '';
+    const carbsPerServing = carbsPerServingInput && carbsPerServingInput.trim() !== '' ? parseFloat(carbsPerServingInput) : null;
     
     // Get pacing mode and target time
     const pacingMode = currentPlan.pacing_mode;
@@ -1115,7 +1232,7 @@ async function calculateRacePlan() {
         climbing_ability: climbingAbility,
         carbs_per_hour: carbsPerHour,
         water_per_hour: waterPerHour,
-        carbs_per_gel: carbsPerGel,
+        carbs_per_serving: carbsPerServing,
         race_start_time: raceStartTime,
         fatigue_enabled: fatigueEnabled,
         fitness_level: fitnessLevel,
@@ -1148,6 +1265,16 @@ async function calculateRacePlan() {
             if (data.elevation_profile) {
                 currentPlan.elevation_profile = data.elevation_profile;
             }
+            
+            // Handle target time warning if present
+            const targetTimeWarning = document.getElementById('target-time-warning');
+            if (data.target_time_warning) {
+                targetTimeWarning.textContent = data.target_time_warning;
+                targetTimeWarning.style.display = 'block';
+            } else {
+                targetTimeWarning.style.display = 'none';
+            }
+            
             displayResults(data);
             saveBtn.disabled = false;
             exportBtn.disabled = false;
@@ -1286,15 +1413,15 @@ function displayResults(data) {
     if (dropbag_contents && dropbag_contents.length > 0) {
         dropbagTbody.innerHTML = '';
         
-        // Check if gel columns should be displayed (if any item has num_gels)
-        const hasGelData = dropbag_contents.some(item => item.num_gels !== undefined);
+        // Check if serving columns should be displayed (if any item has num_servings or num_gels for backward compatibility)
+        const hasServingData = dropbag_contents.some(item => item.num_servings !== undefined || item.num_gels !== undefined);
         
-        // Update table header based on whether gel data is present
-        if (hasGelData) {
+        // Update table header based on whether serving data is present
+        if (hasServingData) {
             dropbagTableHeader.innerHTML = `
                 <th>Checkpoint</th>
                 <th>Carb Target (g)</th>
-                <th>Number of Gels</th>
+                <th>Energy Servings</th>
                 <th>Actual Carbs (g)</th>
                 <th>Hydration Target (L)</th>
             `;
@@ -1310,12 +1437,15 @@ function displayResults(data) {
         dropbag_contents.forEach(item => {
             const row = document.createElement('tr');
             
-            if (hasGelData) {
+            if (hasServingData) {
+                // Try new name first, fallback to old for backward compatibility
+                const servingCount = item.num_servings || item.num_gels;
+                const actualCarbs = item.actual_carbs;
                 row.innerHTML = `
                     <td><strong>${item.checkpoint}</strong></td>
                     <td>${item.carbs}</td>
-                    <td>${item.num_gels}</td>
-                    <td>${item.actual_carbs}</td>
+                    <td>${servingCount}</td>
+                    <td>${actualCarbs}</td>
                     <td>${item.hydration}</td>
                 `;
             } else {
@@ -1400,7 +1530,10 @@ async function savePlan(forceSaveAs = false) {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value),
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value),
-        carbs_per_gel: document.getElementById('carbs-per-gel').value ? parseFloat(document.getElementById('carbs-per-gel').value) : null,
+        carbs_per_serving: (function() {
+            const elem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            return elem && elem.value ? parseFloat(elem.value) : null;
+        })(),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -1697,36 +1830,39 @@ async function loadPlan(filename, source = 'local') {
         const data = await response.json();
 
         if (response.ok) {
+            // Apply default values to handle missing fields gracefully
+            const planData = applyDefaultValues(data);
+            
             // Track the loaded filename for save/save-as functionality
             currentPlan.loadedFilename = filename;
             currentPlan.loadedSource = source;  // Track source for future saves
             
             // Store plan name (from data or filename without .json)
-            currentPlan.planName = data.plan_name || filename.replace(/\.json$/, '');
+            currentPlan.planName = planData.plan_name || filename.replace(/\.json$/, '');
             
             // Update the race plan title to show the loaded plan name
             updateRacePlanTitle(currentPlan.planName);
             
             // Load plan data into form
-            currentPlan.gpx_filename = data.gpx_filename;
-            currentPlan.checkpoint_distances = data.checkpoint_distances || [];
-            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
-            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
+            currentPlan.gpx_filename = planData.gpx_filename;
+            currentPlan.checkpoint_distances = planData.checkpoint_distances;
+            currentPlan.checkpoint_dropbags = planData.checkpoint_dropbags;
+            currentPlan.segment_terrain_types = planData.segment_terrain_types;
             
             // Set total_distance early (before validation) to avoid showing stale distance in error messages
-            if (data.summary && data.summary.total_distance !== undefined && data.summary.total_distance !== null) {
-                currentPlan.total_distance = data.summary.total_distance;
+            if (planData.summary && planData.summary.total_distance !== undefined && planData.summary.total_distance !== null) {
+                currentPlan.total_distance = planData.summary.total_distance;
             }
             
             // Update the GPX file display to show the loaded GPX filename
-            if (data.gpx_filename) {
-                fileNameDisplay.textContent = data.gpx_filename;
+            if (planData.gpx_filename) {
+                fileNameDisplay.textContent = planData.gpx_filename;
             }
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
-            document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            document.getElementById('avg-cp-time').value = planData.avg_cp_time;
             
-            const z2Pace = data.z2_pace || 6.5;
+            const z2Pace = planData.z2_pace;
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
@@ -1741,19 +1877,31 @@ async function loadPlan(filename, source = 'local') {
             document.getElementById('z2-pace-min').value = paceMin;
             document.getElementById('z2-pace-sec').value = paceSec;
             
-            document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
-            document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
-            document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
-            document.getElementById('race-start-time').value = data.race_start_time || '';
-            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
-            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
-            
+            // Required fields with sensible defaults
+            document.getElementById('climbing-ability').value = planData.climbing_ability || 'moderate';
+            document.getElementById('carbs-per-hour').value = planData.carbs_per_hour ?? 60;
+            document.getElementById('water-per-hour').value = planData.water_per_hour ?? 500;
+
+            // Serving / gel compatibility (new + legacy)
+            const servingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            if (servingInput) {
+                servingInput.value = planData.carbs_per_serving ?? planData.carbs_per_gel ?? '';
+            }
+
+            // Optional fields (allow empty UI values)
+            document.getElementById('race-start-time').value = planData.race_start_time || '';
+
+            // Fatigue + fitness handling
+            const fatigueEnabled = planData.fatigue_enabled !== undefined ? planData.fatigue_enabled : true;
+
+            document.getElementById('fatigue-enabled').checked = fatigueEnabled;
+            document.getElementById('fitness-level').value = planData.fitness_level || 'recreational';
+            document.getElementById('fitness-level').disabled = !fatigueEnabled;
+
             // Load terrain settings
-            const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
+            const hasTerrainTypes = planData.segment_terrain_types && planData.segment_terrain_types.some(t => t !== 'smooth_trail');
             document.getElementById('terrain-enabled').checked = hasTerrainTypes;
-            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            document.getElementById('skill-level').value = planData.skill_level;
             terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
             // Generate checkpoint inputs and populate (this will restore dropbag checkboxes)
@@ -1763,19 +1911,19 @@ async function loadPlan(filename, source = 'local') {
             validateCheckpointDistances();
 
             // Load results if available
-            if (data.segments && data.summary) {
-                currentPlan.segments = data.segments;
-                currentPlan.summary = data.summary;
-                currentPlan.total_distance = data.summary.total_distance;
-                currentPlan.race_start_time = data.race_start_time;
-                currentPlan.elevation_profile = data.elevation_profile || null;
-                currentPlan.dropbag_contents = data.dropbag_contents || null;
+            if (planData.segments && planData.summary) {
+                currentPlan.segments = planData.segments;
+                currentPlan.summary = planData.summary;
+                currentPlan.total_distance = planData.summary.total_distance;
+                currentPlan.race_start_time = planData.race_start_time;
+                currentPlan.elevation_profile = planData.elevation_profile;
+                currentPlan.dropbag_contents = planData.dropbag_contents;
                 
                 // If no elevation profile, recalculate to get it
                 if (!currentPlan.elevation_profile) {
                     calculateRacePlan();
                 } else {
-                    displayResults(data);
+                    displayResults(planData);
                 }
                 
                 saveBtn.disabled = false;
@@ -1818,16 +1966,6 @@ async function deletePlan(filename, source = 'local') {
     }
 }
 
-function showExportImportModal() {
-    // Enable/disable export button based on whether a plan is loaded
-    if (currentPlan.segments && currentPlan.segments.length > 0) {
-        exportPlanBtn.disabled = false;
-    } else {
-        exportPlanBtn.disabled = true;
-    }
-    exportImportModal.classList.add('active');
-}
-
 async function exportCurrentPlan() {
     if (!currentPlan.segments) {
         alert('Please calculate or load a race plan first');
@@ -1847,8 +1985,10 @@ async function exportCurrentPlan() {
         climbing_ability: document.getElementById('climbing-ability').value,
         carbs_per_hour: parseFloat(document.getElementById('carbs-per-hour').value) || 60,
         water_per_hour: parseFloat(document.getElementById('water-per-hour').value) || 500,
-        carbs_per_gel: document.getElementById('carbs-per-gel').value ? 
-                       parseFloat(document.getElementById('carbs-per-gel').value) : null,
+        carbs_per_serving: (function() {
+            const elem = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            return elem && elem.value ? parseFloat(elem.value) : null;
+        })(),
         race_start_time: document.getElementById('race-start-time').value || null,
         fatigue_enabled: document.getElementById('fatigue-enabled').checked,
         fitness_level: document.getElementById('fitness-level').value,
@@ -1887,7 +2027,6 @@ async function exportCurrentPlan() {
             window.URL.revokeObjectURL(url);
             
             alert('Plan exported successfully!');
-            hideModal(exportImportModal);
         } else {
             alert('Error exporting plan: ' + data.error);
         }
@@ -1939,8 +2078,8 @@ async function handleImportPlan(event) {
         const result = await response.json();
 
         if (response.ok) {
-            // Load the imported plan data into the form
-            const data = result.plan;
+            // Apply default values to handle missing fields gracefully
+            const data = applyDefaultValues(result.plan);
             
             // Clear current plan tracking
             currentPlan.loadedFilename = null;
@@ -1953,14 +2092,14 @@ async function handleImportPlan(event) {
             
             // Load plan data into form
             currentPlan.gpx_filename = data.gpx_filename;
-            currentPlan.checkpoint_distances = data.checkpoint_distances || [];
-            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags || [];
-            currentPlan.segment_terrain_types = data.segment_terrain_types || [];
+            currentPlan.checkpoint_distances = data.checkpoint_distances;
+            currentPlan.checkpoint_dropbags = data.checkpoint_dropbags;
+            currentPlan.segment_terrain_types = data.segment_terrain_types;
             
             document.getElementById('num-checkpoints').value = currentPlan.checkpoint_distances.length;
-            document.getElementById('avg-cp-time').value = data.avg_cp_time || 5;
+            document.getElementById('avg-cp-time').value = data.avg_cp_time;
             
-            const z2Pace = data.z2_pace || 6.5;
+            const z2Pace = data.z2_pace;
             let paceMin = Math.floor(z2Pace);
             let paceSec = Math.round((z2Pace % 1) * 60);
             
@@ -1975,19 +2114,29 @@ async function handleImportPlan(event) {
             document.getElementById('z2-pace-min').value = paceMin;
             document.getElementById('z2-pace-sec').value = paceSec;
             
+            // Required fields with defaults
             document.getElementById('climbing-ability').value = data.climbing_ability || 'moderate';
-            document.getElementById('carbs-per-hour').value = data.carbs_per_hour || 60;
-            document.getElementById('water-per-hour').value = data.water_per_hour || 500;
-            document.getElementById('carbs-per-gel').value = data.carbs_per_gel || '';
+
+            document.getElementById('carbs-per-hour').value = data.carbs_per_hour ?? 60;
+
+            document.getElementById('water-per-hour').value = data.water_per_hour ?? 500;
+
+            // Serving / gel compatibility (new + legacy)
+            const importServingInput = safeGetElementById('carbs-per-serving', 'carbs-per-gel');
+            if (importServingInput) {
+                importServingInput.value =
+                    data.carbs_per_serving ?? data.carbs_per_gel ?? '';
+            }
+          
             document.getElementById('race-start-time').value = data.race_start_time || '';
-            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled !== undefined ? data.fatigue_enabled : true;
-            document.getElementById('fitness-level').value = data.fitness_level || 'recreational';
-            document.getElementById('fitness-level').disabled = !document.getElementById('fatigue-enabled').checked;
+            document.getElementById('fatigue-enabled').checked = data.fatigue_enabled;
+            document.getElementById('fitness-level').value = data.fitness_level;
+            document.getElementById('fitness-level').disabled = !data.fatigue_enabled;
             
             // Load terrain settings
             const hasTerrainTypes = data.segment_terrain_types && data.segment_terrain_types.some(t => t !== 'smooth_trail');
             document.getElementById('terrain-enabled').checked = hasTerrainTypes;
-            document.getElementById('skill-level').value = data.skill_level || 0.5;
+            document.getElementById('skill-level').value = data.skill_level;
             terrainSkillContainer.style.display = hasTerrainTypes ? 'block' : 'none';
 
             // Generate checkpoint inputs
@@ -1999,8 +2148,8 @@ async function handleImportPlan(event) {
                 currentPlan.summary = data.summary;
                 currentPlan.total_distance = data.summary.total_distance;
                 currentPlan.race_start_time = data.race_start_time;
-                currentPlan.elevation_profile = data.elevation_profile || null;
-                currentPlan.dropbag_contents = data.dropbag_contents || null;
+                currentPlan.elevation_profile = data.elevation_profile;
+                currentPlan.dropbag_contents = data.dropbag_contents;
                 
                 displayResults(data);
                 
@@ -2008,7 +2157,7 @@ async function handleImportPlan(event) {
                 exportBtn.disabled = false;
             }
 
-            hideModal(exportImportModal);
+            // Note: No modal to hide for direct file import
             alert('Plan imported successfully!');
         } else {
             alert('Error importing plan: ' + result.error);
@@ -2050,12 +2199,106 @@ async function exportToCSV() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            hideModal(exportOptionsModal);
         } else {
             const data = await response.json();
             alert('Error exporting CSV: ' + data.error);
         }
     } catch (error) {
         alert('Error exporting CSV: ' + error.message);
+    }
+}
+
+// Show export options modal
+function showExportOptionsModal() {
+    if (!currentPlan.segments) {
+        alert('Please calculate a race plan first');
+        return;
+    }
+    exportOptionsModal.classList.add('active');
+}
+
+// Show PDF options modal
+function showPdfOptionsModal() {
+    hideModal(exportOptionsModal);
+    pdfOptionsModal.classList.add('active');
+}
+
+// Generate PDF with selected options
+async function generatePDF() {
+    if (!currentPlan.segments) {
+        alert('Please calculate a race plan first');
+        return;
+    }
+
+    // Get selected options
+    const options = {
+        elevation_profile: pdfIncludeElevation.checked,
+        race_plan_table: pdfIncludeRacePlan.checked,
+        drop_bag_table: pdfIncludeDropbags.checked,
+        drop_bag_tags: pdfIncludeTags.checked,
+        race_name: pdfRaceName.value.trim(),
+        bib_number: pdfBibNumber.value.trim(),
+        runner_name: pdfRunnerName.value.trim()
+    };
+
+    // Get race name - use input field if provided, otherwise fallback to plan name
+    const raceName = options.race_name || 
+                    currentPlan.planName || 
+                    currentPlan.loadedFilename?.replace('.json', '') || 
+                    'Race Plan';
+
+    // Get elevation profile as base64
+    let elevationProfileData = null;
+    if (options.elevation_profile && elevationChart) {
+        try {
+            elevationProfileData = elevationChart.toBase64Image();
+        } catch (e) {
+            console.error('Error getting chart image:', e);
+        }
+    }
+
+    const exportData = {
+        options: options,
+        race_name: raceName,
+        segments: currentPlan.segments,
+        summary: currentPlan.summary,
+        elevation_profile: elevationProfileData,
+        dropbag_contents: currentPlan.dropbag_contents || [],
+        race_start_time: currentPlan.race_start_time
+    };
+
+    try {
+        const response = await fetch('/api/export-pdf', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(exportData)
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // Sanitize filename to remove special characters that may be invalid
+            const safeRaceName = raceName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            a.download = `${safeRaceName}_${new Date().getTime()}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            hideModal(pdfOptionsModal);
+            hideModal(exportOptionsModal);
+            alert('PDF exported successfully!');
+        } else {
+            const data = await response.json();
+            alert('Error exporting PDF: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error exporting PDF: ' + error.message);
     }
 }
 
@@ -2130,7 +2373,7 @@ function setupNumericInputFiltering() {
         'avg-cp-time',
         'carbs-per-hour',
         'water-per-hour',
-        'carbs-per-gel'
+        'carbs-per-serving'
     ];
 
     // Setup integer inputs

@@ -21,7 +21,8 @@ segment_time = horizontal_time + climb_time - descent_time_savings
 ```
 
 Where:
-- **horizontal_time** = distance_km / flat_speed_kmh × 60 (minutes)
+
+- **horizontal_time** = distance_km / base_pace_kmh × 60 (minutes)
 - **climb_time** = ascent_m / vertical_speed × 60 (minutes)
 - **descent_time_savings** = time saved on downhills based on gradient
 
@@ -61,7 +62,7 @@ Athletes have a sustainable **vertical speed** representing their climbing abili
 **Scenario**: 5 km segment with 500m climb, moderate climber (700 m/h), 6:30 flat pace
 
 ```
-flat_speed = 60 / 6.5 = 9.23 km/h
+base_pace = 60 / 6.5 = 9.23 km/h
 horizontal_time = 5 / 9.23 × 60 = 32.5 minutes
 climb_time = 500 / 700 × 60 = 42.9 minutes
 segment_time = 32.5 + 42.9 = 75.4 minutes

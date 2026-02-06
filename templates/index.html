@@ -15,6 +15,7 @@
     <meta name="msapplication-TileImage" content="{{ url_for('static', filename='logo.png') }}">
     <meta name="msapplication-TileColor" content="#2563eb">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -23,6 +24,9 @@
     <div class="container">
         <header>
             <div class="header-content">
+                <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu">
+                    <span class="mdi mdi-menu"></span>
+                </button>
                 <img src="{{ url_for('static', filename='logo-bg-removed.png') }}" alt="RaceCraft Logo" class="header-logo">
                 <div class="header-text">
                     <h2 class="subtitle">Fuel & Pacing Planner</h2>
@@ -32,6 +36,24 @@
                 </div>
             </div>
         </header>
+
+        <!-- Side Navigation -->
+        <nav id="side-nav" class="side-nav">
+            <div class="side-nav-header">
+                <h3>Navigation</h3>
+                <button id="nav-close" class="nav-close" aria-label="Close menu">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link active"><span class="mdi mdi-home"></span> Home</a></li>
+                <li><a href="/about" class="nav-link"><span class="mdi mdi-information"></span> About</a></li>
+                <li><a href="/docs" class="nav-link"><span class="mdi mdi-book-open-variant"></span> Documentation</a></li>
+            </ul>
+        </nav>
+
+        <!-- Overlay for mobile menu -->
+        <div id="nav-overlay" class="nav-overlay"></div>
 
         <div class="main-grid">
             <!-- Left Panel: Inputs -->
@@ -177,6 +199,7 @@
                                 <span>:</span>
                                 <input type="number" id="target-time-seconds" min="0" max="59" value="0" placeholder="SS" pattern="[0-9]*" inputmode="numeric" />
                             </div>
+                            <div id="target-time-warning" class="validation-error" style="display: none;"></div>
                         </div>
                     </div>
                     <div class="input-group" id="climbing-ability-group">
@@ -235,13 +258,13 @@
                         <input type="text" id="water-per-hour" min="0" step="50" value="500" pattern="[0-9]*\.?[0-9]*" inputmode="decimal" />
                     </div>
                     <div class="input-group">
-                        <label for="carbs-per-gel">
-                            Carbs per Gel/Sachet (g, optional):
+                        <label for="carbs-per-serving">
+                            Carbs per Serving (g, optional):
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="If specified, the dropbag table will show how many gels/sachets to pack in each dropbag to meet your carb targets. Leave empty to only show total carbs."></span>
+                                  data-tooltip="If specified, the dropbag table will show how many servings to pack in each dropbag to meet your carb targets. Leave empty to only show total carbs."></span>
                         </label>
-                        <input type="text" id="carbs-per-gel" min="0" step="1" placeholder="e.g., 25" pattern="[0-9]*\.?[0-9]*" inputmode="decimal" />
+                        <input type="text" id="carbs-per-serving" min="0" step="1" placeholder="e.g., 25" pattern="[0-9]*\.?[0-9]*" inputmode="decimal" />
                     </div>
                 </section>
 
@@ -250,8 +273,9 @@
                     <button id="calculate-btn" class="btn btn-primary">Calculate Race Plan</button>
                     <button id="save-btn" class="btn btn-secondary" disabled>Save Plan</button>
                     <button id="load-btn" class="btn btn-secondary">Load Plan</button>
-                    <button id="export-import-btn" class="btn btn-secondary">Export/Import Plans</button>
-                    <button id="export-btn" class="btn btn-secondary" disabled>Export CSV</button>
+                    <button id="import-plan-btn-direct" class="btn btn-secondary">Import Plan</button>
+                    <input type="file" id="import-plan-file-input" accept=".json" style="display: none;" />
+                    <button id="export-btn" class="btn btn-secondary" disabled>Export</button>
                     <button id="clear-btn" class="btn btn-danger">Clear & Start Again</button>
                 </section>
             </div>
@@ -428,25 +452,80 @@
         </div>
     </div>
 
-    <!-- Export/Import Plan Modal -->
-    <div id="export-import-modal" class="modal">
+    <!-- Export Options Modal -->
+    <div id="export-options-modal" class="modal">
         <div class="modal-content">
-            <h2>Export/Import Plan</h2>
-            <div class="export-import-options">
-                <div class="option-section">
-                    <h3>Export Current Plan</h3>
-                    <p>Download the currently loaded plan as a JSON file.</p>
-                    <button id="export-plan-btn" class="btn btn-primary">Export Plan</button>
-                </div>
-                <div class="option-section">
-                    <h3>Import Plan</h3>
-                    <p>Load a plan from a JSON file. This will replace your current plan.</p>
-                    <button id="import-plan-btn" class="btn btn-primary">Import Plan</button>
-                    <input type="file" id="import-plan-file-input" accept=".json" style="display: none;" />
-                </div>
+            <h2>Export Options</h2>
+            <p class="info-text">Choose how you want to export your race plan:</p>
+            <div class="export-options">
+                <button id="export-pdf-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-file-pdf-box"></span> Export to PDF (Configurable)
+                </button>
+                <button id="export-backup-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-download"></span> Backup File (Re-importable)
+                </button>
+                <button id="export-csv-btn" class="btn btn-primary" style="width: 100%; margin: 10px 0;">
+                    <span class="mdi mdi-file-delimited"></span> CSV Export
+                </button>
             </div>
             <div class="modal-actions">
-                <button id="export-import-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="export-options-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Export Options Modal -->
+    <div id="pdf-options-modal" class="modal">
+        <div class="modal-content">
+            <h2>PDF Export Options</h2>
+            <p class="info-text">Select which sections to include in your PDF:</p>
+            
+            <div class="pdf-options">
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-elevation" checked>
+                        <span>Elevation Profile Image</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-race-plan" checked>
+                        <span>Race Plan Table</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-dropbags" checked>
+                        <span>Drop Bag Table</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="pdf-include-tags">
+                        <span>Drop Bag Tags (Printable Labels)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="pdf-tag-options" style="display: none; margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 5px;">
+                <h4 style="margin-top: 0;">Drop Bag Tag Information</h4>
+                <div class="input-group">
+                    <label for="pdf-race-name">Race Name:</label>
+                    <input type="text" id="pdf-race-name" placeholder="e.g., UTMB 100K" />
+                </div>
+                <div class="input-group">
+                    <label for="pdf-bib-number">Bib Number (optional):</label>
+                    <input type="text" id="pdf-bib-number" placeholder="123" />
+                </div>
+                <div class="input-group">
+                    <label for="pdf-runner-name">Runner Name (optional):</label>
+                    <input type="text" id="pdf-runner-name" placeholder="Your Name" />
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button id="pdf-generate-btn" class="btn btn-primary">Generate PDF</button>
+                <button id="pdf-options-cancel-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
@@ -539,6 +618,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
