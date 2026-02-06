@@ -3005,4 +3005,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setupNumericInputFiltering();
     generateCheckpointInputs();
     validateCheckpointDistances();
+    // Set initial pacing mode state
+    handlePacingModeChange();
 });
