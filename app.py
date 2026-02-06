@@ -2411,7 +2411,68 @@ def export_plan():
 
 @app.route('/api/import-plan', methods=['POST'])
 def import_plan():
-    """Import a single plan from JSON file."""
+    """Import a single plan from JSON file with graceful handling of missing fields."""
+    
+    def apply_plan_defaults(plan_data):
+        """Apply default values for missing fields in plan data."""
+        defaults = {
+            # Core plan configuration
+            'plan_name': None,
+            'gpx_filename': None,
+            'checkpoint_distances': [],
+            'checkpoint_dropbags': [],
+            'segment_terrain_types': [],
+            
+            # Athlete configuration
+            'avg_cp_time': 5,
+            'z2_pace': 6.5,
+            'climbing_ability': 'moderate',
+            'carbs_per_hour': 60,
+            'water_per_hour': 500,
+            'carbs_per_gel': None,
+            'race_start_time': None,
+            
+            # Fatigue & fitness
+            'fatigue_enabled': True,
+            'fitness_level': 'recreational',
+            'skill_level': 0.5,
+            
+            # Calculated results (optional)
+            'segments': None,
+            'summary': None,
+            'elevation_profile': None,
+            'dropbag_contents': None,
+            
+            # Target time mode fields (if present)
+            'pacing_mode': 'base_pace',
+            'target_time_hours': None,
+            'target_time_minutes': None,
+            'target_time_seconds': None
+        }
+        
+        # Create result dict with defaults
+        result = {}
+        for key, default_value in defaults.items():
+            if key in plan_data and plan_data[key] is not None:
+                result[key] = plan_data[key]
+            else:
+                result[key] = default_value
+        
+        # Preserve any additional fields not in defaults
+        for key in plan_data:
+            if key not in result:
+                result[key] = plan_data[key]
+        
+        # Ensure arrays are always arrays (even if they come as null)
+        if not isinstance(result['checkpoint_distances'], list):
+            result['checkpoint_distances'] = []
+        if not isinstance(result['checkpoint_dropbags'], list):
+            result['checkpoint_dropbags'] = []
+        if not isinstance(result['segment_terrain_types'], list):
+            result['segment_terrain_types'] = []
+        
+        return result
+    
     try:
         data = request.json
         if data is None:
@@ -2436,13 +2497,17 @@ def import_plan():
         if plan_data is None or not isinstance(plan_data, dict):
             return jsonify({'error': 'Invalid format: unable to find valid plan data'}), 400
         
+        # Apply default values to handle missing fields gracefully
+        plan_data_with_defaults = apply_plan_defaults(plan_data)
+        
         # Return the plan data so the frontend can load it
         return jsonify({
             'message': 'Plan imported successfully',
-            'plan': plan_data
+            'plan': plan_data_with_defaults
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/api/export-csv', methods=['POST'])
 def export_csv():
