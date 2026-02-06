@@ -1,14 +1,20 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.7.0-serving-terminology
+Version: v1.6.1
 Release Date: Feb 05, 2026
 
-Major Changes in v1.7.0-serving-terminology:
+Major Changes in v1.6.1:
 - TERMINOLOGY UPDATE: Renamed "Gels/Sachets" to "Servings" throughout the application
   - UI labels, variable names, API fields, and exports all updated
   - Maintains backward compatibility: accepts both carbs_per_gel and carbs_per_serving in API
   - CSV/PDF exports now display "Number of Servings" instead of "Number of Gels"
   - Hover tooltips and documentation updated with new terminology
+- added about page with markdown content and new navigation menu 
+- resolved bug with target time validation where achieved times slightly above target were incorrectly flagged as invalid due to strict equality check - now uses a tolerance window to allow for minor allocation variability while still enforcing realistic target times
+- replaced cp input toggle with button 
+- removed export/import button 
+- new pdf export with improved formatting and elevation profile integration
+- elevation profile plot now uses linear distance scale with bounded range
 
 Major Changes in v1.6.0-target-time-mode:
 - New Target Time Mode: Plan by desired finish time instead of pace
