@@ -1240,21 +1240,62 @@ function handlePacingModeChange() {
     const selectedMode = document.querySelector('input[name="pacing-mode"]:checked').value;
     currentPlan.pacing_mode = selectedMode;
     
+    // Get all the inputs that should be disabled in target time mode
+    const z2PaceMinInput = document.getElementById('z2-pace-min');
+    const z2PaceSecInput = document.getElementById('z2-pace-sec');
+    const climbingAbilitySelect = document.getElementById('climbing-ability');
+    const fitnessLevelSelect = document.getElementById('fitness-level');
+    const fatigueEnabledCheckbox = document.getElementById('fatigue-enabled');
+    const skillLevelSelect = document.getElementById('skill-level');
+    
+    // Get parent groups for styling
+    const climbingAbilityGroup = document.getElementById('climbing-ability-group');
+    const fitnessLevelGroup = document.getElementById('fitness-level-group');
+    const fatigueCheckboxGroup = fatigueEnabledCheckbox?.closest('.checkbox-group');
+    const skillLevelGroup = skillLevelSelect?.closest('.input-group');
+    
     if (selectedMode === 'base_pace') {
+        // Base Pace Mode: Show base pace inputs, enable all ability inputs
         basePaceInputs.style.display = 'block';
         targetTimeInputs.style.display = 'none';
+        
+        // Enable all inputs
+        if (z2PaceMinInput) z2PaceMinInput.disabled = false;
+        if (z2PaceSecInput) z2PaceSecInput.disabled = false;
+        if (climbingAbilitySelect) climbingAbilitySelect.disabled = false;
+        if (fitnessLevelSelect) fitnessLevelSelect.disabled = false;
+        if (fatigueEnabledCheckbox) fatigueEnabledCheckbox.disabled = false;
+        if (skillLevelSelect) skillLevelSelect.disabled = false;
+        
+        // Remove disabled styling from groups
+        if (climbingAbilityGroup) climbingAbilityGroup.classList.remove('disabled');
+        if (fitnessLevelGroup) fitnessLevelGroup.classList.remove('disabled');
+        if (fatigueCheckboxGroup) fatigueCheckboxGroup.classList.remove('disabled');
+        if (skillLevelGroup) skillLevelGroup.classList.remove('disabled');
+        
         // Clear target time warning when switching to base pace mode
         if (targetTimeWarning) {
             targetTimeWarning.style.display = 'none';
         }
     } else {
+        // Target Time Mode: Show target time inputs, disable ability inputs
         basePaceInputs.style.display = 'none';
         targetTimeInputs.style.display = 'block';
+        
+        // Disable inputs that don't affect target time mode
+        if (z2PaceMinInput) z2PaceMinInput.disabled = true;
+        if (z2PaceSecInput) z2PaceSecInput.disabled = true;
+        if (climbingAbilitySelect) climbingAbilitySelect.disabled = true;
+        if (fitnessLevelSelect) fitnessLevelSelect.disabled = true;
+        if (fatigueEnabledCheckbox) fatigueEnabledCheckbox.disabled = true;
+        if (skillLevelSelect) skillLevelSelect.disabled = true;
+        
+        // Add disabled styling to groups
+        if (climbingAbilityGroup) climbingAbilityGroup.classList.add('disabled');
+        if (fitnessLevelGroup) fitnessLevelGroup.classList.add('disabled');
+        if (fatigueCheckboxGroup) fatigueCheckboxGroup.classList.add('disabled');
+        if (skillLevelGroup) skillLevelGroup.classList.add('disabled');
     }
-    
-    // Note: Climbing ability, fitness level, and fatigue settings are shown in both modes
-    // - Base Pace Mode: They affect forward prediction (ability → pace → time)
-    // - Target Time Mode: They affect effort allocation optimization (cost, capacity, limits)
     
     // Recalculate if a plan is loaded
     if (currentPlan.gpx_filename && currentPlan.checkpoint_distances.length > 0) {
@@ -1416,7 +1457,7 @@ async function calculateRacePlan() {
 }
 
 function displayResults(data) {
-    const { segments, summary, elevation_profile, dropbag_contents, effort_thresholds } = data;
+    const { segments, summary, elevation_profile, dropbag_contents, effort_guidance } = data;
 
     // Store elevation profile and dropbag contents
     currentPlan.elevation_profile = elevation_profile;
@@ -1436,24 +1477,28 @@ function displayResults(data) {
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
     document.getElementById('summary-water').textContent = `${summary.total_water} L`;
     
-    // Display effort thresholds if in target time mode
-    const thresholdsContainer = document.getElementById('effort-thresholds-container');
-    if (effort_thresholds && thresholdsContainer) {
-        thresholdsContainer.style.display = 'block';
-        
-        // Format times as HH:MM:SS
-        const formatMinutesToTime = (minutes) => {
-            const hours = Math.floor(minutes / 60);
-            const mins = Math.floor(minutes % 60);
-            const secs = Math.floor((minutes % 1) * 60);
-            return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        };
-        
-        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time_minutes);
-        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold_minutes);
-        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold_minutes);
-    } else if (thresholdsContainer) {
-        thresholdsContainer.style.display = 'none';
+    // Display effort guidance if in target time mode
+    const guidanceContainer = document.getElementById('effort-thresholds-container');
+    if (effort_guidance && guidanceContainer) {
+        guidanceContainer.style.display = 'block';
+        guidanceContainer.innerHTML = `
+            <h4>Target Time Guidance</h4>
+            <div class="effort-guidance-info">
+                <p><strong>Natural Pace Baseline:</strong> ${effort_guidance.flat_pace_str} min/km</p>
+                <p class="guidance-note" style="font-size: 0.9em; color: #64748b; margin-top: -8px;">
+                    (Calculated from total distance ÷ target moving time, without elevation or terrain adjustments)
+                </p>
+                <p class="guidance-text">${effort_guidance.guidance_text}</p>
+                <div class="effort-legend">
+                    <span class="effort-badge effort-easy">Easy</span> - Flat or gentle terrain<br>
+                    <span class="effort-badge effort-medium">Medium</span> - Moderate climbs or rolling terrain<br>
+                    <span class="effort-badge effort-hard">Hard</span> - Steep climbs or technical terrain<br>
+                    <span class="effort-badge effort-very-hard">Very Hard</span> - Very steep climbs or highly technical terrain
+                </div>
+            </div>
+        `;
+    } else if (guidanceContainer) {
+        guidanceContainer.style.display = 'none';
     }
 
     // Update segments table
@@ -1499,8 +1544,13 @@ function displayResults(data) {
         }
         
         // Add effort level badge in target time mode only
-        if (effort_thresholds && seg.effort_level) {
+        if (effort_guidance && seg.effort_level) {
             const effortLabels = {
+                'easy': '<span class="effort-badge effort-easy">Easy</span>',
+                'medium': '<span class="effort-badge effort-medium">Medium</span>',
+                'hard': '<span class="effort-badge effort-hard">Hard</span>',
+                'very_hard': '<span class="effort-badge effort-very-hard">Very Hard</span>',
+                // Legacy labels for backward compatibility
                 'push': '<span class="effort-badge effort-push">PUSH</span>',
                 'steady': '<span class="effort-badge effort-steady">Steady</span>',
                 'protect': '<span class="effort-badge effort-protect">Protect</span>'

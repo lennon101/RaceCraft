@@ -120,7 +120,7 @@
                                   Technical Skill Level (Terrain Penalty):
                                   <span class="info-icon mdi mdi-information-outline" 
                                       tabindex="0"
-                                      data-tooltip="How much extra time you lose on technical terrain. Conservative = 100% of the terrain penalty (full slowdown), Elite = 0% penalty (no slowdown). Higher skill means less penalty. See documentation for details."></span>
+                                      data-tooltip="BASE PACE MODE: How much extra time you lose on technical terrain. Conservative = 100% of the terrain penalty (full slowdown), Elite = 0% penalty (no slowdown). TARGET TIME MODE: This setting is disabled - technical skill does not affect target time calculations."></span>
                             </label>
                             <select id="skill-level">
                                 <option value="0.0" title="Struggles on rough terrain, slow pace">Conservative (slow on rough terrain)</option>
@@ -160,7 +160,7 @@
                             Pacing Mode:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Base Pace: Calculate finish time from your flat terrain pace. Target Time: Enter your goal finish time and calculate required paces for each segment."></span>
+                                  data-tooltip="Base Pace: Calculate finish time from your flat terrain pace and abilities. Target Time: Enter your goal finish time - the system will distribute pacing based solely on elevation and terrain to meet this target exactly. Base pace, fitness, fatigue, and technical ability are disabled in Target Time mode."></span>
                         </label>
                         <div class="pacing-mode-toggle">
                             <label class="radio-label">
@@ -195,7 +195,7 @@
                                 Target Finish Time
                                 <span class="info-icon mdi mdi-information-outline" 
                                       tabindex="0"
-                                      data-tooltip="Your goal total race time including checkpoint stops. The system will calculate required paces for each segment to meet this target, accounting for terrain, elevation, and fatigue."></span>
+                                      data-tooltip="Your goal total race time including checkpoint stops. The system will always achieve this exact time by distributing pacing across segments based on elevation and terrain difficulty only."></span>
                             </label>
                             <div class="time-input">
                                 <input type="number" id="target-time-hours" min="0" max="99" value="10" placeholder="HH" pattern="[0-9]*" inputmode="numeric" />
@@ -212,7 +212,7 @@
                             Climbing Ability:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your vertical ascent rate capability. BASE PACE MODE: Determines how much climbing affects your pace on uphills. TARGET TIME MODE: Affects effort cost multipliers - elite climbers find it 'cheaper' to gain time on climbs (0.75x cost) vs conservative climbers (1.2x cost), so optimizer naturally prioritizes climbs for strong climbers."></span>
+                                  data-tooltip="BASE PACE MODE: Determines how much climbing affects your pace on uphills. TARGET TIME MODE: This setting is disabled - climbing pace adjustments are based solely on elevation gain and terrain difficulty."></span>
                         </label>
                         <select id="climbing-ability">
                             <option value="conservative">Conservative Climber (600 m/h)</option>
@@ -228,7 +228,7 @@
                             Include Fatigue Penalty
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="BASE PACE MODE: Your pace gradually slows down as accumulated distance and elevation increase throughout the race. TARGET TIME MODE: Effort cost increases over distance (fatigue multiplier), making optimizer prefer early effort over late effort. Fitness level controls how steep the cost curve is."></span>
+                                  data-tooltip="BASE PACE MODE: Your pace gradually slows down as accumulated distance and elevation increase throughout the race. TARGET TIME MODE: This setting is disabled - fatigue is not factored into target time calculations."></span>
                         </label>
                     </div>
                     <div class="input-group" id="fitness-level-group">
@@ -236,7 +236,7 @@
                             Fitness Level:
                             <span class="info-icon mdi mdi-information-outline" 
                                   tabindex="0"
-                                  data-tooltip="Your endurance fitness level. BASE PACE MODE: Determines Fatigue Onset Point (FOP) - the distance where you start experiencing significant pace degradation. TARGET TIME MODE: Controls global effort budget (15-50% max deviation from natural pace) and fatigue cost curve steepness. Higher fitness allows more aggressive target times."></span>
+                                  data-tooltip="BASE PACE MODE: Determines Fatigue Onset Point (FOP) - the distance where you start experiencing significant pace degradation. TARGET TIME MODE: This setting is disabled - fitness level does not affect target time calculations."></span>
                         </label>
                         <select id="fitness-level">
                             <option value="untrained">Untrained (FOP: 20-30 km-effort)</option>
