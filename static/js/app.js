@@ -455,20 +455,8 @@ function renderElevationChart(elevationProfile, segments) {
             const { ctx, chartArea: { top, bottom, left, right }, scales: { x, y } } = chart;
             
             checkpointData.forEach(cp => {
-                // Find the closest index in elevation profile to this checkpoint distance
-                let closestIndex = 0;
-                let minDiff = Math.abs(elevationProfile[0].distance - cp.distance);
-                
-                for (let i = 1; i < elevationProfile.length; i++) {
-                    const diff = Math.abs(elevationProfile[i].distance - cp.distance);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIndex = i;
-                    }
-                }
-                
-                // Get pixel position using the index
-                const xPos = x.getPixelForValue(closestIndex);
+                // Get pixel position using the distance value directly
+                const xPos = x.getPixelForValue(cp.distance);
                 
                 // Draw vertical dotted line
                 ctx.save();
@@ -495,10 +483,9 @@ function renderElevationChart(elevationProfile, segments) {
     elevationChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: elevationProfile.map(p => p.distance.toFixed(1)),
             datasets: [{
                 label: 'Elevation (m)',
-                data: elevationProfile.map(p => p.elevation),
+                data: elevationProfile.map(p => ({ x: p.distance, y: p.elevation })),
                 borderColor: 'rgb(37, 99, 235)',
                 backgroundColor: gradient,
                 fill: true,
@@ -524,7 +511,7 @@ function renderElevationChart(elevationProfile, segments) {
                     intersect: false,
                     callbacks: {
                         title: (context) => {
-                            const distance = parseFloat(context[0].label);
+                            const distance = context[0].parsed.x;
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
                                 Math.abs(cp.distance - distance) < 0.5
@@ -534,12 +521,12 @@ function renderElevationChart(elevationProfile, segments) {
                                 titleLines.push(`${nearCheckpoint.label}`);
                                 titleLines.push(`Distance: ${nearCheckpoint.distance.toFixed(1)} km`);
                             } else {
-                                titleLines.push(`Distance: ${distance} km`);
+                                titleLines.push(`Distance: ${distance.toFixed(1)} km`);
                             }
                             return titleLines;
                         },
                         label: (context) => {
-                            const distance = parseFloat(context.label);
+                            const distance = context.parsed.x;
                             const labels = [`Elevation: ${context.parsed.y.toFixed(0)} m`];
                             // Check if we're near a checkpoint
                             const nearCheckpoint = checkpointData.find(cp => 
@@ -628,6 +615,7 @@ function renderElevationChart(elevationProfile, segments) {
             },
             scales: {
                 x: {
+                    type: 'linear',
                     title: {
                         display: true,
                         text: 'Distance (km)',
@@ -637,12 +625,23 @@ function renderElevationChart(elevationProfile, segments) {
                         }
                     },
                     ticks: {
+                        callback: function(value) {
+                            return value.toFixed(1);
+                        },
+                        autoSkip: true,
                         maxTicksLimit: 15,
-                        callback: function(value, index) {
-                            // Show every nth tick based on data size
-                            const step = Math.ceil(elevationProfile.length / 15);
-                            return index % step === 0 ? this.getLabelForValue(value) : '';
-                        }
+                        stepSize: (function() {
+                            // Calculate dynamic step size based on total distance
+                            const totalDistance = elevationProfile[elevationProfile.length - 1].distance;
+                            
+                            // Determine appropriate step size
+                            if (totalDistance <= 10) return 1;
+                            if (totalDistance <= 30) return 2;
+                            if (totalDistance <= 50) return 5;
+                            if (totalDistance <= 100) return 10;
+                            if (totalDistance <= 200) return 20;
+                            return 25;
+                        })()
                     },
                     grid: {
                         display: true,
