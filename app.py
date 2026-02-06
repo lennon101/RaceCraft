@@ -1939,7 +1939,12 @@ def calculate():
             })
         
         # === Handle Target Time Mode ===
-        use_target_time = pacing_mode == 'target_time' and target_time_str
+        use_target_time = pacing_mode == 'target_time' and bool(target_time_str)
+        log_message(f"\n=== CALCULATE API CALLED ===")
+        log_message(f"pacing_mode: {pacing_mode}")
+        log_message(f"target_time_str: {target_time_str}")
+        log_message(f"use_target_time: {use_target_time}")
+        
         if use_target_time:
             try:
                 # Parse target time (HH:MM:SS)
@@ -1954,18 +1959,29 @@ def calculate():
                     total_cp_time = avg_cp_time * num_checkpoints
                     target_moving_time = target_total_minutes - total_cp_time
                     
+                    log_message(f"Target total time: {target_total_minutes:.2f} min")
+                    log_message(f"CP time: {total_cp_time:.2f} min")
+                    log_message(f"Target moving time: {target_moving_time:.2f} min")
+                    
                     if target_moving_time <= 0:
                         return jsonify({'error': f'Target time ({target_time_str}) is too short - checkpoint stops alone require {total_cp_time:.1f} minutes'}), 400
                     
                     # Use NEW independent target time calculation
                     # This ignores base pace, fitness, fatigue, and technical ability
+                    log_message(f"Calling calculate_independent_target_pacing...")
                     reverse_results = calculate_independent_target_pacing(
                         target_moving_time, segments_basic_data
                     )
+                    log_message(f"✓ Independent calculation complete. Results count: {len(reverse_results)}")
                 else:
                     return jsonify({'error': 'Invalid target time format. Use HH:MM:SS'}), 400
             except Exception as e:
+                log_message(f"✗ Error in target time calculation: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return jsonify({'error': f'Error parsing target time: {str(e)}'}), 400
+        else:
+            log_message(f"Using BASE PACE mode (not target time)")
         
         # Calculate segments with cumulative effort tracking
         segments = []
@@ -1985,6 +2001,8 @@ def calculate():
             # === Calculate segment time and pace ===
             if use_target_time:
                 # Target Time Mode: Use independent calculation
+                if i == 0:
+                    log_message(f"\n>>> Using TARGET TIME MODE for segment calculations")
                 segment_time = reverse_results[i]['segment_time']
                 required_pace = reverse_results[i]['required_pace']
                 effort_level = reverse_results[i].get('effort_level', 'easy')
@@ -2004,6 +2022,8 @@ def calculate():
                 fatigue_seconds = 0.0
             else:
                 # Base Pace Mode: Use forward-calculated pace (prediction)
+                if i == 0:
+                    log_message(f"\n>>> Using BASE PACE MODE for segment calculations")
                 adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
                     z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
                     fatigue_enabled, fitness_level, terrain_type, skill_level
