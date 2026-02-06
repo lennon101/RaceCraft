@@ -410,6 +410,12 @@ function renderElevationChart(elevationProfile, segments) {
         return;
     }
     
+    // Validate elevation profile data
+    if (!elevationProfile || elevationProfile.length === 0) {
+        console.warn('No elevation profile data available');
+        return;
+    }
+    
     const ctx = document.getElementById('elevation-chart');
     
     // Destroy existing chart
