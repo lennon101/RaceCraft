@@ -1,7 +1,10 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.6.1
+Version: v1.6.2
 Release Date: Feb 05, 2026
+
+Major Changes in v1.6.2:
+- added cache busting to static assets by appending version query parameter in template
 
 Major Changes in v1.6.1:
 - TERMINOLOGY UPDATE: Renamed "Gels/Sachets" to "Servings" throughout the application
