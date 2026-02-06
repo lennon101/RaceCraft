@@ -64,11 +64,17 @@ def test_app_js_changes():
     
     # Test 5: Check that old index-based logic is removed
     print("Test 5: Old index-based logic removed")
-    if "let closestIndex = 0" not in content and "for (let i = 1; i < elevationProfile.length" not in content:
+    has_closestIndex = "let closestIndex = 0" in content
+    has_for_loop = "for (let i = 1; i < elevationProfile.length" in content
+    
+    if not has_closestIndex and not has_for_loop:
         print("  ✓ PASS: Old index-finding logic removed")
         tests_passed += 1
     else:
-        print("  ✗ FAIL: Old index-finding logic still present")
+        if has_closestIndex:
+            print("  ✗ FAIL: 'let closestIndex = 0' still present")
+        if has_for_loop:
+            print("  ✗ FAIL: 'for (let i = 1; i < elevationProfile.length' still present")
         tests_failed += 1
     print()
     
