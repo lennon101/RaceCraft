@@ -22,7 +22,7 @@
     <!-- App Version for Frontend -->
     <script>
         window.APP_VERSION = '{{ app_version }}';
-        window.CLIENT_STORAGE_VERSION = 'v1.6.1'; // Update when localStorage schema changes
+        window.CLIENT_STORAGE_VERSION = 'v1.7.0'; // Update when localStorage schema changes
     </script>
 </head>
 <body>
@@ -174,18 +174,100 @@
                         </div>
                     </div>
                     <div id="base-pace-inputs">
+                        <!-- Pace Entry Mode Toggle -->
                         <div class="input-group">
-                            <label for="z2-pace-min">
-                                Flat Terrain Pace
-                                <span class="info-icon mdi mdi-information-outline" 
-                                      tabindex="0"
-                                      data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
-                            </label>
-                            <div class="pace-input">
-                                <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
-                                <span>:</span>
-                                <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
-                                <span class="unit">min/km</span>
+                            <label>Pace Entry Method:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="pace-entry-mode" id="pace-entry-manual" value="manual" checked />
+                                    <span>Manual Entry</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="pace-entry-mode" id="pace-entry-performance" value="performance" />
+                                    <span>From Performance</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Manual Pace Entry -->
+                        <div id="manual-pace-section">
+                            <div class="input-group">
+                                <label for="z2-pace-min">
+                                    Flat Terrain Pace
+                                    <span class="info-icon mdi mdi-information-outline" 
+                                          tabindex="0"
+                                          data-tooltip="Your expected average pace on flat terrain at a comfortable, sustainable effort level (Zone 2). This serves as the baseline for calculating pace adjustments based on elevation changes and terrain difficulty."></span>
+                                </label>
+                                <div class="pace-input">
+                                    <input type="number" id="z2-pace-min" min="3" max="20" value="6" pattern="[0-9]*" inputmode="numeric" />
+                                    <span>:</span>
+                                    <input type="number" id="z2-pace-sec" min="0" max="59" value="30" pattern="[0-9]*" inputmode="numeric" />
+                                    <span class="unit">min/km</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance-Based Pace Estimation -->
+                        <div id="performance-pace-section" style="display: none;">
+                            <div class="input-group">
+                                <label>
+                                    Reference Performance
+                                    <span class="info-icon mdi mdi-information-outline" 
+                                          tabindex="0"
+                                          data-tooltip="Enter a recent best-effort race result done at race intensity on relatively flat terrain. The system uses Riegel's formula to predict your pace for the uploaded route distance, with automatic intensity downshift for ultra distances (>42.2km). For best accuracy, use a performance from the last 3-6 months on similar terrain."></span>
+                                </label>
+                                <div class="performance-input-grid">
+                                    <div class="performance-input-row">
+                                        <label for="perf-distance" class="inline-label">Distance:</label>
+                                        <select id="perf-distance">
+                                            <option value="5">5K</option>
+                                            <option value="10" selected>10K</option>
+                                            <option value="15">15K</option>
+                                            <option value="21.1">Half Marathon</option>
+                                            <option value="42.2">Marathon</option>
+                                            <option value="50">50K</option>
+                                            <option value="custom">Custom...</option>
+                                        </select>
+                                        <input type="number" id="perf-distance-custom" 
+                                               placeholder="Distance (km)" 
+                                               style="display: none;" 
+                                               min="1" 
+                                               max="500" 
+                                               step="0.1" />
+                                    </div>
+                                    <div class="performance-input-row">
+                                        <label for="perf-time-hours" class="inline-label">Time:</label>
+                                        <div class="time-input">
+                                            <input type="number" id="perf-time-hours" min="0" max="99" value="0" placeholder="HH" pattern="[0-9]*" inputmode="numeric" />
+                                            <span>:</span>
+                                            <input type="number" id="perf-time-minutes" min="0" max="59" value="45" placeholder="MM" pattern="[0-9]*" inputmode="numeric" />
+                                            <span>:</span>
+                                            <input type="number" id="perf-time-seconds" min="0" max="59" value="0" placeholder="SS" pattern="[0-9]*" inputmode="numeric" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.85em; color: #666; font-style: italic; margin-top: 8px; padding: 8px; background: rgba(100, 116, 139, 0.05); border-radius: 4px;">
+                                    💡 Use a recent race result done at race intensity on flat terrain for best accuracy
+                                </div>
+                                <button id="calculate-pace-btn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
+                                    Calculate Estimated Pace
+                                </button>
+                            </div>
+                            
+                            <!-- Performance Calculation Result -->
+                            <div id="performance-result" style="display: none; margin-top: 15px; padding: 20px; background: rgba(76, 175, 80, 0.1); border-left: 3px solid #4CAF50; border-radius: 4px;">
+                                <div style="margin-bottom: 10px;">
+                                    <strong>Estimated Base Pace:</strong>
+                                    <span id="estimated-pace" style="font-size: 1.2em; color: #4CAF50; margin-left: 10px;"></span>
+                                </div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    Predicted finish time: <span id="predicted-time"></span>
+                                </div>
+                                <div id="downshift-info" style="font-size: 0.85em; color: #666; font-style: italic; margin-bottom: 15px;">
+                                </div>
+                                <button id="use-estimated-pace-btn" class="btn btn-primary" style="width: 100%; font-size: 1.05em;">
+                                    ✓ Use This Pace
+                                </button>
                             </div>
                         </div>
                     </div>
