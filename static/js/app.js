@@ -403,6 +403,19 @@ knownRaceSearch.addEventListener('input', filterKnownRaces);
 pacingModeBaseRadio.addEventListener('change', handlePacingModeChange);
 pacingModeTargetRadio.addEventListener('change', handlePacingModeChange);
 
+// Performance-based pace estimation listeners
+const paceEntryManualRadio = document.getElementById('pace-entry-manual');
+const paceEntryPerformanceRadio = document.getElementById('pace-entry-performance');
+const perfDistanceSelect = document.getElementById('perf-distance');
+const calculatePaceBtn = document.getElementById('calculate-pace-btn');
+const useEstimatedPaceBtn = document.getElementById('use-estimated-pace-btn');
+
+if (paceEntryManualRadio) paceEntryManualRadio.addEventListener('change', handlePaceEntryModeChange);
+if (paceEntryPerformanceRadio) paceEntryPerformanceRadio.addEventListener('change', handlePaceEntryModeChange);
+if (perfDistanceSelect) perfDistanceSelect.addEventListener('change', handlePerfDistanceChange);
+if (calculatePaceBtn) calculatePaceBtn.addEventListener('click', calculatePaceFromPerformance);
+if (useEstimatedPaceBtn) useEstimatedPaceBtn.addEventListener('click', useEstimatedPace);
+
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
     fitnessLevelInput.disabled = !fatigueEnabledInput.checked;
@@ -1234,6 +1247,171 @@ function generateTerrainDifficultyInputs() {
             }
         });
     });
+}
+
+// ============================================================================
+// PERFORMANCE-BASED PACE ESTIMATION
+// ============================================================================
+
+/**
+ * Handle pace entry mode toggle between manual and performance-based
+ */
+function handlePaceEntryModeChange() {
+    const selectedMode = document.querySelector('input[name="pace-entry-mode"]:checked')?.value || 'manual';
+    const manualSection = document.getElementById('manual-pace-section');
+    const performanceSection = document.getElementById('performance-pace-section');
+    
+    if (selectedMode === 'manual') {
+        manualSection.style.display = 'block';
+        performanceSection.style.display = 'none';
+    } else {
+        manualSection.style.display = 'none';
+        performanceSection.style.display = 'block';
+    }
+}
+
+/**
+ * Handle custom distance input toggle
+ */
+function handlePerfDistanceChange() {
+    const perfDistance = document.getElementById('perf-distance');
+    const perfDistanceCustom = document.getElementById('perf-distance-custom');
+    
+    if (perfDistance.value === 'custom') {
+        perfDistanceCustom.style.display = 'block';
+        perfDistanceCustom.focus();
+    } else {
+        perfDistanceCustom.style.display = 'none';
+    }
+}
+
+/**
+ * Calculate estimated pace from performance
+ */
+async function calculatePaceFromPerformance() {
+    const perfDistance = document.getElementById('perf-distance');
+    const perfDistanceCustom = document.getElementById('perf-distance-custom');
+    const perfTimeHours = document.getElementById('perf-time-hours');
+    const perfTimeMinutes = document.getElementById('perf-time-minutes');
+    const perfTimeSeconds = document.getElementById('perf-time-seconds');
+    const calculatePaceBtn = document.getElementById('calculate-pace-btn');
+    const performanceResult = document.getElementById('performance-result');
+    
+    // Check if GPX is uploaded
+    if (!currentPlan.gpx_filename || !currentPlan.total_distance) {
+        alert('Please upload a GPX file first to determine the target distance.');
+        return;
+    }
+    
+    // Get reference distance
+    let referenceDistance = parseFloat(perfDistance.value);
+    if (perfDistance.value === 'custom') {
+        referenceDistance = parseFloat(perfDistanceCustom.value);
+        if (!referenceDistance || referenceDistance <= 0) {
+            alert('Please enter a valid custom distance.');
+            return;
+        }
+    }
+    
+    // Get reference time
+    const hours = parseInt(perfTimeHours.value) || 0;
+    const minutes = parseInt(perfTimeMinutes.value) || 0;
+    const seconds = parseInt(perfTimeSeconds.value) || 0;
+    const referenceTimeMinutes = hours * 60 + minutes + seconds / 60;
+    
+    if (referenceTimeMinutes <= 0) {
+        alert('Please enter a valid race time.');
+        return;
+    }
+    
+    // Show loading state
+    calculatePaceBtn.disabled = true;
+    calculatePaceBtn.textContent = 'Calculating...';
+    
+    try {
+        const response = await fetch('/api/calculate-pace-from-performance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reference_distance_km: referenceDistance,
+                reference_time_minutes: referenceTimeMinutes,
+                target_distance_km: currentPlan.total_distance,
+                apply_ultra_downshift: true
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to calculate pace');
+        }
+        
+        const data = await response.json();
+        
+        // Display results
+        const estimatedPaceElem = document.getElementById('estimated-pace');
+        const predictedTimeElem = document.getElementById('predicted-time');
+        const downshiftInfoElem = document.getElementById('downshift-info');
+        
+        // Format pace as MM:SS
+        const paceMin = Math.floor(data.base_pace);
+        const paceSec = Math.round((data.base_pace - paceMin) * 60);
+        estimatedPaceElem.textContent = `${paceMin}:${paceSec.toString().padStart(2, '0')} min/km`;
+        
+        predictedTimeElem.textContent = data.predicted_time_formatted;
+        
+        // Show downshift info if applied
+        if (data.details.intensity_downshift_applied) {
+            downshiftInfoElem.textContent = `Ultra-distance intensity downshift applied (+${data.details.downshift_percentage}% time)`;
+        } else {
+            downshiftInfoElem.textContent = 'Predicted using Riegel\'s formula';
+        }
+        
+        // Store calculated pace for use
+        window.calculatedBasePace = data.base_pace;
+        
+        // Show result panel
+        performanceResult.style.display = 'block';
+        
+    } catch (error) {
+        alert(`Error calculating pace: ${error.message}`);
+        console.error('Error calculating pace:', error);
+    } finally {
+        calculatePaceBtn.disabled = false;
+        calculatePaceBtn.textContent = 'Calculate Estimated Pace';
+    }
+}
+
+/**
+ * Use the estimated pace by copying it to the manual pace inputs
+ */
+function useEstimatedPace() {
+    if (!window.calculatedBasePace) {
+        alert('Please calculate pace first.');
+        return;
+    }
+    
+    const z2PaceMin = document.getElementById('z2-pace-min');
+    const z2PaceSec = document.getElementById('z2-pace-sec');
+    
+    // Convert decimal pace to MM:SS
+    const paceMin = Math.floor(window.calculatedBasePace);
+    const paceSec = Math.round((window.calculatedBasePace - paceMin) * 60);
+    
+    // Set values
+    z2PaceMin.value = paceMin;
+    z2PaceSec.value = paceSec;
+    
+    // Switch back to manual mode to show the pace
+    const manualRadio = document.getElementById('pace-entry-manual');
+    if (manualRadio) {
+        manualRadio.checked = true;
+        handlePaceEntryModeChange();
+    }
+    
+    // Show success message
+    showNotification('✓ Estimated pace applied successfully', 'success');
 }
 
 function handlePacingModeChange() {

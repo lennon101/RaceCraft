@@ -1128,3 +1128,77 @@ tbody tr:last-child td {
     color: #166534;
     border: 1px solid #86efac;
 }
+
+/* ============================================================================
+   PERFORMANCE-BASED PACE ESTIMATION
+   ============================================================================ */
+
+.performance-input-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.performance-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.inline-label {
+    font-weight: 500;
+    min-width: 70px;
+    font-size: 0.95em;
+}
+
+#perf-distance {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1em;
+}
+
+#perf-distance-custom {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1em;
+}
+
+.secondary-btn {
+    background: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 500;
+    transition: background 0.2s ease;
+}
+
+.secondary-btn:hover {
+    background: #475569;
+}
+
+.secondary-btn:active {
+    background: #334155;
+}
+
+#performance-result {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
