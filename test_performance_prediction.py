@@ -5,10 +5,13 @@ Tests the Riegel formula, intensity downshift, and API endpoint.
 """
 
 import sys
+import os
 import math
 
-# Import the functions from app.py
-sys.path.insert(0, '/home/runner/work/RaceCraft/RaceCraft')
+# Add parent directory to path to import from app.py
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+
 from app import (
     predict_race_time_riegel,
     apply_intensity_downshift,
