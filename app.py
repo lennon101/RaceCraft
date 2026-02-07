@@ -1245,14 +1245,15 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
             elev_factor -= descent_bonus
         
         # Terrain difficulty factor
+        # Increased multipliers to more aggressively impact pace on technical terrain
         terrain_factors = {
-            'road': 0.95,
-            'smooth_trail': 1.0,
-            'dirt_road': 1.05,
-            'rocky_runnable': 1.15,
-            'technical': 1.33,
-            'very_technical': 1.65,
-            'scrambling': 2.0
+            'road': 0.90,           # Road is fastest (10% faster than baseline)
+            'smooth_trail': 1.0,    # Baseline
+            'dirt_road': 1.10,      # Slightly slower
+            'rocky_runnable': 1.35, # Noticeably slower (was 1.15)
+            'technical': 1.75,      # Significantly slower (was 1.33)
+            'very_technical': 2.25, # Very slow (was 1.65)
+            'scrambling': 3.0       # Extremely slow (was 2.0)
         }
         terrain_factor = terrain_factors.get(terrain_type, 1.0)
         
