@@ -1176,12 +1176,14 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
     - Base pace, fitness, fatigue, and technical ability have ZERO effect
     - Pace variation comes from elevation and terrain difficulty only
     - Effort labels communicate difficulty (Easy/Medium/Hard/Very Hard)
+    - Pace limits ensure realistic speeds (no faster than sub-2hr marathon, no slower than walking)
     
     Strategy:
     1. Calculate flat-equivalent base pace from total distance and target time
     2. Weight segment paces by elevation gain/loss and terrain difficulty
     3. Distribute time to ensure total time exactly equals target time
-    4. Assign effort labels based on gradient and terrain difficulty
+    4. Apply reasonable pace limits (2:50-15:00 min/km) with time redistribution
+    5. Assign effort labels based on gradient and terrain difficulty
     
     Args:
         target_time_minutes: Target total moving time in minutes
@@ -1193,6 +1195,10 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
     if not segments_data:
         return []
     
+    # Pace limits for realism
+    MIN_PACE = 2.85  # min/km - Sub-2hr marathon pace (~2:51 min/km, rounded to 2:50 for safety)
+    MAX_PACE = 15.0  # min/km - Average walking pace
+    
     # Calculate total distance
     total_distance_km = sum(seg['distance'] for seg in segments_data)
     
@@ -1203,6 +1209,7 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
     log_message(f"Target time: {target_time_minutes:.2f} min")
     log_message(f"Total distance: {total_distance_km:.2f} km")
     log_message(f"Flat-equivalent base pace: {flat_pace:.2f} min/km ({int(flat_pace)}:{int((flat_pace % 1) * 60):02d})")
+    log_message(f"Pace limits: {MIN_PACE:.2f}-{MAX_PACE:.2f} min/km")
     
     # First pass: Calculate relative difficulty weights for each segment
     segment_weights = []
@@ -1254,9 +1261,75 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
         segment_weights.append(weight)
         total_weight += weight
     
-    # Second pass: Distribute target time proportionally to weights
+    # Second pass: Distribute target time proportionally to weights with pace limits
+    # Use iterative approach to handle pace clamping and time redistribution
+    
+    # Initialize segment times based on weights
+    segment_times = []
+    for i in range(len(segments_data)):
+        initial_time = target_time_minutes * (segment_weights[i] / total_weight)
+        segment_times.append(initial_time)
+    
+    # Iteratively adjust paces to respect limits
+    MAX_ITERATIONS = 10
+    for iteration in range(MAX_ITERATIONS):
+        clamped_segments = []
+        total_excess_time = 0.0  # Time freed up from fast segments
+        total_deficit_time = 0.0  # Extra time needed for slow segments
+        adjustable_weight = 0.0  # Weight of segments that can still be adjusted
+        
+        for i in range(len(segments_data)):
+            distance_km = segments_data[i]['distance']
+            if distance_km == 0:
+                continue
+                
+            pace = segment_times[i] / distance_km
+            
+            if pace < MIN_PACE:
+                # Too fast - clamp to minimum pace and free up time
+                clamped_time = distance_km * MIN_PACE
+                excess_time = segment_times[i] - clamped_time
+                segment_times[i] = clamped_time
+                total_excess_time += excess_time
+                clamped_segments.append(i)
+            elif pace > MAX_PACE:
+                # Too slow - clamp to maximum pace and need more time
+                clamped_time = distance_km * MAX_PACE
+                deficit_time = clamped_time - segment_times[i]
+                segment_times[i] = clamped_time
+                total_deficit_time += deficit_time
+                clamped_segments.append(i)
+            else:
+                # Within limits - can be adjusted
+                adjustable_weight += segment_weights[i]
+        
+        # If no segments were clamped, we're done
+        if not clamped_segments:
+            break
+        
+        # Redistribute excess/deficit time to adjustable segments
+        net_time_to_redistribute = total_excess_time - total_deficit_time
+        
+        if adjustable_weight > 0 and abs(net_time_to_redistribute) > 0.001:
+            for i in range(len(segments_data)):
+                if i not in clamped_segments:
+                    # Adjust proportionally to weight
+                    adjustment = net_time_to_redistribute * (segment_weights[i] / adjustable_weight)
+                    segment_times[i] += adjustment
+        
+        log_message(f"Iteration {iteration + 1}: Clamped {len(clamped_segments)} segments, "
+                   f"excess: {total_excess_time:.2f}min, deficit: {total_deficit_time:.2f}min")
+    
+    # Final adjustment: ensure total time equals target exactly
+    actual_total = sum(segment_times)
+    if abs(actual_total - target_time_minutes) > 0.001:
+        # Adjust the last segment to make up the difference
+        time_diff = target_time_minutes - actual_total
+        segment_times[-1] += time_diff
+        log_message(f"Final adjustment: Added {time_diff:.2f}min to last segment")
+    
+    # Third pass: Build results with effort labels
     results = []
-    total_allocated_time = 0.0
     
     for i, seg_data in enumerate(segments_data):
         distance_km = seg_data['distance']
@@ -1264,15 +1337,7 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
         elev_loss = seg_data['elev_loss']
         terrain_type = seg_data['terrain_type']
         
-        # Calculate segment time based on weight
-        if i < len(segments_data) - 1:
-            # Proportional allocation
-            segment_time = target_time_minutes * (segment_weights[i] / total_weight)
-        else:
-            # Last segment: use remaining time to ensure exact total
-            segment_time = target_time_minutes - total_allocated_time
-        
-        total_allocated_time += segment_time
+        segment_time = segment_times[i]
         
         # Calculate required pace
         required_pace = segment_time / distance_km if distance_km > 0 else flat_pace
