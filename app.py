@@ -1178,12 +1178,19 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
     - Effort labels communicate difficulty (Easy/Medium/Hard/Very Hard)
     - Pace limits ensure realistic speeds (no faster than sub-2hr marathon, no slower than walking)
     
-    Strategy:
-    1. Calculate flat-equivalent base pace from total distance and target time
-    2. Weight segment paces by elevation gain/loss and terrain difficulty
-    3. Distribute time to ensure total time exactly equals target time
-    4. Apply reasonable pace limits (2:50-15:00 min/km) with time redistribution
-    5. Assign effort labels based on gradient and terrain difficulty
+    Refactored Strategy (Neutral Route Cost Approach):
+    Step 0: Build neutral route cost (distance × terrain only, no elevation)
+    Step 1: Derive neutral_reference_pace from target_time / neutral_cost
+    Step 2: Apply elevation modifiers (climbs slow down, descents speed up)
+    Step 3: Distribute time proportionally across segments
+    Step 4: Apply pace limits (2:50-15:00 min/km) with time redistribution
+    Step 5: Assign effort labels based on gradient and terrain difficulty
+    
+    This approach:
+    - Produces a route-relative (not athlete-relative) neutral pace
+    - Eliminates circular logic
+    - Makes downhill speedups emerge naturally after the anchor is set
+    - Is deterministic and impossible for users to "game"
     
     Args:
         target_time_minutes: Target total moving time in minutes
@@ -1199,19 +1206,76 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
     MIN_PACE = 2.85  # min/km - Sub-2hr marathon pace (~2:51 min/km, rounded to 2:50 for safety)
     MAX_PACE = 15.0  # min/km - Average walking pace
     
-    # Calculate total distance
-    total_distance_km = sum(seg['distance'] for seg in segments_data)
-    
-    # Calculate flat-equivalent base pace (internal reference)
-    flat_pace = target_time_minutes / total_distance_km  # minutes per km
-    
-    log_message(f"\n=== INDEPENDENT TARGET TIME MODE ===")
+    log_message(f"\n=== INDEPENDENT TARGET TIME MODE (NEUTRAL COST APPROACH) ===")
     log_message(f"Target time: {target_time_minutes:.2f} min")
+    
+    # ========================================
+    # STEP 0: Build neutral route cost
+    # ========================================
+    # This answers: "If this route were run at uniform difficulty,
+    # what flat pace would produce the target time?"
+    # 
+    # Calculation: distance × terrain_multiplier ONLY
+    # - Ignores slope direction
+    # - Ignores downhill benefit
+    # - Ignores uphill penalty
+    # - Pure terrain-weighted distance
+    
+    neutral_cost = 0.0
+    total_distance_km = 0.0
+    neutral_cost = 0.0
+    total_distance_km = 0.0
+    
+    # Base terrain multipliers (for neutral cost calculation)
+    base_terrain_factors = {
+        'road': 0.90,           # Road is fastest (10% faster than baseline)
+        'smooth_trail': 1.0,    # Baseline
+        'dirt_road': 1.10,      # Slightly slower
+        'rocky_runnable': 1.35, # Noticeably slower
+        'technical': 1.75,      # Significantly slower
+        'very_technical': 2.25, # Very slow
+        'scrambling': 3.0       # Extremely slow
+    }
+    
+    for seg_data in segments_data:
+        distance_km = seg_data['distance']
+        terrain_type = seg_data['terrain_type']
+        total_distance_km += distance_km
+        
+        # Get base terrain factor
+        base_terrain_factor = base_terrain_factors.get(terrain_type, 1.0)
+        
+        # Neutral cost = distance × terrain (NO elevation yet)
+        neutral_cost += distance_km * base_terrain_factor
+    
+    # ========================================
+    # STEP 1: Compute neutral reference pace
+    # ========================================
+    # This is the flat-equivalent pace that would produce the target time
+    # on a route with this terrain profile (ignoring elevation changes)
+    #
+    # Key properties:
+    # - Never appears in the UI
+    # - Changes automatically with route + target time
+    # - Route-relative, not athlete-relative
+    # - No circular logic
+    # - No hidden fitness assumptions
+    
+    neutral_reference_pace = target_time_minutes / neutral_cost  # minutes per km (terrain-adjusted)
+    
+    # Also calculate simple flat pace for UI display purposes
+    flat_pace = target_time_minutes / total_distance_km  # minutes per km (simple distance)
+    
     log_message(f"Total distance: {total_distance_km:.2f} km")
-    log_message(f"Flat-equivalent base pace: {flat_pace:.2f} min/km ({int(flat_pace)}:{int((flat_pace % 1) * 60):02d})")
+    log_message(f"Neutral route cost: {neutral_cost:.2f} km-equivalent")
+    log_message(f"Neutral reference pace: {neutral_reference_pace:.2f} min/km (internal, terrain-adjusted)")
+    log_message(f"Simple flat pace: {flat_pace:.2f} min/km ({int(flat_pace)}:{int((flat_pace % 1) * 60):02d}) (for UI display)")
     log_message(f"Pace limits: {MIN_PACE:.2f}-{MAX_PACE:.2f} min/km")
     
-    # First pass: Calculate relative difficulty weights for each segment
+    # ========================================
+    # STEP 2: Calculate segment weights with elevation modifiers
+    # ========================================
+    # Now we apply elevation effects on top of the neutral cost
     segment_weights = []
     total_weight = 0.0
     
@@ -1224,40 +1288,10 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
         # Calculate gradient
         gradient = (elev_gain - elev_loss) / (distance_km * 1000) if distance_km > 0 else 0
         
-        # Base weight is distance (time spent on segment at flat pace)
-        base_weight = distance_km
-        
-        # Elevation adjustment factor
-        # Steep climbs increase difficulty (slower), descents decrease difficulty (faster)
-        elev_factor = 1.0
-        if elev_gain > 0:
-            # Climbing slows pace - use vertical speed model
-            # Conservative: 600 m/h = 0.01 km/min = 100 min per 1km elevation
-            vertical_speed_km_per_min = 0.6 / 60.0  # 600 m/h = 0.01 km/min
-            climb_time_penalty = elev_gain / 1000.0 / vertical_speed_km_per_min
-            # Add climb penalty as fraction of base time
-            elev_factor += climb_time_penalty / (distance_km / flat_pace) if distance_km > 0 else 0
-        
-        if elev_loss > 0:
-            # Descents allow faster pace - but with safety limits
-            # Assume descent speeds up by ~10-20% depending on steepness
-            descent_bonus = min(0.20, abs(gradient) * 2.0) if gradient < 0 else 0
-            elev_factor -= descent_bonus
-        
-        # Terrain difficulty factor
-        # Base terrain multipliers (applied to flat/neutral terrain)
-        base_terrain_factors = {
-            'road': 0.90,           # Road is fastest (10% faster than baseline)
-            'smooth_trail': 1.0,    # Baseline
-            'dirt_road': 1.10,      # Slightly slower
-            'rocky_runnable': 1.35, # Noticeably slower
-            'technical': 1.75,      # Significantly slower
-            'very_technical': 2.25, # Very slow
-            'scrambling': 3.0       # Extremely slow
-        }
+        # Get base terrain factor (same as used in neutral cost)
         base_terrain_factor = base_terrain_factors.get(terrain_type, 1.0)
         
-        # Adjust terrain factor based on elevation change
+        # Adjust terrain factor based on elevation profile
         # Technical terrain impacts pace differently on climbs vs descents:
         # - On DESCENTS: Technical terrain slows you down MORE (safety, footing)
         # - On CLIMBS: Technical terrain doesn't slow you down AS MUCH (already slow)
@@ -1268,25 +1302,51 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
         
         if elevation_dominance < -0.03:  # Descent-dominant (gradient < -3%)
             # Amplify terrain difficulty on descents
-            # Technical terrain is much more challenging when going downhill
             terrain_amplification = 1.3  # 30% more impact
             terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_amplification
         elif elevation_dominance > 0.03:  # Climb-dominant (gradient > 3%)
             # Reduce terrain difficulty impact on climbs
-            # Already slow on climbs, technical terrain adds less penalty
             terrain_reduction = 0.6  # 40% less impact
             terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_reduction
         else:  # Relatively flat (-3% to +3%)
             # Use base terrain factor
             terrain_factor = base_terrain_factor
         
-        # Combined weight
-        weight = base_weight * elev_factor * terrain_factor
+        # Base weight starts with neutral cost component
+        # This is distance × terrain_factor (same as Step 0)
+        base_weight = distance_km * terrain_factor
+        
+        # Elevation adjustment factor
+        # Now we layer elevation effects ON TOP of the neutral cost
+        elev_factor = 1.0
+        
+        if elev_gain > 0:
+            # Climbing slows pace - use vertical speed model
+            # Conservative: 600 m/h = 0.01 km/min = 100 min per 1km elevation
+            vertical_speed_km_per_min = 0.6 / 60.0  # 600 m/h = 0.01 km/min
+            climb_time_penalty = elev_gain / 1000.0 / vertical_speed_km_per_min
+            # Add climb penalty as fraction of base time
+            # Use neutral_reference_pace as the anchor (not simple flat_pace)
+            base_segment_time = base_weight * neutral_reference_pace
+            if base_segment_time > 0:
+                elev_factor += climb_time_penalty / base_segment_time
+        
+        if elev_loss > 0:
+            # Descents allow faster pace - but with safety limits
+            # Assume descent speeds up by ~10-20% depending on steepness
+            descent_bonus = min(0.20, abs(gradient) * 2.0) if gradient < 0 else 0
+            elev_factor -= descent_bonus
+        
+        # Combined weight = neutral cost component × elevation modifier
+        weight = base_weight * elev_factor
         segment_weights.append(weight)
         total_weight += weight
     
-    # Second pass: Distribute target time proportionally to weights with pace limits
-    # Use iterative approach to handle pace clamping and time redistribution
+    # ========================================
+    # STEP 3 & 4: Distribute time and apply pace limits
+    # ========================================
+    # Now distribute the target time proportionally to weights
+    # Then apply pace limits with iterative redistribution
     
     # Initialize segment times based on weights
     segment_times = []
@@ -1352,7 +1412,9 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
         segment_times[-1] += time_diff
         log_message(f"Final adjustment: Added {time_diff:.2f}min to last segment")
     
-    # Third pass: Build results with effort labels
+    # ========================================
+    # STEP 5: Build results with effort labels
+    # ========================================
     results = []
     
     for i, seg_data in enumerate(segments_data):
