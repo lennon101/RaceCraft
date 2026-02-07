@@ -1410,8 +1410,8 @@ function useEstimatedPace() {
         handlePaceEntryModeChange();
     }
     
-    // Show success message
-    showNotification('✓ Estimated pace applied successfully', 'success');
+    // Log success
+    console.log('✓ Estimated pace applied successfully:', window.calculatedBasePace, 'min/km');
 }
 
 function handlePacingModeChange() {
