@@ -1525,6 +1525,13 @@ function displayResults(data) {
     terrainCols.forEach(col => {
         col.style.display = terrainEnabled ? 'table-cell' : 'none';
     });
+    
+    // Show/hide Course Difficulty column based on target time mode
+    const isTargetTimeMode = effort_guidance !== null && effort_guidance !== undefined;
+    const courseDifficultyCols = document.querySelectorAll('.course-difficulty-col');
+    courseDifficultyCols.forEach(col => {
+        col.style.display = isTargetTimeMode ? 'table-cell' : 'none';
+    });
 
     segments.forEach(seg => {
         const row = document.createElement('tr');
@@ -1534,7 +1541,30 @@ function displayResults(data) {
         let paceWarning = '';
         let effortBadge = '';
         
-        if (seg.pace_capped) {
+        // In Target Time mode, color the pace based on speed relative to flat pace
+        if (isTargetTimeMode && seg.flat_pace && seg.pace) {
+            // Calculate pace ratio (actual pace / flat pace)
+            // Higher ratio = slower pace = red
+            // Lower ratio = faster pace = green
+            const paceRatio = seg.pace / seg.flat_pace;
+            
+            // Define color scale thresholds
+            // Fast: <0.85 (green)
+            // Normal: 0.85-1.15 (blue)
+            // Slow: >1.15 (red)
+            let paceColor;
+            if (paceRatio < 0.85) {
+                // Fast pace - green
+                paceColor = '#16a34a'; // green-600
+            } else if (paceRatio > 1.15) {
+                // Slow pace - red
+                paceColor = '#dc2626'; // red-600
+            } else {
+                // Normal pace - blue
+                paceColor = '#2563eb'; // blue-600
+            }
+            paceStyle = `font-weight: bold; color: ${paceColor};`;
+        } else if (seg.pace_capped) {
             paceStyle = 'color: #ef4444; font-weight: bold;';
             paceWarning = ' ⚠️';
         } else if (seg.pace_aggressive) {
@@ -1543,8 +1573,8 @@ function displayResults(data) {
             paceWarning = ' ⚡';
         }
         
-        // Add effort level badge in target time mode only
-        if (effort_guidance && seg.effort_level) {
+        // Create effort level badge for Course Difficulty column (target time mode only)
+        if (isTargetTimeMode && seg.effort_level) {
             const effortLabels = {
                 'easy': '<span class="effort-badge effort-easy">Easy</span>',
                 'medium': '<span class="effort-badge effort-medium">Medium</span>',
@@ -1572,7 +1602,8 @@ function displayResults(data) {
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
             <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong> ${effortBadge}</td>
+            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong></td>
+            <td class="course-difficulty-col" style="display: ${isTargetTimeMode ? 'table-cell' : 'none'}">${effortBadge}</td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
             <td>${seg.target_water}</td>

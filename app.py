@@ -2006,6 +2006,7 @@ def calculate():
                 segment_time = reverse_results[i]['segment_time']
                 required_pace = reverse_results[i]['required_pace']
                 effort_level = reverse_results[i].get('effort_level', 'easy')
+                flat_pace = reverse_results[i].get('flat_pace', required_pace)  # Get flat pace for reference
                 
                 # In new independent mode, we still calculate natural pace for display reference
                 # But it doesn't affect the results
@@ -2031,6 +2032,7 @@ def calculate():
                 segment_time = segment_dist * adjusted_pace
                 pace_aggressive = False
                 effort_level = 'steady'
+                flat_pace = None  # Not applicable in base pace mode
                 
                 # Log when pace is capped
                 if pace_capped:
@@ -2086,6 +2088,7 @@ def calculate():
                 'pace_capped': pace_capped,
                 'pace_aggressive': pace_aggressive if use_target_time else False,
                 'effort_level': effort_level if use_target_time else 'steady',  # New: effort allocation
+                'flat_pace': round(flat_pace, 2) if flat_pace else None,  # Add flat pace for pace coloring in target time mode
                 # Note: In target time mode, fatigue is incorporated into natural pacing, not displayed separately
                 'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
