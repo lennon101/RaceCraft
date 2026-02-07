@@ -1168,26 +1168,6 @@ tbody tr:last-child td {
     font-size: 1em;
 }
 
-.secondary-btn {
-    background: var(--secondary-color);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.95em;
-    font-weight: 500;
-    transition: background 0.2s ease;
-}
-
-.secondary-btn:hover {
-    background: #475569;
-}
-
-.secondary-btn:active {
-    background: #334155;
-}
-
 #performance-result {
     animation: slideIn 0.3s ease-out;
 }

@@ -214,7 +214,7 @@
                                     Reference Performance
                                     <span class="info-icon mdi mdi-information-outline" 
                                           tabindex="0"
-                                          data-tooltip="Enter a recent best-effort race result. The system uses Riegel's formula to predict your pace for the uploaded route distance, with automatic intensity downshift for ultra distances (>42.2km)."></span>
+                                          data-tooltip="Enter a recent best-effort race result done at race intensity on relatively flat terrain. The system uses Riegel's formula to predict your pace for the uploaded route distance, with automatic intensity downshift for ultra distances (>42.2km). For best accuracy, use a performance from the last 3-6 months on similar terrain."></span>
                                 </label>
                                 <div class="performance-input-grid">
                                     <div class="performance-input-row">
@@ -246,13 +246,16 @@
                                         </div>
                                     </div>
                                 </div>
-                                <button id="calculate-pace-btn" class="secondary-btn" style="margin-top: 10px;">
+                                <div style="font-size: 0.85em; color: #666; font-style: italic; margin-top: 8px; padding: 8px; background: rgba(100, 116, 139, 0.05); border-radius: 4px;">
+                                    💡 Use a recent race result done at race intensity on flat terrain for best accuracy
+                                </div>
+                                <button id="calculate-pace-btn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
                                     Calculate Estimated Pace
                                 </button>
                             </div>
                             
                             <!-- Performance Calculation Result -->
-                            <div id="performance-result" style="display: none; margin-top: 15px; padding: 15px; background: rgba(76, 175, 80, 0.1); border-left: 3px solid #4CAF50; border-radius: 4px;">
+                            <div id="performance-result" style="display: none; margin-top: 15px; padding: 20px; background: rgba(76, 175, 80, 0.1); border-left: 3px solid #4CAF50; border-radius: 4px;">
                                 <div style="margin-bottom: 10px;">
                                     <strong>Estimated Base Pace:</strong>
                                     <span id="estimated-pace" style="font-size: 1.2em; color: #4CAF50; margin-left: 10px;"></span>
@@ -260,10 +263,10 @@
                                 <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
                                     Predicted finish time: <span id="predicted-time"></span>
                                 </div>
-                                <div id="downshift-info" style="font-size: 0.85em; color: #666; font-style: italic;">
+                                <div id="downshift-info" style="font-size: 0.85em; color: #666; font-style: italic; margin-bottom: 15px;">
                                 </div>
-                                <button id="use-estimated-pace-btn" class="primary-btn" style="margin-top: 10px;">
-                                    Use This Pace
+                                <button id="use-estimated-pace-btn" class="btn btn-primary" style="width: 100%; font-size: 1.05em;">
+                                    ✓ Use This Pace
                                 </button>
                             </div>
                         </div>
