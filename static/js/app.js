@@ -1412,6 +1412,11 @@ function useEstimatedPace() {
     
     // Log success
     console.log('✓ Estimated pace applied successfully:', window.calculatedBasePace, 'min/km');
+    
+    // Automatically recalculate the race plan with the new pace
+    if (currentPlan.gpx_filename) {
+        calculateRacePlan();
+    }
 }
 
 function handlePacingModeChange() {
