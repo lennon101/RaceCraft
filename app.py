@@ -1245,17 +1245,40 @@ def calculate_independent_target_pacing(target_time_minutes, segments_data):
             elev_factor -= descent_bonus
         
         # Terrain difficulty factor
-        # Increased multipliers to more aggressively impact pace on technical terrain
-        terrain_factors = {
+        # Base terrain multipliers (applied to flat/neutral terrain)
+        base_terrain_factors = {
             'road': 0.90,           # Road is fastest (10% faster than baseline)
             'smooth_trail': 1.0,    # Baseline
             'dirt_road': 1.10,      # Slightly slower
-            'rocky_runnable': 1.35, # Noticeably slower (was 1.15)
-            'technical': 1.75,      # Significantly slower (was 1.33)
-            'very_technical': 2.25, # Very slow (was 1.65)
-            'scrambling': 3.0       # Extremely slow (was 2.0)
+            'rocky_runnable': 1.35, # Noticeably slower
+            'technical': 1.75,      # Significantly slower
+            'very_technical': 2.25, # Very slow
+            'scrambling': 3.0       # Extremely slow
         }
-        terrain_factor = terrain_factors.get(terrain_type, 1.0)
+        base_terrain_factor = base_terrain_factors.get(terrain_type, 1.0)
+        
+        # Adjust terrain factor based on elevation change
+        # Technical terrain impacts pace differently on climbs vs descents:
+        # - On DESCENTS: Technical terrain slows you down MORE (safety, footing)
+        # - On CLIMBS: Technical terrain doesn't slow you down AS MUCH (already slow)
+        # - On FLAT: Use base terrain factor
+        
+        net_elevation = elev_gain - elev_loss
+        elevation_dominance = net_elevation / (distance_km * 1000) if distance_km > 0 else 0
+        
+        if elevation_dominance < -0.03:  # Descent-dominant (gradient < -3%)
+            # Amplify terrain difficulty on descents
+            # Technical terrain is much more challenging when going downhill
+            terrain_amplification = 1.3  # 30% more impact
+            terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_amplification
+        elif elevation_dominance > 0.03:  # Climb-dominant (gradient > 3%)
+            # Reduce terrain difficulty impact on climbs
+            # Already slow on climbs, technical terrain adds less penalty
+            terrain_reduction = 0.6  # 40% less impact
+            terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_reduction
+        else:  # Relatively flat (-3% to +3%)
+            # Use base terrain factor
+            terrain_factor = base_terrain_factor
         
         # Combined weight
         weight = base_weight * elev_factor * terrain_factor
