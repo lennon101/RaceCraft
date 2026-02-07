@@ -403,6 +403,19 @@ knownRaceSearch.addEventListener('input', filterKnownRaces);
 pacingModeBaseRadio.addEventListener('change', handlePacingModeChange);
 pacingModeTargetRadio.addEventListener('change', handlePacingModeChange);
 
+// Performance-based pace estimation listeners
+const paceEntryManualRadio = document.getElementById('pace-entry-manual');
+const paceEntryPerformanceRadio = document.getElementById('pace-entry-performance');
+const perfDistanceSelect = document.getElementById('perf-distance');
+const calculatePaceBtn = document.getElementById('calculate-pace-btn');
+const useEstimatedPaceBtn = document.getElementById('use-estimated-pace-btn');
+
+if (paceEntryManualRadio) paceEntryManualRadio.addEventListener('change', handlePaceEntryModeChange);
+if (paceEntryPerformanceRadio) paceEntryPerformanceRadio.addEventListener('change', handlePaceEntryModeChange);
+if (perfDistanceSelect) perfDistanceSelect.addEventListener('change', handlePerfDistanceChange);
+if (calculatePaceBtn) calculatePaceBtn.addEventListener('click', calculatePaceFromPerformance);
+if (useEstimatedPaceBtn) useEstimatedPaceBtn.addEventListener('click', useEstimatedPace);
+
 // Fatigue checkbox toggles fitness level dropdown
 fatigueEnabledInput.addEventListener('change', () => {
     fitnessLevelInput.disabled = !fatigueEnabledInput.checked;
@@ -1236,25 +1249,236 @@ function generateTerrainDifficultyInputs() {
     });
 }
 
+// ============================================================================
+// PERFORMANCE-BASED PACE ESTIMATION
+// ============================================================================
+
+/**
+ * Handle pace entry mode toggle between manual and performance-based
+ */
+function handlePaceEntryModeChange() {
+    const selectedMode = document.querySelector('input[name="pace-entry-mode"]:checked')?.value || 'manual';
+    const manualSection = document.getElementById('manual-pace-section');
+    const performanceSection = document.getElementById('performance-pace-section');
+    
+    if (selectedMode === 'manual') {
+        manualSection.style.display = 'block';
+        performanceSection.style.display = 'none';
+    } else {
+        manualSection.style.display = 'none';
+        performanceSection.style.display = 'block';
+    }
+}
+
+/**
+ * Handle custom distance input toggle
+ */
+function handlePerfDistanceChange() {
+    const perfDistance = document.getElementById('perf-distance');
+    const perfDistanceCustom = document.getElementById('perf-distance-custom');
+    
+    if (perfDistance.value === 'custom') {
+        perfDistanceCustom.style.display = 'block';
+        perfDistanceCustom.focus();
+    } else {
+        perfDistanceCustom.style.display = 'none';
+    }
+}
+
+/**
+ * Calculate estimated pace from performance
+ */
+async function calculatePaceFromPerformance() {
+    const perfDistance = document.getElementById('perf-distance');
+    const perfDistanceCustom = document.getElementById('perf-distance-custom');
+    const perfTimeHours = document.getElementById('perf-time-hours');
+    const perfTimeMinutes = document.getElementById('perf-time-minutes');
+    const perfTimeSeconds = document.getElementById('perf-time-seconds');
+    const calculatePaceBtn = document.getElementById('calculate-pace-btn');
+    const performanceResult = document.getElementById('performance-result');
+    
+    // Check if GPX is uploaded
+    if (!currentPlan.gpx_filename || !currentPlan.total_distance) {
+        alert('Please upload a GPX file first to determine the target distance.');
+        return;
+    }
+    
+    // Get reference distance
+    let referenceDistance = parseFloat(perfDistance.value);
+    if (perfDistance.value === 'custom') {
+        referenceDistance = parseFloat(perfDistanceCustom.value);
+        if (!referenceDistance || referenceDistance <= 0) {
+            alert('Please enter a valid custom distance.');
+            return;
+        }
+    }
+    
+    // Get reference time
+    const hours = parseInt(perfTimeHours.value) || 0;
+    const minutes = parseInt(perfTimeMinutes.value) || 0;
+    const seconds = parseInt(perfTimeSeconds.value) || 0;
+    const referenceTimeMinutes = hours * 60 + minutes + seconds / 60;
+    
+    if (referenceTimeMinutes <= 0) {
+        alert('Please enter a valid race time.');
+        return;
+    }
+    
+    // Show loading state
+    calculatePaceBtn.disabled = true;
+    calculatePaceBtn.textContent = 'Calculating...';
+    
+    try {
+        const response = await fetch('/api/calculate-pace-from-performance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reference_distance_km: referenceDistance,
+                reference_time_minutes: referenceTimeMinutes,
+                target_distance_km: currentPlan.total_distance,
+                apply_ultra_downshift: true
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to calculate pace');
+        }
+        
+        const data = await response.json();
+        
+        // Display results
+        const estimatedPaceElem = document.getElementById('estimated-pace');
+        const predictedTimeElem = document.getElementById('predicted-time');
+        const downshiftInfoElem = document.getElementById('downshift-info');
+        
+        // Format pace as MM:SS
+        const paceMin = Math.floor(data.base_pace);
+        const paceSec = Math.round((data.base_pace - paceMin) * 60);
+        estimatedPaceElem.textContent = `${paceMin}:${paceSec.toString().padStart(2, '0')} min/km`;
+        
+        predictedTimeElem.textContent = data.predicted_time_formatted;
+        
+        // Show downshift info if applied
+        if (data.details.intensity_downshift_applied) {
+            downshiftInfoElem.textContent = `Ultra-distance intensity downshift applied (+${data.details.downshift_percentage}% time)`;
+        } else {
+            downshiftInfoElem.textContent = 'Predicted using Riegel\'s formula';
+        }
+        
+        // Store calculated pace for use
+        window.calculatedBasePace = data.base_pace;
+        
+        // Show result panel
+        performanceResult.style.display = 'block';
+        
+    } catch (error) {
+        alert(`Error calculating pace: ${error.message}`);
+        console.error('Error calculating pace:', error);
+    } finally {
+        calculatePaceBtn.disabled = false;
+        calculatePaceBtn.textContent = 'Calculate Estimated Pace';
+    }
+}
+
+/**
+ * Use the estimated pace by copying it to the manual pace inputs
+ */
+function useEstimatedPace() {
+    if (!window.calculatedBasePace) {
+        alert('Please calculate pace first.');
+        return;
+    }
+    
+    const z2PaceMin = document.getElementById('z2-pace-min');
+    const z2PaceSec = document.getElementById('z2-pace-sec');
+    
+    // Convert decimal pace to MM:SS
+    const paceMin = Math.floor(window.calculatedBasePace);
+    const paceSec = Math.round((window.calculatedBasePace - paceMin) * 60);
+    
+    // Set values
+    z2PaceMin.value = paceMin;
+    z2PaceSec.value = paceSec;
+    
+    // Switch back to manual mode to show the pace
+    const manualRadio = document.getElementById('pace-entry-manual');
+    if (manualRadio) {
+        manualRadio.checked = true;
+        handlePaceEntryModeChange();
+    }
+    
+    // Log success
+    console.log('✓ Estimated pace applied successfully:', window.calculatedBasePace, 'min/km');
+    
+    // Automatically recalculate the race plan with the new pace
+    if (currentPlan.gpx_filename) {
+        calculateRacePlan();
+    }
+}
+
 function handlePacingModeChange() {
     const selectedMode = document.querySelector('input[name="pacing-mode"]:checked').value;
     currentPlan.pacing_mode = selectedMode;
     
+    // Get all the inputs that should be disabled in target time mode
+    const z2PaceMinInput = document.getElementById('z2-pace-min');
+    const z2PaceSecInput = document.getElementById('z2-pace-sec');
+    const climbingAbilitySelect = document.getElementById('climbing-ability');
+    const fitnessLevelSelect = document.getElementById('fitness-level');
+    const fatigueEnabledCheckbox = document.getElementById('fatigue-enabled');
+    const skillLevelSelect = document.getElementById('skill-level');
+    
+    // Get parent groups for styling
+    const climbingAbilityGroup = document.getElementById('climbing-ability-group');
+    const fitnessLevelGroup = document.getElementById('fitness-level-group');
+    const fatigueCheckboxGroup = fatigueEnabledCheckbox?.closest('.checkbox-group');
+    const skillLevelGroup = skillLevelSelect?.closest('.input-group');
+    
     if (selectedMode === 'base_pace') {
+        // Base Pace Mode: Show base pace inputs, enable all ability inputs
         basePaceInputs.style.display = 'block';
         targetTimeInputs.style.display = 'none';
+        
+        // Enable all inputs
+        if (z2PaceMinInput) z2PaceMinInput.disabled = false;
+        if (z2PaceSecInput) z2PaceSecInput.disabled = false;
+        if (climbingAbilitySelect) climbingAbilitySelect.disabled = false;
+        if (fitnessLevelSelect) fitnessLevelSelect.disabled = false;
+        if (fatigueEnabledCheckbox) fatigueEnabledCheckbox.disabled = false;
+        if (skillLevelSelect) skillLevelSelect.disabled = false;
+        
+        // Remove disabled styling from groups
+        if (climbingAbilityGroup) climbingAbilityGroup.classList.remove('disabled');
+        if (fitnessLevelGroup) fitnessLevelGroup.classList.remove('disabled');
+        if (fatigueCheckboxGroup) fatigueCheckboxGroup.classList.remove('disabled');
+        if (skillLevelGroup) skillLevelGroup.classList.remove('disabled');
+        
         // Clear target time warning when switching to base pace mode
         if (targetTimeWarning) {
             targetTimeWarning.style.display = 'none';
         }
     } else {
+        // Target Time Mode: Show target time inputs, disable ability inputs
         basePaceInputs.style.display = 'none';
         targetTimeInputs.style.display = 'block';
+        
+        // Disable inputs that don't affect target time mode
+        if (z2PaceMinInput) z2PaceMinInput.disabled = true;
+        if (z2PaceSecInput) z2PaceSecInput.disabled = true;
+        if (climbingAbilitySelect) climbingAbilitySelect.disabled = true;
+        if (fitnessLevelSelect) fitnessLevelSelect.disabled = true;
+        if (fatigueEnabledCheckbox) fatigueEnabledCheckbox.disabled = true;
+        if (skillLevelSelect) skillLevelSelect.disabled = true;
+        
+        // Add disabled styling to groups
+        if (climbingAbilityGroup) climbingAbilityGroup.classList.add('disabled');
+        if (fitnessLevelGroup) fitnessLevelGroup.classList.add('disabled');
+        if (fatigueCheckboxGroup) fatigueCheckboxGroup.classList.add('disabled');
+        if (skillLevelGroup) skillLevelGroup.classList.add('disabled');
     }
-    
-    // Note: Climbing ability, fitness level, and fatigue settings are shown in both modes
-    // - Base Pace Mode: They affect forward prediction (ability → pace → time)
-    // - Target Time Mode: They affect effort allocation optimization (cost, capacity, limits)
     
     // Recalculate if a plan is loaded
     if (currentPlan.gpx_filename && currentPlan.checkpoint_distances.length > 0) {
@@ -1416,7 +1640,7 @@ async function calculateRacePlan() {
 }
 
 function displayResults(data) {
-    const { segments, summary, elevation_profile, dropbag_contents, effort_thresholds } = data;
+    const { segments, summary, elevation_profile, dropbag_contents, effort_guidance } = data;
 
     // Store elevation profile and dropbag contents
     currentPlan.elevation_profile = elevation_profile;
@@ -1436,24 +1660,28 @@ function displayResults(data) {
     document.getElementById('summary-carbs').textContent = `${summary.total_carbs} g`;
     document.getElementById('summary-water').textContent = `${summary.total_water} L`;
     
-    // Display effort thresholds if in target time mode
-    const thresholdsContainer = document.getElementById('effort-thresholds-container');
-    if (effort_thresholds && thresholdsContainer) {
-        thresholdsContainer.style.display = 'block';
-        
-        // Format times as HH:MM:SS
-        const formatMinutesToTime = (minutes) => {
-            const hours = Math.floor(minutes / 60);
-            const mins = Math.floor(minutes % 60);
-            const secs = Math.floor((minutes % 1) * 60);
-            return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        };
-        
-        document.getElementById('threshold-natural').textContent = formatMinutesToTime(effort_thresholds.natural_time_minutes);
-        document.getElementById('threshold-push').textContent = formatMinutesToTime(effort_thresholds.push_threshold_minutes);
-        document.getElementById('threshold-protect').textContent = formatMinutesToTime(effort_thresholds.protect_threshold_minutes);
-    } else if (thresholdsContainer) {
-        thresholdsContainer.style.display = 'none';
+    // Display effort guidance if in target time mode
+    const guidanceContainer = document.getElementById('effort-thresholds-container');
+    if (effort_guidance && guidanceContainer) {
+        guidanceContainer.style.display = 'block';
+        guidanceContainer.innerHTML = `
+            <h4>Target Time Guidance</h4>
+            <div class="effort-guidance-info">
+                <p><strong>Natural Pace Baseline:</strong> ${effort_guidance.flat_pace_str} min/km</p>
+                <p class="guidance-note" style="font-size: 0.9em; color: #64748b; margin-top: -8px;">
+                    (Calculated from total distance ÷ target moving time, without elevation or terrain adjustments)
+                </p>
+                <p class="guidance-text">${effort_guidance.guidance_text}</p>
+                <div class="effort-legend">
+                    <span class="effort-badge effort-easy">Easy</span> - Flat or gentle terrain<br>
+                    <span class="effort-badge effort-medium">Medium</span> - Moderate climbs or rolling terrain<br>
+                    <span class="effort-badge effort-hard">Hard</span> - Steep climbs or technical terrain<br>
+                    <span class="effort-badge effort-very-hard">Very Hard</span> - Very steep climbs or highly technical terrain
+                </div>
+            </div>
+        `;
+    } else if (guidanceContainer) {
+        guidanceContainer.style.display = 'none';
     }
 
     // Update segments table
@@ -1480,6 +1708,13 @@ function displayResults(data) {
     terrainCols.forEach(col => {
         col.style.display = terrainEnabled ? 'table-cell' : 'none';
     });
+    
+    // Show/hide Course Difficulty column based on target time mode
+    const isTargetTimeMode = effort_guidance !== null && effort_guidance !== undefined;
+    const courseDifficultyCols = document.querySelectorAll('.course-difficulty-col');
+    courseDifficultyCols.forEach(col => {
+        col.style.display = isTargetTimeMode ? 'table-cell' : 'none';
+    });
 
     segments.forEach(seg => {
         const row = document.createElement('tr');
@@ -1489,7 +1724,30 @@ function displayResults(data) {
         let paceWarning = '';
         let effortBadge = '';
         
-        if (seg.pace_capped) {
+        // In Target Time mode, color the pace based on speed relative to flat pace
+        if (isTargetTimeMode && seg.flat_pace && seg.pace) {
+            // Calculate pace ratio (actual pace / flat pace)
+            // Higher ratio = slower pace = red
+            // Lower ratio = faster pace = green
+            const paceRatio = seg.pace / seg.flat_pace;
+            
+            // Define color scale thresholds
+            // Fast: <0.85 (green)
+            // Normal: 0.85-1.15 (blue)
+            // Slow: >1.15 (red)
+            let paceColor;
+            if (paceRatio < 0.85) {
+                // Fast pace - green
+                paceColor = '#16a34a'; // green-600
+            } else if (paceRatio > 1.15) {
+                // Slow pace - red
+                paceColor = '#dc2626'; // red-600
+            } else {
+                // Normal pace - blue
+                paceColor = '#2563eb'; // blue-600
+            }
+            paceStyle = `font-weight: bold; color: ${paceColor};`;
+        } else if (seg.pace_capped) {
             paceStyle = 'color: #ef4444; font-weight: bold;';
             paceWarning = ' ⚠️';
         } else if (seg.pace_aggressive) {
@@ -1498,9 +1756,14 @@ function displayResults(data) {
             paceWarning = ' ⚡';
         }
         
-        // Add effort level badge in target time mode only
-        if (effort_thresholds && seg.effort_level) {
+        // Create effort level badge for Course Difficulty column (target time mode only)
+        if (isTargetTimeMode && seg.effort_level) {
             const effortLabels = {
+                'easy': '<span class="effort-badge effort-easy">Easy</span>',
+                'medium': '<span class="effort-badge effort-medium">Medium</span>',
+                'hard': '<span class="effort-badge effort-hard">Hard</span>',
+                'very_hard': '<span class="effort-badge effort-very-hard">Very Hard</span>',
+                // Legacy labels for backward compatibility
                 'push': '<span class="effort-badge effort-push">PUSH</span>',
                 'steady': '<span class="effort-badge effort-steady">Steady</span>',
                 'protect': '<span class="effort-badge effort-protect">Protect</span>'
@@ -1522,7 +1785,8 @@ function displayResults(data) {
             <td>${seg.elev_pace_str}</td>
             <td class="fatigue-col" style="display: ${hasFatigue ? 'table-cell' : 'none'}">${seg.fatigue_str}</td>
             <td class="terrain-col" style="display: ${terrainEnabled ? 'table-cell' : 'none'}">${terrainFactorDisplay}</td>
-            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong> ${effortBadge}</td>
+            <td><strong style="${paceStyle}">${seg.pace_str}${paceWarning}</strong></td>
+            <td class="course-difficulty-col" style="display: ${isTargetTimeMode ? 'table-cell' : 'none'}">${effortBadge}</td>
             <td>${seg.segment_time_str}</td>
             <td>${seg.target_carbs}</td>
             <td>${seg.target_water}</td>
@@ -2955,4 +3219,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setupNumericInputFiltering();
     generateCheckpointInputs();
     validateCheckpointDistances();
+    // Set initial pacing mode state
+    handlePacingModeChange();
 });

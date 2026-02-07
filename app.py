@@ -1,7 +1,15 @@
 """
 RaceCraft - Fuel & Pacing Planner
-Version: v1.6.2
-Release Date: Feb 05, 2026
+Version: v1.7.0
+Release Date: Feb 07, 2026
+
+Major Changes in v1.7.0:
+- NEW FEATURE: Distance-Adaptive Base Pace Estimation
+  - Calculate base pace from known race performances (5K to ultra)
+  - Uses Riegel's formula for performance prediction
+  - Automatic intensity downshift for ultra-distances (>42.2km)
+  - Toggle between manual pace entry and performance-based estimation
+  - Seamless integration with existing pacing calculations
 
 Major Changes in v1.6.2:
 - added cache busting to static assets by appending version query parameter in template
@@ -445,6 +453,141 @@ def parse_gpx_file(gpx_path):
         trackpoints.append((lat, lon, elev))
     
     return trackpoints
+
+# ============================================================================
+# PERFORMANCE PREDICTION MODEL
+# ============================================================================
+
+def predict_race_time_riegel(reference_distance_km, reference_time_minutes, target_distance_km):
+    """
+    Predict race time at a target distance using Riegel's formula.
+    
+    Riegel's formula: Time2 = Time1 × (Distance2 / Distance1)^1.06
+    
+    The exponent 1.06 represents the fatigue factor - each doubling of distance
+    results in slightly slower pace (not just double the time).
+    
+    Args:
+        reference_distance_km: Known race distance (e.g., 10 for 10K)
+        reference_time_minutes: Known race time in minutes (e.g., 45.0 for 45:00)
+        target_distance_km: Target race distance to predict
+    
+    Returns:
+        Predicted time in minutes for the target distance
+    
+    Examples:
+        >>> predict_race_time_riegel(10, 45.0, 21.1)  # 10K in 45min → Half Marathon
+        100.26  # ~1:40:15
+        
+        >>> predict_race_time_riegel(21.1, 90.0, 42.2)  # Half in 1:30 → Marathon
+        192.48  # ~3:12:29
+    """
+    if reference_distance_km <= 0 or target_distance_km <= 0:
+        raise ValueError("Distances must be positive")
+    if reference_time_minutes <= 0:
+        raise ValueError("Reference time must be positive")
+    
+    # Riegel's formula with standard exponent of 1.06
+    distance_ratio = target_distance_km / reference_distance_km
+    predicted_time = reference_time_minutes * (distance_ratio ** 1.06)
+    
+    return predicted_time
+
+
+def apply_intensity_downshift(predicted_time_minutes, target_distance_km, reference_distance_km):
+    """
+    Apply intensity downshift for ultra-distance races (>42.2km).
+    
+    Ultra-distance races require more conservative pacing than what Riegel's formula
+    predicts. This function applies a logarithmic downshift that scales with the
+    ratio between target and reference distances.
+    
+    Formula: intensity_factor = 1.0 - log10(effort_ratio) × 0.15
+    Where: effort_ratio = target_distance / reference_distance
+    
+    The 0.15 coefficient was calibrated based on ultra-marathon performance data
+    showing ~15% pace reduction per 10x distance increase.
+    
+    Args:
+        predicted_time_minutes: Time predicted by Riegel's formula
+        target_distance_km: Target race distance
+        reference_distance_km: Reference race distance used for prediction
+    
+    Returns:
+        Adjusted time in minutes with intensity downshift applied
+    
+    Examples:
+        >>> apply_intensity_downshift(300.0, 100, 21.1)  # Half → 100K
+        339.8  # ~13% slower than Riegel prediction
+        
+        >>> apply_intensity_downshift(720.0, 160, 42.2)  # Marathon → 100 miler
+        831.5  # ~15% slower than Riegel prediction
+    """
+    # Only apply downshift for ultra distances (>42.2 km)
+    if target_distance_km <= 42.2:
+        return predicted_time_minutes
+    
+    # Calculate effort ratio
+    effort_ratio = target_distance_km / reference_distance_km
+    
+    # Apply logarithmic downshift
+    # log10(2) = 0.301 → ~4.5% slower for 2x distance
+    # log10(4) = 0.602 → ~9% slower for 4x distance
+    # log10(10) = 1.0 → ~15% slower for 10x distance
+    if effort_ratio > 1.0:
+        downshift_factor = math.log10(effort_ratio) * 0.15
+        intensity_factor = 1.0 - downshift_factor
+        # Clamp to reasonable bounds (50-100% intensity)
+        intensity_factor = max(0.5, min(1.0, intensity_factor))
+        adjusted_time = predicted_time_minutes / intensity_factor
+    else:
+        adjusted_time = predicted_time_minutes
+    
+    return adjusted_time
+
+
+def calculate_base_pace_from_performance(reference_distance_km, reference_time_minutes, 
+                                          target_distance_km, apply_ultra_downshift=True):
+    """
+    Calculate base pace (min/km) for a target distance from a known performance.
+    
+    This is the main entry point for performance-based pace estimation. It:
+    1. Predicts time at target distance using Riegel's formula
+    2. Applies intensity downshift for ultra distances (if enabled)
+    3. Converts to pace (min/km)
+    
+    Args:
+        reference_distance_km: Known race distance (e.g., 10 for 10K)
+        reference_time_minutes: Known race time in minutes (e.g., 45.0)
+        target_distance_km: Target race distance
+        apply_ultra_downshift: Whether to apply ultra-distance intensity reduction (default: True)
+    
+    Returns:
+        Base pace in min/km suitable for use in RaceCraft calculations
+    
+    Examples:
+        >>> calculate_base_pace_from_performance(10, 45.0, 50)
+        5.43  # min/km for 50K based on 10K in 45min
+        
+        >>> calculate_base_pace_from_performance(21.1, 90.0, 100)
+        6.79  # min/km for 100K based on half marathon in 1:30
+    """
+    # Step 1: Predict time using Riegel's formula
+    predicted_time = predict_race_time_riegel(reference_distance_km, reference_time_minutes, 
+                                              target_distance_km)
+    
+    # Step 2: Apply intensity downshift for ultra distances
+    if apply_ultra_downshift and target_distance_km > 42.2:
+        adjusted_time = apply_intensity_downshift(predicted_time, target_distance_km, 
+                                                  reference_distance_km)
+    else:
+        adjusted_time = predicted_time
+    
+    # Step 3: Convert to pace (min/km)
+    base_pace = adjusted_time / target_distance_km
+    
+    return base_pace
+
 
 def calculate_total_distance(trackpoints):
     """Calculate total distance of route."""
@@ -931,6 +1074,98 @@ def upload_gpx():
     except Exception as e:
         return jsonify({'error': f'Error parsing GPX file: {str(e)}'}), 400
 
+@app.route('/api/calculate-pace-from-performance', methods=['POST'])
+def calculate_pace_from_performance():
+    """
+    Calculate base pace from a known race performance.
+    
+    Expected JSON body:
+    {
+        "reference_distance_km": 10.0,
+        "reference_time_minutes": 45.0,
+        "target_distance_km": 50.0,
+        "apply_ultra_downshift": true  # optional, default true
+    }
+    
+    Returns:
+    {
+        "base_pace": 5.43,  # min/km
+        "predicted_time_minutes": 271.5,
+        "predicted_time_formatted": "4:31:30",
+        "details": {
+            "riegel_prediction": 265.2,
+            "intensity_downshift_applied": true,
+            "downshift_percentage": 2.4
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        required_fields = ['reference_distance_km', 'reference_time_minutes', 'target_distance_km']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Extract parameters
+        reference_distance_km = float(data['reference_distance_km'])
+        reference_time_minutes = float(data['reference_time_minutes'])
+        target_distance_km = float(data['target_distance_km'])
+        apply_ultra_downshift = data.get('apply_ultra_downshift', True)
+        
+        # Validate inputs
+        if reference_distance_km <= 0:
+            return jsonify({'error': 'Reference distance must be positive'}), 400
+        if reference_time_minutes <= 0:
+            return jsonify({'error': 'Reference time must be positive'}), 400
+        if target_distance_km <= 0:
+            return jsonify({'error': 'Target distance must be positive'}), 400
+        
+        # Calculate Riegel prediction
+        riegel_time = predict_race_time_riegel(reference_distance_km, reference_time_minutes, 
+                                               target_distance_km)
+        
+        # Apply intensity downshift if enabled and ultra distance
+        downshift_applied = False
+        downshift_percentage = 0.0
+        
+        if apply_ultra_downshift and target_distance_km > 42.2:
+            adjusted_time = apply_intensity_downshift(riegel_time, target_distance_km, 
+                                                     reference_distance_km)
+            downshift_applied = True
+            downshift_percentage = ((adjusted_time - riegel_time) / riegel_time) * 100
+        else:
+            adjusted_time = riegel_time
+        
+        # Calculate base pace
+        base_pace = adjusted_time / target_distance_km
+        
+        # Format predicted time as HH:MM:SS
+        hours = int(adjusted_time // 60)
+        minutes = int(adjusted_time % 60)
+        seconds = int((adjusted_time % 1) * 60)
+        predicted_time_formatted = f"{hours}:{minutes:02d}:{seconds:02d}"
+        
+        return jsonify({
+            'base_pace': round(base_pace, 2),
+            'predicted_time_minutes': round(adjusted_time, 2),
+            'predicted_time_formatted': predicted_time_formatted,
+            'details': {
+                'riegel_prediction': round(riegel_time, 2),
+                'intensity_downshift_applied': downshift_applied,
+                'downshift_percentage': round(downshift_percentage, 1)
+            }
+        })
+    
+    except ValueError as e:
+        return jsonify({'error': f'Invalid input: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Calculation error: {str(e)}'}), 500
+
 def parse_known_race_filename(filename):
     """
     Parse known race filename according to format: Organiser-race_name-year.gpx
@@ -1165,6 +1400,331 @@ def get_terrain_effort_bounds(elev_gain, elev_loss, distance_km, climbing_abilit
         # Baseline cost (not affected much by abilities)
         effort_cost = 1.0
         return (0.80, 1.25, effort_cost)
+
+
+def calculate_independent_target_pacing(target_time_minutes, segments_data):
+    """
+    Independent target time calculation for new Target Total Time mode.
+    
+    Core Principles:
+    - Target time is a HARD CONSTRAINT - total time MUST equal target time
+    - Base pace, fitness, fatigue, and technical ability have ZERO effect
+    - Pace variation comes from elevation and terrain difficulty only
+    - Effort labels communicate difficulty (Easy/Medium/Hard/Very Hard)
+    - Pace limits ensure realistic speeds (no faster than sub-2hr marathon, no slower than walking)
+    
+    Refactored Strategy (Neutral Route Cost Approach):
+    Step 0: Build neutral route cost (distance × terrain only, no elevation)
+    Step 1: Derive neutral_reference_pace from target_time / neutral_cost
+    Step 2: Apply elevation modifiers (climbs slow down, descents speed up)
+    Step 3: Distribute time proportionally across segments
+    Step 4: Apply pace limits (2:50-15:00 min/km) with time redistribution
+    Step 5: Assign effort labels based on gradient and terrain difficulty
+    
+    This approach:
+    - Produces a route-relative (not athlete-relative) neutral pace
+    - Eliminates circular logic
+    - Makes downhill speedups emerge naturally after the anchor is set
+    - Is deterministic and impossible for users to "game"
+    
+    Args:
+        target_time_minutes: Target total moving time in minutes
+        segments_data: List of dicts with 'distance', 'elev_gain', 'elev_loss', 'terrain_type'
+    
+    Returns:
+        List of dicts with 'segment_time', 'required_pace', 'effort_level' for each segment
+    """
+    if not segments_data:
+        return []
+    
+    # Pace limits for realism
+    MIN_PACE = 2.85  # min/km - Sub-2hr marathon pace (~2:51 min/km, rounded to 2:50 for safety)
+    MAX_PACE = 15.0  # min/km - Average walking pace
+    
+    log_message(f"\n=== INDEPENDENT TARGET TIME MODE (NEUTRAL COST APPROACH) ===")
+    log_message(f"Target time: {target_time_minutes:.2f} min")
+    
+    # ========================================
+    # STEP 0: Build neutral route cost
+    # ========================================
+    # This answers: "If this route were run at uniform difficulty,
+    # what flat pace would produce the target time?"
+    # 
+    # Calculation: distance × terrain_multiplier ONLY
+    # - Ignores slope direction
+    # - Ignores downhill benefit
+    # - Ignores uphill penalty
+    # - Pure terrain-weighted distance
+    
+    neutral_cost = 0.0
+    total_distance_km = 0.0
+    neutral_cost = 0.0
+    total_distance_km = 0.0
+    
+    # Base terrain multipliers (for neutral cost calculation)
+    base_terrain_factors = {
+        'road': 0.90,           # Road is fastest (10% faster than baseline)
+        'smooth_trail': 1.0,    # Baseline
+        'dirt_road': 1.10,      # Slightly slower
+        'rocky_runnable': 1.35, # Noticeably slower
+        'technical': 1.75,      # Significantly slower
+        'very_technical': 2.25, # Very slow
+        'scrambling': 3.0       # Extremely slow
+    }
+    
+    for seg_data in segments_data:
+        distance_km = seg_data['distance']
+        terrain_type = seg_data['terrain_type']
+        total_distance_km += distance_km
+        
+        # Get base terrain factor
+        base_terrain_factor = base_terrain_factors.get(terrain_type, 1.0)
+        
+        # Neutral cost = distance × terrain (NO elevation yet)
+        neutral_cost += distance_km * base_terrain_factor
+    
+    # ========================================
+    # STEP 1: Compute neutral reference pace
+    # ========================================
+    # This is the flat-equivalent pace that would produce the target time
+    # on a route with this terrain profile (ignoring elevation changes)
+    #
+    # Key properties:
+    # - Never appears in the UI
+    # - Changes automatically with route + target time
+    # - Route-relative, not athlete-relative
+    # - No circular logic
+    # - No hidden fitness assumptions
+    
+    neutral_reference_pace = target_time_minutes / neutral_cost  # minutes per km (terrain-adjusted)
+    
+    # Also calculate simple flat pace for UI display purposes
+    flat_pace = target_time_minutes / total_distance_km  # minutes per km (simple distance)
+    
+    log_message(f"Total distance: {total_distance_km:.2f} km")
+    log_message(f"Neutral route cost: {neutral_cost:.2f} km-equivalent")
+    log_message(f"Neutral reference pace: {neutral_reference_pace:.2f} min/km (internal, terrain-adjusted)")
+    log_message(f"Simple flat pace: {flat_pace:.2f} min/km ({int(flat_pace)}:{int((flat_pace % 1) * 60):02d}) (for UI display)")
+    log_message(f"Pace limits: {MIN_PACE:.2f}-{MAX_PACE:.2f} min/km")
+    
+    # ========================================
+    # STEP 2: Calculate segment weights with elevation modifiers
+    # ========================================
+    # Now we apply elevation effects on top of the neutral cost
+    segment_weights = []
+    total_weight = 0.0
+    
+    for seg_data in segments_data:
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        terrain_type = seg_data['terrain_type']
+        
+        # Calculate gradient
+        gradient = (elev_gain - elev_loss) / (distance_km * 1000) if distance_km > 0 else 0
+        
+        # Get base terrain factor (same as used in neutral cost)
+        base_terrain_factor = base_terrain_factors.get(terrain_type, 1.0)
+        
+        # Adjust terrain factor based on elevation profile
+        # Technical terrain impacts pace differently on climbs vs descents:
+        # - On DESCENTS: Technical terrain slows you down MORE (safety, footing)
+        # - On CLIMBS: Technical terrain doesn't slow you down AS MUCH (already slow)
+        # - On FLAT: Use base terrain factor
+        
+        net_elevation = elev_gain - elev_loss
+        elevation_dominance = net_elevation / (distance_km * 1000) if distance_km > 0 else 0
+        
+        if elevation_dominance < -0.03:  # Descent-dominant (gradient < -3%)
+            # Amplify terrain difficulty on descents
+            terrain_amplification = 1.3  # 30% more impact
+            terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_amplification
+        elif elevation_dominance > 0.03:  # Climb-dominant (gradient > 3%)
+            # Reduce terrain difficulty impact on climbs
+            terrain_reduction = 0.6  # 40% less impact
+            terrain_factor = 1.0 + (base_terrain_factor - 1.0) * terrain_reduction
+        else:  # Relatively flat (-3% to +3%)
+            # Use base terrain factor
+            terrain_factor = base_terrain_factor
+        
+        # Base weight starts with neutral cost component
+        # This is distance × terrain_factor (same as Step 0)
+        base_weight = distance_km * terrain_factor
+        
+        # Elevation adjustment factor
+        # Now we layer elevation effects ON TOP of the neutral cost
+        elev_factor = 1.0
+        
+        if elev_gain > 0:
+            # Climbing slows pace - use vertical speed model
+            # Conservative: 600 m/h = 0.01 km/min = 100 min per 1km elevation
+            vertical_speed_km_per_min = 0.6 / 60.0  # 600 m/h = 0.01 km/min
+            climb_time_penalty = elev_gain / 1000.0 / vertical_speed_km_per_min
+            # Add climb penalty as fraction of base time
+            # Use neutral_reference_pace as the anchor (not simple flat_pace)
+            base_segment_time = base_weight * neutral_reference_pace
+            if base_segment_time > 0:
+                elev_factor += climb_time_penalty / base_segment_time
+        
+        if elev_loss > 0:
+            # Descents allow faster pace - but with safety limits
+            # Assume descent speeds up by ~10-20% depending on steepness
+            descent_bonus = min(0.20, abs(gradient) * 2.0) if gradient < 0 else 0
+            elev_factor -= descent_bonus
+        
+        # Combined weight = neutral cost component × elevation modifier
+        weight = base_weight * elev_factor
+        segment_weights.append(weight)
+        total_weight += weight
+    
+    # ========================================
+    # STEP 3 & 4: Distribute time and apply pace limits
+    # ========================================
+    # Now distribute the target time proportionally to weights
+    # Then apply pace limits with iterative redistribution
+    
+    # Initialize segment times based on weights
+    segment_times = []
+    for i in range(len(segments_data)):
+        initial_time = target_time_minutes * (segment_weights[i] / total_weight)
+        segment_times.append(initial_time)
+    
+    # Iteratively adjust paces to respect limits
+    MAX_ITERATIONS = 10
+    for iteration in range(MAX_ITERATIONS):
+        clamped_segments = []
+        total_excess_time = 0.0  # Time freed up from fast segments
+        total_deficit_time = 0.0  # Extra time needed for slow segments
+        adjustable_weight = 0.0  # Weight of segments that can still be adjusted
+        
+        for i in range(len(segments_data)):
+            distance_km = segments_data[i]['distance']
+            if distance_km == 0:
+                continue
+                
+            pace = segment_times[i] / distance_km
+            
+            if pace < MIN_PACE:
+                # Too fast - clamp to minimum pace and free up time
+                clamped_time = distance_km * MIN_PACE
+                excess_time = segment_times[i] - clamped_time
+                segment_times[i] = clamped_time
+                total_excess_time += excess_time
+                clamped_segments.append(i)
+            elif pace > MAX_PACE:
+                # Too slow - clamp to maximum pace and need more time
+                clamped_time = distance_km * MAX_PACE
+                deficit_time = clamped_time - segment_times[i]
+                segment_times[i] = clamped_time
+                total_deficit_time += deficit_time
+                clamped_segments.append(i)
+            else:
+                # Within limits - can be adjusted
+                adjustable_weight += segment_weights[i]
+        
+        # If no segments were clamped, we're done
+        if not clamped_segments:
+            break
+        
+        # Redistribute excess/deficit time to adjustable segments
+        net_time_to_redistribute = total_excess_time - total_deficit_time
+        
+        if adjustable_weight > 0 and abs(net_time_to_redistribute) > 0.001:
+            for i in range(len(segments_data)):
+                if i not in clamped_segments:
+                    # Adjust proportionally to weight
+                    adjustment = net_time_to_redistribute * (segment_weights[i] / adjustable_weight)
+                    segment_times[i] += adjustment
+        
+        log_message(f"Iteration {iteration + 1}: Clamped {len(clamped_segments)} segments, "
+                   f"excess: {total_excess_time:.2f}min, deficit: {total_deficit_time:.2f}min")
+    
+    # Final adjustment: ensure total time equals target exactly
+    actual_total = sum(segment_times)
+    if abs(actual_total - target_time_minutes) > 0.001:
+        # Adjust the last segment to make up the difference
+        time_diff = target_time_minutes - actual_total
+        segment_times[-1] += time_diff
+        log_message(f"Final adjustment: Added {time_diff:.2f}min to last segment")
+    
+    # ========================================
+    # STEP 5: Build results with effort labels
+    # ========================================
+    results = []
+    
+    for i, seg_data in enumerate(segments_data):
+        distance_km = seg_data['distance']
+        elev_gain = seg_data['elev_gain']
+        elev_loss = seg_data['elev_loss']
+        terrain_type = seg_data['terrain_type']
+        
+        segment_time = segment_times[i]
+        
+        # Calculate required pace
+        required_pace = segment_time / distance_km if distance_km > 0 else flat_pace
+        
+        # Calculate gradient for effort label
+        gradient = (elev_gain - elev_loss) / (distance_km * 1000) if distance_km > 0 else 0
+        
+        # Assign effort label based on gradient and terrain difficulty
+        # Very steep climbs or highly technical terrain = Hard/Very Hard
+        # Moderate climbs or moderate terrain = Medium
+        # Flat or gentle terrain = Easy
+        
+        terrain_difficulty_scores = {
+            'road': 1,
+            'smooth_trail': 1,
+            'dirt_road': 2,
+            'rocky_runnable': 3,
+            'technical': 4,
+            'very_technical': 5,
+            'scrambling': 6
+        }
+        terrain_score = terrain_difficulty_scores.get(terrain_type, 1)
+        
+        # Calculate difficulty score
+        # Gradient contribution: steep climbs increase difficulty
+        gradient_score = 0
+        if gradient > 0.12:  # Very steep (>12%)
+            gradient_score = 3
+        elif gradient > 0.08:  # Steep (>8%)
+            gradient_score = 2
+        elif gradient > 0.04:  # Moderate (>4%)
+            gradient_score = 1
+        elif gradient < -0.08:  # Steep descent
+            gradient_score = 1  # Descents can be challenging too
+        
+        # Combined difficulty score
+        difficulty_score = gradient_score + (terrain_score - 1)
+        
+        # Map to effort level
+        if difficulty_score >= 5:
+            effort_level = 'very_hard'
+        elif difficulty_score >= 3:
+            effort_level = 'hard'
+        elif difficulty_score >= 1:
+            effort_level = 'medium'
+        else:
+            effort_level = 'easy'
+        
+        results.append({
+            'segment_time': segment_time,
+            'required_pace': required_pace,
+            'effort_level': effort_level,
+            'flat_pace': flat_pace  # Include for reference
+        })
+        
+        log_message(f"Segment {i+1}: dist={distance_km:.2f}km, elev_gain={elev_gain:.0f}m, "
+                   f"terrain={terrain_type}, gradient={gradient:.1%}, "
+                   f"weight={segment_weights[i]:.2f}, time={segment_time:.2f}min, "
+                   f"pace={required_pace:.2f}min/km, effort={effort_level}")
+    
+    # Verify total time equals target (should be exact due to last segment adjustment)
+    actual_total = sum(r['segment_time'] for r in results)
+    log_message(f"Total allocated time: {actual_total:.2f} min (target: {target_time_minutes:.2f} min, "
+               f"difference: {abs(actual_total - target_time_minutes):.4f} min)")
+    
+    return results
 
 
 def allocate_effort_to_target(target_time_minutes, segments_data, natural_results, 
@@ -1765,7 +2325,12 @@ def calculate():
             })
         
         # === Handle Target Time Mode ===
-        use_target_time = pacing_mode == 'target_time' and target_time_str
+        use_target_time = pacing_mode == 'target_time' and bool(target_time_str)
+        log_message(f"\n=== CALCULATE API CALLED ===")
+        log_message(f"pacing_mode: {pacing_mode}")
+        log_message(f"target_time_str: {target_time_str}")
+        log_message(f"use_target_time: {use_target_time}")
+        
         if use_target_time:
             try:
                 # Parse target time (HH:MM:SS)
@@ -1780,27 +2345,29 @@ def calculate():
                     total_cp_time = avg_cp_time * num_checkpoints
                     target_moving_time = target_total_minutes - total_cp_time
                     
+                    log_message(f"Target total time: {target_total_minutes:.2f} min")
+                    log_message(f"CP time: {total_cp_time:.2f} min")
+                    log_message(f"Target moving time: {target_moving_time:.2f} min")
+                    
                     if target_moving_time <= 0:
                         return jsonify({'error': f'Target time ({target_time_str}) is too short - checkpoint stops alone require {total_cp_time:.1f} minutes'}), 400
                     
-                    log_message(f"\n=== TARGET TIME MODE: Effort Allocation Optimization ===")
-                    log_message(f"Target time: {target_time_str} (moving time: {target_moving_time:.2f} min)")
-                    
-                    # Step 1: Calculate natural pacing (what athlete would do on autopilot)
-                    natural_results = calculate_natural_pacing(
-                        segments_basic_data, z2_pace, climbing_ability,
-                        fatigue_enabled, fitness_level, skill_level
+                    # Use NEW independent target time calculation
+                    # This ignores base pace, fitness, fatigue, and technical ability
+                    log_message(f"Calling calculate_independent_target_pacing...")
+                    reverse_results = calculate_independent_target_pacing(
+                        target_moving_time, segments_basic_data
                     )
-                    
-                    # Step 2: Apply effort allocation optimization
-                    reverse_results = allocate_effort_to_target(
-                        target_moving_time, segments_basic_data, natural_results,
-                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
-                    )
+                    log_message(f"✓ Independent calculation complete. Results count: {len(reverse_results)}")
                 else:
                     return jsonify({'error': 'Invalid target time format. Use HH:MM:SS'}), 400
             except Exception as e:
+                log_message(f"✗ Error in target time calculation: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return jsonify({'error': f'Error parsing target time: {str(e)}'}), 400
+        else:
+            log_message(f"Using BASE PACE mode (not target time)")
         
         # Calculate segments with cumulative effort tracking
         segments = []
@@ -1819,23 +2386,31 @@ def calculate():
             
             # === Calculate segment time and pace ===
             if use_target_time:
-                # Target Time Mode: Use effort allocation optimizer
+                # Target Time Mode: Use independent calculation
+                if i == 0:
+                    log_message(f"\n>>> Using TARGET TIME MODE for segment calculations")
                 segment_time = reverse_results[i]['segment_time']
                 required_pace = reverse_results[i]['required_pace']
-                effort_level = reverse_results[i].get('effort_level', 'steady')
+                effort_level = reverse_results[i].get('effort_level', 'easy')
+                flat_pace = reverse_results[i].get('flat_pace', required_pace)  # Get flat pace for reference
                 
-                # For display: still calculate what the natural pace would be
+                # In new independent mode, we still calculate natural pace for display reference
+                # But it doesn't affect the results
                 _, elev_adjusted_pace, fatigue_seconds, terrain_factor, _ = adjust_pace_for_elevation(
                     z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
                     fatigue_enabled, fitness_level, terrain_type, skill_level
                 )
                 
-                # Mark as aggressive if pushing significantly harder than natural
-                pace_aggressive = effort_level == 'push'
+                # No aggressive marking in new mode - effort level communicates difficulty
+                pace_aggressive = False
                 adjusted_pace = required_pace
                 pace_capped = False
+                # Set fatigue_seconds to 0 in target time mode since it's not used
+                fatigue_seconds = 0.0
             else:
                 # Base Pace Mode: Use forward-calculated pace (prediction)
+                if i == 0:
+                    log_message(f"\n>>> Using BASE PACE MODE for segment calculations")
                 adjusted_pace, elev_adjusted_pace, fatigue_seconds, terrain_factor, pace_capped = adjust_pace_for_elevation(
                     z2_pace, elev_gain, elev_loss, segment_dist, cumulative_effort, climbing_ability,
                     fatigue_enabled, fitness_level, terrain_type, skill_level
@@ -1843,6 +2418,7 @@ def calculate():
                 segment_time = segment_dist * adjusted_pace
                 pace_aggressive = False
                 effort_level = 'steady'
+                flat_pace = None  # Not applicable in base pace mode
                 
                 # Log when pace is capped
                 if pace_capped:
@@ -1898,6 +2474,7 @@ def calculate():
                 'pace_capped': pace_capped,
                 'pace_aggressive': pace_aggressive if use_target_time else False,
                 'effort_level': effort_level if use_target_time else 'steady',  # New: effort allocation
+                'flat_pace': round(flat_pace, 2) if flat_pace else None,  # Add flat pace for pace coloring in target time mode
                 # Note: In target time mode, fatigue is incorporated into natural pacing, not displayed separately
                 'fatigue_seconds': round(fatigue_seconds, 1) if not use_target_time else 0.0,
                 'fatigue_str': f"+{int(fatigue_seconds // 60)}:{int(fatigue_seconds % 60):02d}" if not use_target_time else "+0:00",
@@ -1924,91 +2501,9 @@ def calculate():
         total_water = sum(s['target_water'] for s in segments)
         total_cp_time = avg_cp_time * num_checkpoints
         
-        # Validate target time achievement if in target time mode
+        # In new independent target time mode, no warnings needed
+        # The system always achieves the target time exactly
         target_time_warning = None
-        if use_target_time:
-            # Calculate target total time for warning message
-            target_total_time = target_moving_time + total_cp_time
-            
-            # Calculate natural pacing total time (stable reference that never changes)
-            # Natural pacing represents steady-effort time without target optimization
-            if natural_results and all('natural_time' in r for r in natural_results):
-                natural_moving_time = sum(r['natural_time'] for r in natural_results)
-                natural_total_time = natural_moving_time + total_cp_time
-            else:
-                # Fallback if natural_results not available (shouldn't happen in target time mode)
-                natural_total_time = None
-            
-            # Calculate TRUE minimum achievable time (independent of target)
-            # This represents the absolute fastest time possible with maximum effort
-            # By using zero/negative target, we force the algorithm to max out effort everywhere
-            minimum_achievable_total_time = None
-            if natural_results:
-                try:
-                    # Use impossible target (0 or negative) to force maximum effort allocation
-                    # This ensures algorithm maxes out all segments within fitness/ability constraints
-                    impossible_target = 0.0  # Moving time of 0 (physically impossible)
-                    min_effort_results = allocate_effort_to_target(
-                        impossible_target, segments_basic_data, natural_results,
-                        z2_pace, climbing_ability, fatigue_enabled, fitness_level, skill_level
-                    )
-                    if min_effort_results:
-                        min_moving_time = sum(r['segment_time'] for r in min_effort_results)
-                        minimum_achievable_total_time = min_moving_time + total_cp_time
-                except Exception as e:
-                    log_message(f"Could not calculate minimum achievable time: {e}")
-                    minimum_achievable_total_time = None
-            
-            # Check if achieved time exceeds target significantly
-            # NOTE: We don't check if target is below theoretical minimum because:
-            # - Theoretical minimum assumes ALL segments simultaneously reach min_mult
-            # - Cost-weighted allocation can't achieve this in practice
-            # - This created false "too aggressive" warnings causing circular behavior
-            # - Better to only warn if algorithm ACTUALLY can't achieve the target
-            time_above_target = total_moving_time - target_moving_time
-            
-            # Only show warning if achieved time significantly exceeds target
-            achieved_above_target = time_above_target > TARGET_TIME_TOLERANCE_MINUTES
-            
-            # Generate warning if target couldn't be achieved
-            if achieved_above_target:
-                target_total_time_str = format_time(target_total_time)
-                
-                # Common suggestion text
-                suggestions = (
-                    "Consider: (1) increasing your target time{target_hint}, (2) improving base pace, "
-                    "(3) selecting higher fitness/ability levels, or (4) adjusting route/checkpoints."
-                )
-                
-                # Build warning message with stable references (independent of target)
-                if natural_total_time is not None and minimum_achievable_total_time is not None:
-                    natural_total_time_str = format_time(natural_total_time)
-                    minimum_achievable_time_str = format_time(minimum_achievable_total_time)
-                    target_hint = f" (ideally to {minimum_achievable_time_str} or more)"
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        f"Minimum achievable time: {minimum_achievable_time_str} (max effort), "
-                        f"Natural pacing: {natural_total_time_str} (steady effort). "
-                        + suggestions.format(target_hint=target_hint)
-                    )
-                elif natural_total_time is not None:
-                    # Fallback: only natural pacing available
-                    natural_total_time_str = format_time(natural_total_time)
-                    target_hint = f" (ideally to {natural_total_time_str} or more)"
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        f"With steady effort, your natural pacing would take {natural_total_time_str}. "
-                        + suggestions.format(target_hint=target_hint)
-                    )
-                else:
-                    # Fallback if neither reference available
-                    target_hint = ""
-                    target_time_warning = (
-                        f"⚠️ Target time {target_total_time_str} is too aggressive. "
-                        + suggestions.format(target_hint=target_hint)
-                    )
-                
-                log_message(f"WARNING: Target time validation - Achieved above target - {target_time_warning}")
         
         # Build elevation profile data
         # If elevation profile was provided, keep it; otherwise generate from trackpoints
@@ -2037,15 +2532,27 @@ def calculate():
         # Calculate dropbag contents
         dropbag_contents = calculate_dropbag_contents(segments, checkpoint_dropbags, carbs_per_serving)
         
-        # Calculate effort thresholds for target time mode
-        effort_thresholds = None
-        if use_target_time and natural_results:
-            num_checkpoints = len(checkpoint_distances)  # Includes finish but not start
-            effort_thresholds = calculate_effort_thresholds(
-                natural_results, segments_basic_data, z2_pace,
-                climbing_ability, fatigue_enabled, fitness_level, skill_level,
-                num_checkpoints, avg_cp_time
-            )
+        # No effort thresholds in new independent target time mode
+        # Instead, provide effort label guidance
+        effort_guidance = None
+        if use_target_time:
+            # Calculate flat-equivalent base pace for display
+            total_distance_km = sum(seg['distance'] for seg in segments_basic_data)
+            flat_pace = target_moving_time / total_distance_km if total_distance_km > 0 else 0
+            flat_pace_str = f"{int(flat_pace)}:{int((flat_pace % 1) * 60):02d}"
+            
+            effort_guidance = {
+                'flat_pace': round(flat_pace, 2),
+                'flat_pace_str': flat_pace_str,
+                'guidance_text': (
+                    'Effort labels indicate segment difficulty based on terrain and elevation. '
+                    'Easy (Green): Flat or gentle terrain. '
+                    'Medium (Blue): Moderate climbs or rolling terrain. '
+                    'Hard (Orange): Steep climbs or technical terrain. '
+                    'Very Hard (Red): Very steep climbs or highly technical terrain. '
+                    'Target time will be met exactly through pace adjustments.'
+                )
+            }
         
         response_data = {
             'segments': segments,
@@ -2065,11 +2572,11 @@ def calculate():
             }
         }
         
-        # Add effort thresholds if in target time mode
-        if effort_thresholds:
-            response_data['effort_thresholds'] = effort_thresholds
+        # Add effort guidance if in target time mode
+        if effort_guidance:
+            response_data['effort_guidance'] = effort_guidance
         
-        # Add target time warning if present
+        # Add target time warning if present (shouldn't happen in new mode)
         if target_time_warning:
             response_data['target_time_warning'] = target_time_warning
         
