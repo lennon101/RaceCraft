@@ -130,6 +130,42 @@ initializeCacheBusting();
 // End Cache Busting System
 // ============================================================
 
+// ============================================================
+// Theme-Aware Chart Colors
+// ============================================================
+
+/**
+ * Get theme-aware colors for charts and UI elements
+ * @returns {object} Color palette based on current theme
+ */
+function getThemeColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    
+    return {
+        // Primary chart colors
+        chartLine: isDark ? 'rgb(59, 130, 246)' : 'rgb(37, 99, 235)',
+        chartGradientStart: isDark ? 'rgba(59, 130, 246, 0.5)' : 'rgba(37, 99, 235, 0.5)',
+        chartGradientEnd: isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(37, 99, 235, 0.1)',
+        
+        // Checkpoint colors
+        checkpointLine: isDark ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.7)',
+        checkpointLabel: isDark ? 'rgba(239, 68, 68, 1)' : 'rgba(239, 68, 68, 0.9)',
+        
+        // Grid and borders
+        gridColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+        
+        // Text colors
+        textPrimary: isDark ? '#f1f5f9' : '#1f2937',
+        textSecondary: isDark ? '#cbd5e1' : '#666666',
+        
+        // Tooltip colors
+        tooltipBg: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        tooltipText: isDark ? '#f1f5f9' : '#1f2937',
+        tooltipBorder: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'
+    };
+}
+
 // Helper function to safely get element by trying multiple IDs (for backward compatibility)
 function safeGetElementById(...ids) {
     for (const id of ids) {
@@ -558,6 +594,9 @@ function renderElevationChart(elevationProfile, segments) {
         return;
     }
     
+    // Get theme-aware colors
+    const colors = getThemeColors();
+    
     const ctx = document.getElementById('elevation-chart');
     
     // Destroy existing chart
@@ -593,8 +632,8 @@ function renderElevationChart(elevationProfile, segments) {
     
     // Create gradient
     const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(37, 99, 235, 0.5)');
-    gradient.addColorStop(1, 'rgba(37, 99, 235, 0.1)');
+    gradient.addColorStop(0, colors.chartGradientStart);
+    gradient.addColorStop(1, colors.chartGradientEnd);
     
     // Plugin to draw checkpoint lines
     const checkpointLinesPlugin = {
@@ -608,7 +647,7 @@ function renderElevationChart(elevationProfile, segments) {
                 
                 // Draw vertical dotted line
                 ctx.save();
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+                ctx.strokeStyle = colors.checkpointLine;
                 ctx.lineWidth = 2;
                 ctx.setLineDash([5, 5]);
                 ctx.beginPath();
@@ -619,7 +658,7 @@ function renderElevationChart(elevationProfile, segments) {
                 
                 // Draw checkpoint label
                 ctx.save();
-                ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+                ctx.fillStyle = colors.checkpointLabel;
                 ctx.font = 'bold 11px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText(cp.label, xPos, top - 5);
@@ -634,7 +673,7 @@ function renderElevationChart(elevationProfile, segments) {
             datasets: [{
                 label: 'Elevation (m)',
                 data: elevationProfile.map(p => ({ x: p.distance, y: p.elevation })),
-                borderColor: 'rgb(37, 99, 235)',
+                borderColor: colors.chartLine,
                 backgroundColor: gradient,
                 fill: true,
                 tension: 0.4,
@@ -742,13 +781,13 @@ function renderElevationChart(elevationProfile, segments) {
                             return labels;
                         },
                         labelTextColor: (context) => {
-                            return '#1f2937';
+                            return colors.tooltipText;
                         }
                     },
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    titleColor: '#1f2937',
-                    bodyColor: '#1f2937',
-                    borderColor: 'rgba(0, 0, 0, 0.1)',
+                    backgroundColor: colors.tooltipBg,
+                    titleColor: colors.tooltipText,
+                    bodyColor: colors.tooltipText,
+                    borderColor: colors.tooltipBorder,
                     borderWidth: 1,
                     padding: 12,
                     displayColors: false,
@@ -769,12 +808,14 @@ function renderElevationChart(elevationProfile, segments) {
                     title: {
                         display: true,
                         text: 'Distance (km)',
+                        color: colors.textPrimary,
                         font: {
                             size: 12,
                             weight: 'bold'
                         }
                     },
                     ticks: {
+                        color: colors.textPrimary,
                         callback: function(value) {
                             return value.toFixed(1);
                         },
@@ -795,21 +836,25 @@ function renderElevationChart(elevationProfile, segments) {
                     },
                     grid: {
                         display: true,
-                        color: 'rgba(0, 0, 0, 0.05)'
+                        color: colors.gridColor
                     }
                 },
                 y: {
                     title: {
                         display: true,
                         text: 'Elevation (m)',
+                        color: colors.textPrimary,
                         font: {
                             size: 12,
                             weight: 'bold'
                         }
                     },
+                    ticks: {
+                        color: colors.textPrimary
+                    },
                     grid: {
                         display: true,
-                        color: 'rgba(0, 0, 0, 0.05)'
+                        color: colors.gridColor
                     }
                 }
             },
