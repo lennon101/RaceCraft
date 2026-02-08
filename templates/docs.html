@@ -42,6 +42,32 @@
                 <li><a href="/about" class="nav-link"><span class="mdi mdi-information"></span> About</a></li>
                 <li><a href="/docs" class="nav-link active"><span class="mdi mdi-book-open-variant"></span> Documentation</a></li>
             </ul>
+            <div class="theme-switcher">
+                <h4>Theme</h4>
+                <div class="theme-options">
+                    <div class="theme-option">
+                        <input type="radio" id="theme-light" name="theme" value="light">
+                        <label for="theme-light">
+                            <span class="mdi mdi-white-balance-sunny"></span>
+                            Light
+                        </label>
+                    </div>
+                    <div class="theme-option">
+                        <input type="radio" id="theme-dark" name="theme" value="dark">
+                        <label for="theme-dark">
+                            <span class="mdi mdi-moon-waning-crescent"></span>
+                            Dark
+                        </label>
+                    </div>
+                    <div class="theme-option">
+                        <input type="radio" id="theme-auto" name="theme" value="auto">
+                        <label for="theme-auto">
+                            <span class="mdi mdi-theme-light-dark"></span>
+                            Auto
+                        </label>
+                    </div>
+                </div>
+            </div>
         </nav>
 
         <!-- Overlay for mobile menu -->
@@ -126,6 +152,8 @@
         </main>
     </div>
 
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}?v={{ app_version }}"></script>
     <script src="{{ url_for('static', filename='js/navigation.js') }}?v={{ app_version }}"></script>
     <script src="{{ url_for('static', filename='js/docs.js') }}?v={{ app_version }}"></script>
 </body>
